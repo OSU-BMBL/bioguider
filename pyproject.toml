@@ -1,15 +1,15 @@
 [tool.poetry]
 name = "bioguider"
 version = "0.1.0"
-description = ""
+description = "An AI-Powered package to help biomedical developers to generate clear documentation"
 authors = [
     "Cankun Wang <Cankun.Wang@osumc.edu>",
     "Shaohong Feng <shaohong.feng.78@gmail.com>"
 ]
 license = "MIT"
 readme = "README.md"
-package = [
-    {include = "bioguider}
+packages = [
+    {include = "bioguider"}
 ]
 classifiers = [
     "Intended Audience :: Developers",
@@ -23,6 +23,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.11"
+langchain = "^0.3.20"
 
 
 [tool.poetry.group.dev.dependencies]
