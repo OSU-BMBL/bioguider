@@ -110,6 +110,7 @@ class ItemEvaluationAgent:
         self.graph = graph.compile()
         # display(Image(self.graph.get_graph().draw_mermaid_png()))            
         logger.info(self.graph.get_graph().draw_ascii())
+        print(self.graph.get_graph().draw_ascii())
 
     def _initialize(
         self,
@@ -147,5 +148,5 @@ class ItemEvaluationAgent:
             if "Score" in s and s["Score"] is not None and \
                 "Reason" in s and s["Reason"] is not None:
                 return (s["Score"], s["Reason"])
-            logger.info(s)
+            print(s)
 
