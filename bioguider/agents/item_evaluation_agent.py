@@ -1,5 +1,6 @@
 import os
 from typing import List, Literal, Optional, TypedDict, Union
+import logging
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, START
 from langchain_core.tools import tool
@@ -8,6 +9,8 @@ from langchain_core.prompts.chat import SystemMessagePromptTemplate
 
 from .prompt_utils import EVALUATION_ITEM_PROMPT, EVALUATION_SYSTEM_PROMPT
 from .agent_utils import read_file_or_dir
+
+logger = logging.getLogger(__name__)
 
 class EvaluationItemResult(BaseModel):
     """ Item evaluation result schema"""
@@ -106,7 +109,7 @@ class ItemEvaluationAgent:
         )
         self.graph = graph.compile()
         # display(Image(self.graph.get_graph().draw_mermaid_png()))            
-        print(self.graph.get_graph().draw_ascii())
+        logger.info(self.graph.get_graph().draw_ascii())
 
     def _initialize(
         self,
@@ -144,5 +147,5 @@ class ItemEvaluationAgent:
             if "Score" in s and s["Score"] is not None and \
                 "Reason" in s and s["Reason"] is not None:
                 return (s["Score"], s["Reason"])
-            print(s)
+            logger.info(s)
 
