@@ -1,5 +1,22 @@
 from langchain_core.prompts import ChatPromptTemplate
 
+COLLECTION_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
+Please act as both a **biomedical researcher** and an **experienced software developer**, to collect {document} documentation from a repository, 
+Here is the file structure (level: {file_structure_level}) of the repository:
+{file_structure}
+                                                            
+Here are functions you can call:
+{function_descriptions}
+                                                            
+Please draft a step-by-step plan to collect all {document} documentation, the planned step format should be like this:
+1. step description: step_description
+   functions to call: a list of functions to call and functions' arguments, if no function to call, return None
+""")
+
+USER_INSTRUCTION = """
+Do not give the final result immediately. First, explain your reasoning process step by step, then provide the answer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
+"""
+
 EVALUATION_ITEMS = [
     ("1. Clarity & Readability", 20),
     ("2. Completeness", 20), 
@@ -48,3 +65,6 @@ Let's begin by evaluating **Criterion {evaluation_item}*.
 [files/directories needed for evaluation]
 ```
 """)
+
+
+

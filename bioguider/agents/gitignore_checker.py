@@ -1,6 +1,6 @@
 import fnmatch
 import os
-
+from pathlib import Path
 
 class GitignoreChecker:
     def __init__(self, directory: str, gitignore_path: str):
@@ -98,19 +98,24 @@ class GitignoreChecker:
     
     @staticmethod
     def _is_ignored_by_default(path: str, is_dir: bool=False) -> bool:
-        return is_dir and path == ".git"
+        return is_dir and path.startswith(".") # path == ".git" 
 
-    def check_files_and_folders(self, first_level=True) -> list:
+    def check_files_and_folders(self, level=-1) -> list:
         """
         Check all files and folders in the given directory against the split gitignore patterns.
-        Return a list of files that are not ignored and have the '.py' extension.
+        Return a list of files that are not ignored.
         The returned file paths are relative to the self.directory.
 
         Returns:
-            list: A list of paths to files that are not ignored and have the '.py' extension.
+            list: A list of paths to files that are not ignored.
         """
         not_ignored_files = []
+        root_path = Path(self.directory)
         for root, dirs, files in os.walk(self.directory):
+            current_root_path = Path(root)
+            current_levels = len(current_root_path.relative_to(root_path).parts)
+            if level >= 0 and current_levels > level:
+                return not_ignored_files
             dirs[:] = [
                 d
                 for d in dirs
@@ -125,9 +130,11 @@ class GitignoreChecker:
                     file, self.file_patterns
                 ): # and file_path.endswith(".py"):
                     not_ignored_files.append(relative_path)
-
-            if first_level:
-                return not_ignored_files + dirs
+            
+            if level >= 0 and current_levels == level:
+                not_ignored_files = \
+                    not_ignored_files + \
+                    [os.path.relpath(os.path.join(root, d), self.directory) for d in dirs]
 
         return not_ignored_files
 

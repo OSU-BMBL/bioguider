@@ -1,6 +1,6 @@
 
 import os
-from typing import Union
+from typing import Optional, Union
 from langchain_openai import ChatOpenAI
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.utils.interactive_env import is_interactive_env
@@ -91,7 +91,7 @@ def read_file_or_dir(
             gitignore_path=gitignore_path,
         )
         not_ignored_files = gitignore_checker.check_files_and_folders(
-            first_level=True
+            level=1
         )
         directory_content = "\n"
         for item in not_ignored_files:
@@ -135,5 +135,24 @@ def summarize_file(llm, name: str, content: str=None):
         out = s['messages'][-1].content
     
     return out
+
+DEFAULT_TOKEN_USAGE = {
+    "total_tokens": 0,
+    "completion_tokens": 0,
+    "prompt_tokens": 0,
+}
+
+def increase_token_usage(
+    token_usage: Optional[dict] = None,
+    incremental: dict = {**DEFAULT_TOKEN_USAGE},
+):
+    if token_usage is None:
+        token_usage = {**DEFAULT_TOKEN_USAGE}
+    token_usage["total_tokens"] += incremental["total_tokens"]
+    token_usage["completion_tokens"] += incremental["completion_tokens"]
+    token_usage["prompt_tokens"] += incremental["prompt_tokens"]
+
+    return token_usage
+
 
     
