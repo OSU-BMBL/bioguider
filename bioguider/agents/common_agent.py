@@ -12,7 +12,6 @@ from bioguider.agents.agent_utils import (
 
 logger = logging.getLogger()
 
-
 class RetryException(Exception):
     """Exception need to retry"""
 
@@ -59,15 +58,10 @@ class CommonAgent:
             is_OK = pre_process(**kwargs)
             if not is_OK:  # skip
                 return
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_prompt),
-                ("human", instruction_prompt),
-            ]
-        )
-
+        
         return self._invoke_agent(
-            prompt,
+            system_prompt,
+            instruction_prompt,
             schema,
             post_process,
             **kwargs,
@@ -90,13 +84,11 @@ class CommonAgent:
         return updated_prompt
 
     def _incre_token_usage(self, token_usage):
+        incremental_token_usage = token_usage
+        if not isinstance(token_usage, dict):
+            incremental_token_usage = vars(incremental_token_usage)
         self.token_usage = increase_token_usage(
-            self.token_usage,
-            {
-                "total_tokens": token_usage.total_tokens,
-                "completion_tokens": token_usage.completion_tokens,
-                "prompt_tokens": token_usage.prompt_tokens,
-            },
+            self.token_usage, incremental_token_usage
         )
 
     @retry(
@@ -105,11 +97,16 @@ class CommonAgent:
     )
     def _invoke_agent(
         self,
-        prompt: ChatPromptTemplate,
+        system_prompt: str,
+        instruction_prompt: str,
         schema: any,
         post_process: Optional[Callable] = None,
         **kwargs: Optional[Any],
     ):
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", instruction_prompt),
+        ])
         # Initialize the callback handler
         callback_handler = OpenAICallbackHandler()
 
@@ -126,7 +123,7 @@ class CommonAgent:
         except Exception as e:
             logger.error(str(e))
             raise e
-        processed_res = None
+        processed_res = res
         if post_process is not None:
             try:
                 processed_res = post_process(res, **kwargs)
@@ -138,3 +135,4 @@ class CommonAgent:
                 logger.error(str(e))
                 raise e
         return res, processed_res, self.token_usage
+    

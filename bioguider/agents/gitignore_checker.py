@@ -115,7 +115,7 @@ class GitignoreChecker:
             current_root_path = Path(root)
             current_levels = len(current_root_path.relative_to(root_path).parts)
             if level >= 0 and current_levels > level:
-                return not_ignored_files
+                continue
             dirs[:] = [
                 d
                 for d in dirs

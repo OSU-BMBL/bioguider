@@ -1,11 +1,18 @@
 
+import json
 import os
-from typing import Optional, Union
-from langchain_openai import ChatOpenAI
+import re
+from typing import List, Optional, Tuple, Union
+from langchain_openai import AzureChatOpenAI
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.utils.interactive_env import is_interactive_env
 from langchain_core.messages.base import get_msg_title_repr
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, StringPromptTemplate
+from langchain_core.messages import AIMessage
+from langchain_openai.chat_models.base import BaseChatOpenAI
+from langchain.tools import BaseTool
+from langchain.schema import AgentAction, AgentFinish
+from langchain.agents import AgentOutputParser
 from langgraph.prebuilt import create_react_agent
 import logging
 
@@ -13,9 +20,22 @@ from .gitignore_checker import GitignoreChecker
 
 logger = logging.getLogger(__name__)
 
+def get_openai():
+    return get_llm(
+        api_key=os.environ.get("OPENAI_4O_API_KEY"),
+        model_name=os.environ.get("OPENAI_4O_MODEL"),
+        azure_endpoint=os.environ.get("AZURE_OPENAI_4O_ENDPOINT"),
+        api_version=os.environ.get("OPENAI_4O_API_VERSION"),
+        azure_deployment=os.environ.get("OPENAI_4O_DEPLOYMENT_NAME"),
+        max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKEN"),
+    )
+
 def get_llm(
     api_key: str,
     model_name: str="gpt-4o",
+    azure_endpoint: str=None,
+    api_version: str=None,
+    azure_deployment: str=None,
     temperature: float = 0.0,
     max_tokens: int = 4096,
 ):
@@ -27,8 +47,11 @@ def get_llm(
             max_tokens=max_tokens,
         )
     elif model_name.startswith("gpt"):
-        chat = ChatOpenAI(
-            openai_api_key=api_key,
+        chat = AzureChatOpenAI(
+            api_key=api_key,
+            azure_endpoint=azure_endpoint,
+            api_version=api_version,
+            azure_deployment=azure_deployment,
             model=model_name,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -71,50 +94,48 @@ def pretty_print(message, printout = True):
 
 HUGE_FILE_LENGTH = 10 * 1024 # 10K
 
-def read_file_or_dir(
-    name: str, 
-    repo_path: str, 
+def read_file(
+    file_path: str,    
+) -> str | None:
+    if not os.path.isfile(file_path):
+        return None
+    with open(file_path, 'r') as f:
+        content = f.read()
+        return content
+    
+def read_directory(
+    dir_path: str,
     gitignore_path: str,
-    llm: any,
-    try_not_summarize: bool = False
-) -> Union[str, list]:
-    if os.path.isfile(name):
-        with open(name, 'r') as f:
-            content = f.read()
-        if try_not_summarize and len(content) < HUGE_FILE_LENGTH:
-            return content
-        else:
-            return summarize_file(llm, name, content)
-    if os.path.isdir(name):
-        gitignore_checker = GitignoreChecker(
-            directory=name,
-            gitignore_path=gitignore_path,
-        )
-        not_ignored_files = gitignore_checker.check_files_and_folders(
-            level=1
-        )
-        directory_content = "\n"
-        for item in not_ignored_files:
-            file_path = os.path.join(name, item)
-            if os.path.isfile(file_path):
-                directory_content += f"{file_path} - f\n"
-            if os.path.isdir(file_path):
-                directory_content += f"{file_path} - d\n"
-        return directory_content
-    return ""
+    level: int=1,
+) -> list[str] | None:
+    if not os.path.isdir(dir_path):
+        return None
+    gitignore_checker = GitignoreChecker(
+        directory=dir_path,
+        gitignore_path=gitignore_path
+    )
+    files = gitignore_checker.check_files_and_folders(level=level)
+    return files
 
-EVALUATION_SUMMARIZE_FILE_PROMPT = ChatPromptTemplate.from_template(
-"""
-Here is the content of file {file_name}:
+
+EVALUATION_SUMMARIZE_FILE_PROMPT = ChatPromptTemplate.from_template("""
+You are provided with the content of the file **{file_name}**:  
 ```
 {file_content}
 ```
 
-The content is lengthy, so please provide a concise summary in one to two sentences. Focus on assessing the quality and clarity of its documentation, highlighting key strengths or areas for improvement.
+The content is lengthy. Please generate a concise summary ({sentence_num1}-{sentence_num2} sentences).
 """)
 
-MAX_FILE_LENGTH=1024 # 1K
-def summarize_file(llm, name: str, content: str=None):
+MAX_FILE_LENGTH=20 *1024 # 20K
+MAX_SENTENCE_NUM=10
+def summarize_file(
+    llm: BaseChatOpenAI, 
+    name: str, 
+    content: str | None = None, 
+    goal: str | None = None,
+    level: int = 3,
+) -> Tuple[str, dict]:
     if content is None:
         try:
             with open(name, "r") as fobj:
@@ -123,18 +144,31 @@ def summarize_file(llm, name: str, content: str=None):
             logger.error(e)
             return ""
     file_content = content
-    if len(file_content) < MAX_FILE_LENGTH:
-        return file_content
+    level = level if level > 0 else 1
+    level = level if level < MAX_SENTENCE_NUM+1 else MAX_SENTENCE_NUM
+    if len(file_content) > MAX_FILE_LENGTH:
+        file_content = content[:MAX_FILE_LENGTH] + " ..."
+    prompt = EVALUATION_SUMMARIZE_FILE_PROMPT.format(
+        file_name=name, 
+        file_content=file_content, 
+        goal=goal,
+        sentence_num1=level,
+        sentence_num2=level+1,
+    )
     
-    file_content = content[:MAX_FILE_LENGTH] + " ..."
-    app = create_react_agent(llm, [])
-    prompt = EVALUATION_SUMMARIZE_FILE_PROMPT.format(file_name=name, file_content=file_content)
     config = {"recursion_limit": 500}
-    inputs = {"messages": [("user", prompt)]}
-    for s in app.stream(inputs, stream_mode="values", config=config):
-        out = s['messages'][-1].content
+    res: AIMessage = llm.invoke([("human", prompt)], config=config)
+    out = res.content
+    token_usage = {
+        "prompt_tokens": res.usage_metadata["input_tokens"],
+        "completion_tokens": res.usage_metadata["output_tokens"],
+        "total_tokens": res.usage_metadata["total_tokens"],
+    }
+
+    # for s in app.stream(inputs, stream_mode="values", config=config):
+    #     out = s['messages'][-1].content
     
-    return out
+    return out, token_usage
 
 DEFAULT_TOKEN_USAGE = {
     "total_tokens": 0,
@@ -155,4 +189,67 @@ def increase_token_usage(
     return token_usage
 
 
+  # Set up a prompt template
+class CustomPromptTemplate(StringPromptTemplate):
+    # The template to use
+    template: str
+    # The list of tools available
+    tools: List[BaseTool]
+    # Plan
+    plan: str
+
+    def format(self, **kwargs) -> str:
+        # Get the intermediate steps (AgentAction, Observation tuples)
+        # Format them in a particular way
+        intermediate_steps = kwargs.pop("intermediate_steps")
+        thoughts = ""
+        for action, observation in intermediate_steps:
+            thoughts += action.log
+            thoughts += f"\nObservation: {observation}\nThought: "
+        # Set plan_step
+        kwargs["plan_step"] = self.plan
+        # Set the agent_scratchpad variable to that value
+        kwargs["agent_scratchpad"] = thoughts
+        # Create a tools variable from the list of tools provided
+        kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
+        # Create a list of tool names for the tools provided
+        kwargs["tool_names"] = ", ".join([tool.name for tool in self.tools])
+        prompt = self.template.format(**kwargs)
+        # print([prompt])
+        return prompt
     
+class CustomOutputParser(AgentOutputParser):
+    def parse(self, llm_output: str) -> Union[AgentAction, AgentFinish]:
+        # Check if agent should finish
+        if "Final Answer:" in llm_output:
+            return AgentFinish(
+                return_values={"output": llm_output},
+                log=llm_output,
+            )
+        # Parse out the action and action input
+        regex = r"Action\s*\d*\s*:(.*?)\nAction\s*\d*\s*Input\s*\d*\s*:[\s]*(.*)"
+        match = re.search(regex, llm_output, re.DOTALL)
+        if not match:
+            # raise ValueError(f"Could not parse LLM output: `{llm_output}`")
+            print(f"Warning: could not parse LLM output: `{llm_output}`, finishing chain...")
+            return AgentFinish(
+                return_values={"output": llm_output},
+                log=llm_output,
+            )
+        action = match.group(1).strip()
+        action_input = match.group(2)
+        # Return the action and action input
+        action_dict = None
+        action_input = action_input.strip(" ").strip('"')
+        action_input_replaced = action_input.replace("'", '"')
+        try:
+            action_dict = json.loads(action_input_replaced)
+        except json.JSONDecodeError:
+            pass
+        return AgentAction(
+            tool=action, 
+            tool_input=action_dict if action_dict is not None else action_input, 
+            log=llm_output
+        )
+
+  

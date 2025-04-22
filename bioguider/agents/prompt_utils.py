@@ -1,18 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
 
-COLLECTION_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
-Please act as both a **biomedical researcher** and an **experienced software developer**, to collect {document} documentation from a repository, 
-Here is the file structure (level: {file_structure_level}) of the repository:
-{file_structure}
-                                                            
-Here are functions you can call:
-{function_descriptions}
-                                                            
-Please draft a step-by-step plan to collect all {document} documentation, the planned step format should be like this:
-1. step description: step_description
-   functions to call: a list of functions to call and functions' arguments, if no function to call, return None
-""")
-
 USER_INSTRUCTION = """
 Do not give the final result immediately. First, explain your reasoning process step by step, then provide the answer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   
 """
@@ -66,5 +53,153 @@ Let's begin by evaluating **Criterion {evaluation_item}*.
 ```
 """)
 
+
+## goal: identify project type
+IDENTIFICATION_GOAL_PROJECT_TYPE = """
+Identify the following key attribute of the repository:
+  **project type**: The primary functional type of the project.  
+    Options and their definitions:  
+    - **package**: A reusable Python or R library intended to be imported by other software.  
+    - **application**: A standalone Python or R program that can be directly executed by users.  
+    - **pipeline**: A biomedical data processing workflow that integrates multiple tools or steps.
+    - **unknown type**: Use this only if the type cannot be determined reliably from available information.
+  **Notes**:
+    The project can be identified as one of the above project type.
+"""
+
+## plan system prompt
+IDENTIFICATION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
+### **Goal**
+You are an expert developer in the field of biomedical domain. Your goal is:
+{goal}
+
+### **Repository File Structure**
+Here is the 3-level file structure of the repository (f - file, d - directory):
+{repo_structure}
+
+### **Function Tools**
+You are provided the following function tools:
+{tools}
+
+### Intermediate Steps
+Hers are the intermediate steps results:
+{intermediate_steps}
+
+### Intermediate Thoughts
+Analysis: {intermediate_analysis}
+Thoughts: {intermediate_thoughts}
+
+### **Instruction**
+All the results in each round will be persisted, meaning that states and variables will persisted through
+multiple rounds of plan execution. Be sure to take advantage of this by developing your collection plan
+incrementally and reflect on the intermediate observations at each round, instead of coding up everything 
+in one go. Be sure to take only one or two actions in each step.
+
+### **Output**
+You plan should follow this format:
+Step: tool name, should be one of {tool_names}
+Step Input: file name or directory name
+Step: tool name, should be one of {tool_names}
+Step Input: file name or directory name
+""")
+
+## executioin system prompt
+IDENTIFICATION_EXECUTION_SYSTEM_PROMPT = """
+You are an expert Python developer.
+
+You are given a **plan** and are expected to complete it using Python code and the available tools.
+
+---
+
+### **Available Tools**
+{tools}
+
+---
+
+### **Your Task**
+
+Execute the plan step by step using the format below:
+
+```
+Thought: Describe what you are thinking or planning to do next.  
+Action: The tool you are going to use (must be one of: {tool_names})  
+Action Input: The input to the selected action  
+Observation: The result returned by the action  
+```
+
+You may repeat the **Thought → Action → Action Input → Observation** loop as many times as needed.
+
+Once the plan is fully completed, output the result in the following format:
+```
+Thought: I have completed the plan.  
+Final Answer: Summarize all actions taken in the following format:
+
+**{{Action Input}}**: ({{Action}}) - Action Result: {{Action Output}}
+**{{Action Input}}**: ({{Action}}) - Action Result: {{Action Output}}
+...
+```
+
+---
+
+### **Example**
+```
+Action: read_file  
+Action Input: README.md  
+Observation: ### Scanpy \n### Installation ...  
+...  
+Final Answer:  
+**README.md**: (analyze_file_tool) - ### Scanpy \n ### Installation ...
+...
+```
+
+---
+
+### Instruction
+Please follow the plan exactly as specified. Do not take any actions outside of the outlined steps.
+
+### **Plan**
+{plan_steps}
+
+### **Actions Already Taken**
+{agent_scratchpad}
+
+---
+
+{input}
+"""
+
+## observation system prompt
+IDENTIFICATION_OBSERVATION_SYSTEM_PROMPT = """
+Your goal is:
+{goal}
+
+### **Repository File Structure**
+Here is the 3-level file structure of the repository (f - file, d - directory):
+{repo_structure}
+
+### **Intermediate Output**
+{intermediate_output}
+
+### **Instructions**
+Carefully review the **Goal**, **Repository File Structure**, and **Intermediate Output**.
+- If you believe the goal **can be achieved**, proceed as follows:  
+  - Provide your reasoning under **Analysis**  
+  - Then provide your result under **FinalAnswer**  
+  ```
+  **Analysis**: your analysis here  
+  **FinalAnswer**: your final answer here
+  ```
+- If the information is **not sufficient** to achieve the goal, simply explain why under **Thoughts**:  
+  ```
+  **Thoughts**: your thoughts here
+  ```
+Be precise and support your reasoning with evidence from the input.
+
+### Notes
+We are collecting information over multiple rounds, so please **do not rush to provide a Final Answer**.  
+If you find the current information insufficient, share your reasoning or thoughts instead—we’ll continue with the next round accordingly.
+"""
+
+COT_USER_INSTRUCTION = "Do not give the final result immediately. First, explain your reasoning process step by step, then provide the answer."
 
 
