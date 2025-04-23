@@ -203,7 +203,7 @@ class CustomPromptTemplate(StringPromptTemplate):
         thoughts = ""
         for action, observation in intermediate_steps:
             thoughts += action.log
-            thoughts += f"\nObservation: {observation}\nThought: "
+            thoughts += f"\nObservation: {observation}\n"
         # Set plan_step
         kwargs["plan_step"] = self.plan
         # Set the agent_scratchpad variable to that value

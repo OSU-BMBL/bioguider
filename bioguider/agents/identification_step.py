@@ -1,7 +1,5 @@
 
 import os
-import json
-from json import JSONDecodeError
 import re
 import logging
 from enum import Enum
@@ -9,13 +7,13 @@ from typing import Callable, Optional, TypedDict
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain.tools import tool, Tool, BaseTool
+from langchain.tools import tool, Tool
 from langchain.agents import create_react_agent, AgentExecutor
 from langgraph.graph import StateGraph, START, END
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, CustomOutputParser, CustomPromptTemplate, increase_token_usage, read_directory, read_file, summarize_file
-from bioguider.agents.common_agent import CommonAgent
+from bioguider.agents.agent_tools import read_directory_tool, read_file_tool, summarize_file_tool
+from bioguider.agents.agent_utils import CustomOutputParser, CustomPromptTemplate, read_directory, read_file, summarize_file
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.prompt_utils import (
     IDENTIFICATION_EXECUTION_SYSTEM_PROMPT, 
@@ -86,7 +84,27 @@ class IdentificationStep:
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
         self.step_callback: Callable | None = step_callback
+        self.tools = []
+        self.custom_tools = []
     
+    def _print_step(
+        self,
+        step_name: str | None = None,
+        step_output: str | None = None,
+        token_usage: dict | object | None = None,
+    ):
+        if self.step_callback is None:
+            return
+        # convert token_usage to dict
+        if token_usage is not None and not isinstance(token_usage, dict):
+            token_usage = vars(token_usage)
+        step_callback = self.step_callback
+        step_callback(
+            step_name=step_name,
+            step_output=step_output,
+            token_usage=token_usage,
+        )
+
     def compile(
         self, 
         repo_path: str,
@@ -95,79 +113,22 @@ class IdentificationStep:
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path
 
-        def _print_step(
-            step_name: str | None = None,
-            step_output: str | None = None,
-            token_usage: dict | object | None = None,
-        ):
-            if self.step_callback is None:
-                return
-            # convert token_usage to dict
-            if token_usage is not None and not isinstance(token_usage, dict):
-                token_usage = vars(token_usage)
-            step_callback = self.step_callback
-            step_callback(
-                step_name=step_name,
-                step_output=step_output,
-                token_usage=token_usage,
-            )
-
-        @tool
-        def analyze_file_tool(file_path: str) -> str | None:
-            """ read and analyze file
-Args:
-    file_path str: file path
-Returns:
-    A string of analysis result, if the file does not exist, return None. 
-    The fille will be analyzed to infer the project type.
-            """
-            if file_path is None:
-                return None
-            file_path = file_path.strip()
-            if repo_path not in file_path:
-                file_path = os.path.join(self.repo_path, file_path)
-            content = read_file(file_path)
-            if content is None:
-                return None
-            summarized_content, token_usage = summarize_file(
-                self.llm, 
-                file_path, 
-                content, 
-                level=6
-            )
-            _print_step(token_usage=token_usage)
-            return summarized_content
-        
-        @tool
-        def read_directory_tool(dir_path: str) -> str | None:
-            """ 
-Reads the contents of a directory, including files and subdirectories up to the specified depth.
-This function will exclude the file or directories specified in .gitignore file (gitignore_path).
-Args:
-    dir_path (str): Path to the directory.
-Returns:
-    a string containing file and subdirectory paths found within the specified depth.
-           """
-            full_path = dir_path
-            if full_path == "." or full_path == "..":
-                return f"Please skip this folder {dir_path}"
-            if repo_path not in full_path:
-                full_path = os.path.join(repo_path, full_path)
-            files = read_directory(full_path, gitignore_path=gitignore_path, level=1)
-            if files is None:
-                return "N/A"
-            file_pairs = [(f, "f" if os.path.isfile(os.path.join(full_path, f)) else "d") for f in files]
-            dir_structure = ""
-            for f, f_type in file_pairs:
-                dir_structure += f"{os.path.join(dir_path, f)} - {f_type}\n"
-            return dir_structure
+        self.tools = [
+            summarize_file_tool(llm=self.llm, repo_path=self.repo_path, token_usage_callback=self._print_step),
+            read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path)
+        ]
+        self.custom_tools = [Tool(
+            name=tool.__class__.__name__,
+            func=tool.run,
+            description=tool.__class__.__doc__,
+        ) for tool in self.tools]
         
         python_tool = Tool(
             name="Custom_Python_AST_REPL",
             func=CustomPythonAstREPLTool().run,
             description="Executes Python code. Useful for math, logic, or small computations."
         )
-        custom_tools = [python_tool, analyze_file_tool, read_directory_tool]
+        custom_tools = [python_tool] + self.custom_tools
         custom_tools_desc = ""
         custom_tool_names = "["
         for t in custom_tools:
@@ -208,10 +169,10 @@ Returns:
             repo_structure = self.repo_structure
             intermediate_steps = _build_intermediate_step_and_current_step(state)
             step_analysis, step_thoughts = _build_intermediate_analysis_and_thoughts(state)
-            _print_step(
+            self._print_step(
                 step_output="**Intermediate Step Output**\n" + intermediate_steps
             )
-            _print_step(
+            self._print_step(
                 step_output=f"**Intermediate Step Analysis**\n{step_analysis}\n**Intermediate Step Thoughts**\n{step_thoughts}"
             )
 
@@ -242,7 +203,7 @@ Returns:
             
             return result_plan
         def plan_step(state: IdentificationState):
-            _print_step(step_name="Plan Step")
+            self._print_step(step_name="Plan Step")
             syste_prompt = _build_plan_prompt(state)
             agent = CommonAgentTwoSteps(llm=self.llm)
             res, processed_res, token_useage, reasoning_process = agent.go(
@@ -253,14 +214,14 @@ Returns:
 
             _initialize_step(state)            
             res = IdentificationPlanResult(**res)
-            _print_step(step_output=f"**Reasoning Process**\n{reasoning_process}")
-            _print_step(step_output=f"**Plan**\n{str(res.actions)}")
-            _print_step(token_usage=token_useage)
+            self._print_step(step_output=f"**Reasoning Process**\n{reasoning_process}")
+            self._print_step(step_output=f"**Plan**\n{str(res.actions)}")
+            self._print_step(token_usage=token_useage)
             state['plan'] = _convert_plan(res)
             return state
 
         def execute_step(state: IdentificationState):
-            _print_step(step_name="Execute Step")
+            self._print_step(step_name="Execute Step")
             plan = state['plan']
             prompt = CustomPromptTemplate(
                 template=IDENTIFICATION_EXECUTION_SYSTEM_PROMPT,
@@ -294,8 +255,8 @@ Returns:
                         state["step_output"] = ""
                         return state
                     step_output = match.group(1).strip().strip(':')
-                    _print_step(step_output=step_output)
-                    _print_step(token_usage=callback_handler)
+                    self._print_step(step_output=step_output)
+                    self._print_step(token_usage=callback_handler)
                     state["step_output"] = step_output
                     return state
                 elif "Final Answer" in output:
@@ -306,8 +267,8 @@ Returns:
                         state["step_output"] = ""
                         return state
                     step_output = match.group(1).strip().strip(':')
-                    _print_step(step_output=step_output)
-                    _print_step(token_usage=callback_handler)
+                    self._print_step(step_output=step_output)
+                    self._print_step(token_usage=callback_handler)
                     state["step_output"] = step_output
                     return state
                 else:
@@ -316,7 +277,7 @@ Returns:
             return state
 
         def observe_step(state: IdentificationState):
-            _print_step(step_name="Observe Step")
+            self._print_step(step_name="Observe Step")
             intermediate_steps = state["intermediate_steps"] if "intermediate_steps" in state else []
             agent = CommonAgentTwoSteps(llm=self.llm)
             res, processed_res, token_usage, reasoning_process = agent.go(
@@ -328,11 +289,11 @@ Returns:
             state["final_answer"] = res.FinalAnswer
             analysis = res.Analysis
             thoughts = res.Thoughts
-            _print_step(step_output=f"**Observation Reasoning Process**\n{reasoning_process}")
-            _print_step(
+            self._print_step(step_output=f"**Observation Reasoning Process**\n{reasoning_process}")
+            self._print_step(
                 step_output=f"Final Answer: {res.FinalAnswer if res.FinalAnswer else None}\nAnalysis: {analysis}\nThoughts: {thoughts}",
             )
-            _print_step(token_usage=token_usage)
+            self._print_step(token_usage=token_usage)
             
             intermediate_step: list[str] = state["intermediate_steps"] if "intermediate_steps" in state else []
             step_output = state["step_output"]
