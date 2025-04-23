@@ -67,6 +67,18 @@ Identify the following key attribute of the repository:
     The project can be identified as one of the above project type.
 """
 
+## goal: identify primary language
+IDENTIFICATION_GOAL_PRIMARY_LANGUAGE = """
+Identify the following key attribute of the repository:
+  **primary language**: The primary language of the project.  
+    Options and their definitions:  
+    - **python**: Python language
+    - **R**: R language
+    - **unknown type**: Use this only if the type cannot be determined reliably from available information.
+  **Notes**:
+    The project can be identified as one of the above primary language.
+"""
+
 ## plan system prompt
 IDENTIFICATION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
 ### **Goal**
@@ -154,7 +166,7 @@ Final Answer:
 
 ---
 
-### Instruction
+### Notes
 Please follow the plan exactly as specified. Do not take any actions outside of the outlined steps.
 
 ### **Plan**

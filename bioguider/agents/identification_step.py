@@ -4,6 +4,7 @@ import json
 from json import JSONDecodeError
 import re
 import logging
+from enum import Enum
 from typing import Callable, Optional, TypedDict
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
@@ -19,6 +20,7 @@ from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.prompt_utils import (
     IDENTIFICATION_EXECUTION_SYSTEM_PROMPT, 
     IDENTIFICATION_GOAL_PROJECT_TYPE, 
+    IDENTIFICATION_GOAL_PRIMARY_LANGUAGE,
     IDENTIFICATION_OBSERVATION_SYSTEM_PROMPT, 
     IDENTIFICATION_PLAN_SYSTEM_PROMPT,
 )
@@ -61,6 +63,17 @@ class IdentificationState(TypedDict):
     step_output: Optional[str]
     step_analysis: Optional[str]
     step_thoughts: Optional[str]
+
+class ProjectTypeEnum(Enum):
+    application="application"
+    package="package"
+    pipeline="pipeline"
+    unknown="unknown type"
+
+class PrimaryLanguageEnum(Enum):
+    python="python"
+    R="R"
+    unknown="unknown type"
 
 class IdentificationStep:
     def __init__(
@@ -120,7 +133,6 @@ Returns:
                 self.llm, 
                 file_path, 
                 content, 
-                IDENTIFICATION_GOAL_PROJECT_TYPE, 
                 level=6
             )
             _print_step(token_usage=token_usage)
@@ -348,7 +360,15 @@ Returns:
 
         self.graph = graph.compile()
         
-    def execute(self):
+    def identify_project_type(self):
+        proj_type = self._identify(IDENTIFICATION_GOAL_PROJECT_TYPE)
+        return self._parse_project_type(proj_type)
+    
+    def identify_primary_language(self):
+        language = self._identify(IDENTIFICATION_GOAL_PRIMARY_LANGUAGE)
+        return self._parse_primary_language(language)
+
+    def _identify(self, goal: str):
         files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
         file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
         self.repo_structure = ""
@@ -357,8 +377,28 @@ Returns:
         
         for s in self.graph.stream(input={
             "llm": self.llm,
-            "goal": IDENTIFICATION_GOAL_PROJECT_TYPE,
+            "goal": goal,
         }, stream_mode="values"):
             print(s)
 
         return s["final_answer"] if "final_answer" in s else "unknown type"
+    
+    def _parse_project_type(self, proj_type: str) -> ProjectTypeEnum:
+        proj_type = proj_type.strip()
+        if proj_type == "application":
+            return ProjectTypeEnum.application
+        elif proj_type == "package":
+            return ProjectTypeEnum.package
+        elif proj_type == "pipeline":
+            return ProjectTypeEnum.pipeline
+        else:
+            return ProjectTypeEnum.unknown
+        
+    def _parse_primary_language(self, language: str) -> PrimaryLanguageEnum:
+        language = language.strip()
+        if language == "python":
+            return PrimaryLanguageEnum.python
+        elif language == "R":
+            return PrimaryLanguageEnum.R
+        else:
+            return PrimaryLanguageEnum.unknown

@@ -133,7 +133,6 @@ def summarize_file(
     llm: BaseChatOpenAI, 
     name: str, 
     content: str | None = None, 
-    goal: str | None = None,
     level: int = 3,
 ) -> Tuple[str, dict]:
     if content is None:
@@ -151,7 +150,6 @@ def summarize_file(
     prompt = EVALUATION_SUMMARIZE_FILE_PROMPT.format(
         file_name=name, 
         file_content=file_content, 
-        goal=goal,
         sentence_num1=level,
         sentence_num2=level+1,
     )
