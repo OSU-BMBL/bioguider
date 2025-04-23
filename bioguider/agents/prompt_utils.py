@@ -64,7 +64,10 @@ Identify the following key attribute of the repository:
     - **pipeline**: A biomedical data processing workflow that integrates multiple tools or steps.
     - **unknown type**: Use this only if the type cannot be determined reliably from available information.
   **Notes**:
-    The project can be identified as one of the above project type.
+    1. The project can be identified as one of the above project type.
+    2. The project may server as multiple project types, like package & pipeline, standalone application & package,
+      However, you need to investigate closely to find out the primary project type.
+    3. Do **not** rely heavily on directories like 'benchmark/' or 'tests/' when determining the project type, as they are often auxiliary.
 """
 
 ## goal: identify primary language
@@ -208,10 +211,10 @@ Carefully review the **Goal**, **Repository File Structure**, and **Intermediate
 Be precise and support your reasoning with evidence from the input.
 
 ### Notes
-We are collecting information over multiple rounds, so please **do not rush to provide a Final Answer**.  
+We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
 If you find the current information insufficient, share your reasoning or thoughts instead—we’ll continue with the next round accordingly.
 """
 
-COT_USER_INSTRUCTION = "Do not give the final result immediately. First, explain your reasoning process step by step, then provide the answer."
+COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your reasoning process step by step, then provide the answer."
 
 
