@@ -23,6 +23,7 @@ from bioguider.agents.prompt_utils import (
     IDENTIFICATION_PLAN_SYSTEM_PROMPT,
 )
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
+from bioguider.agents.agent_step import AgentStep
 
 logger = logging.getLogger(__name__)
 
@@ -73,69 +74,58 @@ class PrimaryLanguageEnum(Enum):
     R="R"
     unknown="unknown type"
 
-class IdentificationStep:
+class IdentificationStep(AgentStep):
     def __init__(
         self, 
         llm: BaseChatOpenAI,
         step_callback: Callable | None=None,
     ):
-        self.llm = llm
+        super().__init__(llm=llm, step_callback=step_callback)
         self.repo_path: str | None = None
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
-        self.step_callback: Callable | None = step_callback
         self.tools = []
         self.custom_tools = []
-    
-    def _print_step(
-        self,
-        step_name: str | None = None,
-        step_output: str | None = None,
-        token_usage: dict | object | None = None,
-    ):
-        if self.step_callback is None:
-            return
-        # convert token_usage to dict
-        if token_usage is not None and not isinstance(token_usage, dict):
-            token_usage = vars(token_usage)
-        step_callback = self.step_callback
-        step_callback(
-            step_name=step_name,
-            step_output=step_output,
-            token_usage=token_usage,
-        )
+        self.custom_tool_names: str | None = None
+        self.custom_tools_desc: str | None = None
 
-    def compile(
-        self, 
-        repo_path: str,
-        gitignore_path: str,
-    ):
+    def _initialize(self, repo_path: str, gitignore_path: str):
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path
+        if not os.path.exists(self.repo_path):
+            raise ValueError(f"Repository path {self.repo_path} does not exist.")
+        files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
+        file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
+        self.repo_structure = ""
+        for f, f_type in file_pairs:
+            self.repo_structure += f"{f} - {f_type}\n"
 
         self.tools = [
             summarize_file_tool(llm=self.llm, repo_path=self.repo_path, token_usage_callback=self._print_step),
-            read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path)
+            read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path),
+            CustomPythonAstREPLTool(),
         ]
         self.custom_tools = [Tool(
             name=tool.__class__.__name__,
             func=tool.run,
             description=tool.__class__.__doc__,
         ) for tool in self.tools]
-        
-        python_tool = Tool(
-            name="Custom_Python_AST_REPL",
-            func=CustomPythonAstREPLTool().run,
-            description="Executes Python code. Useful for math, logic, or small computations."
-        )
-        custom_tools = [python_tool] + self.custom_tools
-        custom_tools_desc = ""
-        custom_tool_names = "["
-        for t in custom_tools:
-            custom_tools_desc += f"name: {t.name}, description: {t.description}\n"
-            custom_tool_names += t.name + ","
-        custom_tool_names += "]"
 
+        self.custom_tools_desc = ""
+        self.custom_tool_names = "["
+        for t in self.custom_tools:
+            self.custom_tools_desc += f"name: {t.name}, description: {t.description}\n"
+            self.custom_tool_names += t.name + ","
+        self.custom_tool_names += "]"
+
+    
+    def _compile(
+        self, 
+        repo_path: str,
+        gitignore_path: str,
+    ):
+        self._initialize(repo_path, gitignore_path)
+        
         def _initialize_step(state: IdentificationState):
             state["step_output"] = None
             state["step_analysis"] = None
@@ -179,9 +169,9 @@ class IdentificationStep:
             return IDENTIFICATION_PLAN_SYSTEM_PROMPT.format(
                 goal = goal,
                 repo_structure=repo_structure,
-                tools=custom_tools_desc,
+                tools=self.custom_tools_desc,
                 intermediate_steps=intermediate_steps,
-                tool_names=custom_tool_names,
+                tool_names=self.custom_tool_names,
                 intermediate_analysis=step_analysis,
                 intermediate_thoughts=step_thoughts,
             )
@@ -225,20 +215,20 @@ class IdentificationStep:
             plan = state['plan']
             prompt = CustomPromptTemplate(
                 template=IDENTIFICATION_EXECUTION_SYSTEM_PROMPT,
-                tools=custom_tools,
+                tools=self.custom_tools,
                 plan=plan,
                 input_variables=["tools", "agent_scratchpad", "intermediate_steps", "tool_names", "plan_steps"]
             )
             output_parser = CustomOutputParser()
             agent = create_react_agent(
                 llm=self.llm,
-                tools=custom_tools,
+                tools=self.custom_tools,
                 prompt=prompt,
                 output_parser=output_parser,
                 stop_sequence=["\nObservation:"],
             )
             callback_handler = OpenAICallbackHandler()
-            agent_executor = AgentExecutor(agent=agent, tools=custom_tools)
+            agent_executor = AgentExecutor(agent=agent, tools=self.custom_tools)
             response = agent_executor.invoke(
                 input={"plan_steps": plan, "input": "Now, let's begin."},
                 config={"callbacks": [callback_handler]}
@@ -322,27 +312,14 @@ class IdentificationStep:
         self.graph = graph.compile()
         
     def identify_project_type(self):
-        proj_type = self._identify(IDENTIFICATION_GOAL_PROJECT_TYPE)
+        s = self._go_graph({"goal": IDENTIFICATION_GOAL_PROJECT_TYPE})
+        proj_type = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_project_type(proj_type)
     
     def identify_primary_language(self):
-        language = self._identify(IDENTIFICATION_GOAL_PRIMARY_LANGUAGE)
+        s = self._go_graph({"goal": IDENTIFICATION_GOAL_PRIMARY_LANGUAGE})
+        language = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_primary_language(language)
-
-    def _identify(self, goal: str):
-        files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
-        file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
-        self.repo_structure = ""
-        for f, f_type in file_pairs:
-            self.repo_structure += f"{f} - {f_type}\n"
-        
-        for s in self.graph.stream(input={
-            "llm": self.llm,
-            "goal": goal,
-        }, stream_mode="values"):
-            print(s)
-
-        return s["final_answer"] if "final_answer" in s else "unknown type"
     
     def _parse_project_type(self, proj_type: str) -> ProjectTypeEnum:
         proj_type = proj_type.strip()

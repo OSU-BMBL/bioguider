@@ -7,6 +7,12 @@ import logging
 from langchain_experimental.tools.python.tool import PythonAstREPLTool
 
 class CustomPythonAstREPLTool(PythonAstREPLTool):
+    """
+    Custom Python REPL tool that executes Python code and captures output.
+    This tool is designed to be used in a LangChain agent for executing Python code
+    and capturing the output, including any print statements.
+    """
+    __name__ = "Custom_Python_AST_REPL"
     _exec_globals: dict = PrivateAttr()
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -17,8 +17,8 @@ def test_IdentificationAgent_biochatter(llm, step_callback):
     step = IdentificationStep(llm=llm, step_callback=step_callback)
     
     step.compile(
-        repo_path="/home/ubuntu/projects/github/biochatter/",
-        gitignore_path="/home/ubuntu/projects/github/biochatter/.gitignore",
+        repo_path="/home/ubuntu/projects/github/POPPER/",
+        gitignore_path="/home/ubuntu/projects/github/POPPER/.gitignore",
     )
     res = step.identify_project_type()
     assert res == ProjectTypeEnum.package
