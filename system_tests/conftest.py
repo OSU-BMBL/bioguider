@@ -218,4 +218,8 @@ def step_callback():
     return print_step
 
 
+@pytest.fixture(scope="module")
+def plan_actions():
+    return 'Step: check_file_related_tool\nStep Input: .env.template\n'
+
 

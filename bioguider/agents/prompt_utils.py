@@ -105,10 +105,10 @@ Analysis: {intermediate_analysis}
 Thoughts: {intermediate_thoughts}
 
 ### **Instruction**
-All the results in each round will be persisted, meaning that states and variables will persisted through
-multiple rounds of plan execution. Be sure to take advantage of this by developing your collection plan
-incrementally and reflect on the intermediate observations at each round, instead of coding up everything 
-in one go. Be sure to take only one or two actions in each step.
+We will repeat **Plan - Execution - Observation** loops as many times as needed. All the results in each round will be persisted, 
+meaning that states and variables will persisted through multiple rounds of plan execution. Be sure to take advantage of this by 
+developing your collection plan incrementally and reflect on the intermediate observations at each round, instead of coding up 
+everything in one go. Be sure to take only one or two actions in each step.
 
 ### **Output**
 You plan should follow this format:
@@ -118,7 +118,7 @@ Step: tool name, should be one of {tool_names}
 Step Input: file name or directory name
 """)
 
-## executioin system prompt
+## execution system prompt
 IDENTIFICATION_EXECUTION_SYSTEM_PROMPT = """
 You are an expert Python developer.
 

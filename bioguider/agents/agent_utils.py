@@ -194,7 +194,7 @@ class CustomPromptTemplate(StringPromptTemplate):
     # The list of tools available
     tools: List[BaseTool]
     # Plan
-    plan: str
+    plan_actions: str
 
     def format(self, **kwargs) -> str:
         # Get the intermediate steps (AgentAction, Observation tuples)
@@ -205,7 +205,7 @@ class CustomPromptTemplate(StringPromptTemplate):
             thoughts += action.log
             thoughts += f"\nObservation: {observation}\n"
         # Set plan_step
-        kwargs["plan_step"] = self.plan
+        kwargs["plan_actions"] = self.plan_actions
         # Set the agent_scratchpad variable to that value
         kwargs["agent_scratchpad"] = thoughts
         # Create a tools variable from the list of tools provided
@@ -250,4 +250,21 @@ class CustomOutputParser(AgentOutputParser):
             log=llm_output
         )
 
-  
+def get_tool_names_and_descriptions(tools: List[BaseTool]) -> str:
+    tool_names = []
+    tools_descriptions = ""
+    for tool in tools:
+        tools_descriptions += f"name: {tool.name}, description: {tool.description}\n"
+        tool_names.append(tool.name)
+    return str(tool_names), tools_descriptions
+
+def generate_repo_structure_prompt(
+    files: List[str],
+) -> str:
+    # Convert the repo structure to a string
+    file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
+    repo_structure = ""
+    for f, f_type in file_pairs:
+        repo_structure += f"{f} - {f_type}\n"
+    return repo_structure
+

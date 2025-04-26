@@ -3,8 +3,8 @@ import pytest
 
 # from bioguider.agents.collect_agent import CollectionAgent, IdentificationPlanResult
 
-from bioguider.agents.identification_step import (
-    IdentificationStep, 
+from bioguider.agents.identification_task import (
+    IdentificationTask, 
     IdentificationPlanResult,
     ProjectTypeEnum,
     PrimaryLanguageEnum
@@ -14,7 +14,7 @@ from bioguider.agents.identification_step import (
 def test_IdentificationAgent_biochatter(llm, step_callback):
     json_schema = IdentificationPlanResult.model_json_schema()
 
-    step = IdentificationStep(llm=llm, step_callback=step_callback)
+    step = IdentificationTask(llm=llm, step_callback=step_callback)
     
     step.compile(
         repo_path="/home/ubuntu/projects/github/POPPER/",
@@ -28,7 +28,7 @@ def test_IdentificationAgent_biochatter(llm, step_callback):
 def test_IdentificationAgent_biochatter_server(llm, step_callback):
     json_schema = IdentificationPlanResult.model_json_schema()
 
-    step = IdentificationStep(llm=llm, step_callback=step_callback)
+    step = IdentificationTask(llm=llm, step_callback=step_callback)
     
     step.compile(
         repo_path="/home/ubuntu/projects/github/biochatter-server/",
@@ -42,7 +42,7 @@ def test_IdentificationAgent_biochatter_server(llm, step_callback):
 def test_IdentificationAgent_biochatter_server(llm, step_callback):
     json_schema = IdentificationPlanResult.model_json_schema()
 
-    step = IdentificationStep(llm=llm, step_callback=step_callback)
+    step = IdentificationTask(llm=llm, step_callback=step_callback)
     
     step.compile(
         repo_path="/home/ubuntu/projects/github/biochatter-server/",

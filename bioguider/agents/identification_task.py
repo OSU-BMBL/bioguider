@@ -13,7 +13,12 @@ from langgraph.graph import StateGraph, START, END
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 
 from bioguider.agents.agent_tools import read_directory_tool, read_file_tool, summarize_file_tool
-from bioguider.agents.agent_utils import CustomOutputParser, CustomPromptTemplate, read_directory, read_file, summarize_file
+from bioguider.agents.agent_utils import (
+    CustomOutputParser, 
+    CustomPromptTemplate, 
+    read_directory,
+    get_tool_names_and_descriptions,
+)
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.prompt_utils import (
     IDENTIFICATION_EXECUTION_SYSTEM_PROMPT, 
@@ -23,7 +28,7 @@ from bioguider.agents.prompt_utils import (
     IDENTIFICATION_PLAN_SYSTEM_PROMPT,
 )
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
-from bioguider.agents.agent_step import AgentStep
+from bioguider.agents.agent_task import AgentTask
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +79,7 @@ class PrimaryLanguageEnum(Enum):
     R="R"
     unknown="unknown type"
 
-class IdentificationStep(AgentStep):
+class IdentificationTask(AgentTask):
     def __init__(
         self, 
         llm: BaseChatOpenAI,
@@ -86,8 +91,6 @@ class IdentificationStep(AgentStep):
         self.repo_structure: str | None = None
         self.tools = []
         self.custom_tools = []
-        self.custom_tool_names: str | None = None
-        self.custom_tools_desc: str | None = None
 
     def _initialize(self, repo_path: str, gitignore_path: str):
         self.repo_path = repo_path
@@ -103,21 +106,14 @@ class IdentificationStep(AgentStep):
         self.tools = [
             summarize_file_tool(llm=self.llm, repo_path=self.repo_path, token_usage_callback=self._print_step),
             read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path),
-            CustomPythonAstREPLTool(),
         ]
         self.custom_tools = [Tool(
             name=tool.__class__.__name__,
             func=tool.run,
             description=tool.__class__.__doc__,
         ) for tool in self.tools]
-
-        self.custom_tools_desc = ""
-        self.custom_tool_names = "["
-        for t in self.custom_tools:
-            self.custom_tools_desc += f"name: {t.name}, description: {t.description}\n"
-            self.custom_tool_names += t.name + ","
-        self.custom_tool_names += "]"
-
+        self.custom_tools.append(CustomPythonAstREPLTool())
+        
     
     def _compile(
         self, 
@@ -166,12 +162,13 @@ class IdentificationStep(AgentStep):
                 step_output=f"**Intermediate Step Analysis**\n{step_analysis}\n**Intermediate Step Thoughts**\n{step_thoughts}"
             )
 
+            custom_tool_names, custom_tools_desc = get_tool_names_and_descriptions(self.custom_tools)
             return IDENTIFICATION_PLAN_SYSTEM_PROMPT.format(
                 goal = goal,
                 repo_structure=repo_structure,
-                tools=self.custom_tools_desc,
+                tools=custom_tools_desc,
                 intermediate_steps=intermediate_steps,
-                tool_names=self.custom_tool_names,
+                tool_names=custom_tool_names,
                 intermediate_analysis=step_analysis,
                 intermediate_thoughts=step_thoughts,
             )
@@ -216,8 +213,8 @@ class IdentificationStep(AgentStep):
             prompt = CustomPromptTemplate(
                 template=IDENTIFICATION_EXECUTION_SYSTEM_PROMPT,
                 tools=self.custom_tools,
-                plan=plan,
-                input_variables=["tools", "agent_scratchpad", "intermediate_steps", "tool_names", "plan_steps"]
+                plan_actions=plan,
+                input_variables=["tools", "agent_scratchpad", "intermediate_steps", "tool_names", "plan_actions"]
             )
             output_parser = CustomOutputParser()
             agent = create_react_agent(
@@ -228,9 +225,12 @@ class IdentificationStep(AgentStep):
                 stop_sequence=["\nObservation:"],
             )
             callback_handler = OpenAICallbackHandler()
-            agent_executor = AgentExecutor(agent=agent, tools=self.custom_tools)
+            agent_executor = AgentExecutor(
+                agent=agent, 
+                tools=self.custom_tools
+            )
             response = agent_executor.invoke(
-                input={"plan_steps": plan, "input": "Now, let's begin."},
+                input={"plan_actions": plan, "input": "Now, let's begin."},
                 config={"callbacks": [callback_handler]}
             )
             

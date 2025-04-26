@@ -3,6 +3,19 @@ from typing import Callable
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.agents.agent_utils import read_directory, read_file, summarize_file
 
+class agent_tool:
+    def __init__(
+        self,
+        llm: BaseChatOpenAI | None = None,
+        token_usage_callback:Callable[[dict], None] = None,
+    ):
+        self.llm = llm
+        self.token_usage_callback = token_usage_callback
+
+    def _print_token_usage(self, token_usage: dict):
+        if self.token_usage_callback is not None:
+            self.token_usage_callback(token_usage=token_usage)
+
 class read_file_tool:
     """ read file
 Args:
@@ -23,7 +36,7 @@ Returns:
             return None
         return read_file(file_path)
 
-class summarize_file_tool:
+class summarize_file_tool(agent_tool):
     """ read and summarize the file
 Args:
     file_path str: file path
@@ -37,9 +50,8 @@ Returns:
         token_usage_callback: Callable | None = None,
         detailed_level: int | None = 6,
     ):
-        self.llm = llm
+        super().__init__(llm=llm, token_usage_callback=token_usage_callback)
         self.repo_path = repo_path
-        self.token_usage_callback = token_usage_callback
         detailed_level = detailed_level if detailed_level is not None else 6
         detailed_level = detailed_level if detailed_level > 0 else 1
         detailed_level = detailed_level if detailed_level <= 10 else 10
@@ -67,7 +79,7 @@ Args:
     dir_path (str): Path to the directory.
 Returns:
     a string containing file and subdirectory paths found within the specified depth.
-        """
+    """
     def __init__(
         self, 
         repo_path: str | None = None,

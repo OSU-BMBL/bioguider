@@ -4,7 +4,9 @@ from abc import ABC, abstractmethod
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
-class AgentStep(ABC):
+from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE
+
+class AgentTask(ABC):
     """
     A class representing a step in an agent's process.
     """
@@ -32,6 +34,7 @@ class AgentStep(ABC):
         # convert token_usage to dict
         if token_usage is not None and not isinstance(token_usage, dict):
             token_usage = vars(token_usage)
+            token_usage = {**DEFAULT_TOKEN_USAGE, **token_usage}
         step_callback = self.step_callback
         step_callback(
             step_name=step_name,
