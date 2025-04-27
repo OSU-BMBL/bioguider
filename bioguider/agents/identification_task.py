@@ -15,7 +15,8 @@ from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 from bioguider.agents.agent_tools import read_directory_tool, read_file_tool, summarize_file_tool
 from bioguider.agents.agent_utils import (
     CustomOutputParser, 
-    CustomPromptTemplate, 
+    CustomPromptTemplate,
+    ObservationResult, 
     read_directory,
     get_tool_names_and_descriptions,
 )
@@ -50,11 +51,6 @@ IdentificationPlanResultJsonSchema = {
     },
     "required": ["actions"],
 }
-
-class IdentificationObservationResult(BaseModel):
-    Analysis: Optional[str]=Field(description="Analyzing the goal, repository file structure and intermediate output.")
-    FinalAnswer: Optional[str]=Field(description="the final answer for the goal")
-    Thoughts: Optional[str]=Field(description="If the information is insufficient, the thoughts will be given and be taken into consideration in next round.")
 
 class IdentificationState(TypedDict):
     llm: BaseChatOpenAI
@@ -273,9 +269,9 @@ class IdentificationTask(AgentTask):
             res, processed_res, token_usage, reasoning_process = agent.go(
                 system_prompt=_build_observation_prompt(state),
                 instruction_prompt="Let's begin thinking.",
-                schema=IdentificationObservationResult
+                schema=ObservationResult
             )
-            res: IdentificationObservationResult = res
+            res: ObservationResult = res
             state["final_answer"] = res.FinalAnswer
             analysis = res.Analysis
             thoughts = res.Thoughts

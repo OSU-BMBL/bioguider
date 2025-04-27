@@ -20,26 +20,72 @@ from langchain.schema import (
 )
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.agents.agent_utils import read_directory
+from bioguider.agents.collection_task_utils import (
+    RELATED_FILE_GOAL_ITEM,
+    CollectionWorkflowState, 
+    check_file_related_tool,
+)
 from bioguider.agents.common_agent import CommonAgent
-from bioguider.agents.agent_tools import read_directory_tool, summarize_file_tool, read_file_tool
+from bioguider.agents.agent_tools import (
+    read_directory_tool, 
+    summarize_file_tool, 
+    read_file_tool,
+)
+from bioguider.agents.peo_common_step import PEOCommonStep
+from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.agent_task import AgentTask
+from bioguider.agents.collection_plan_step import CollectionPlanStep
+from bioguider.agents.collection_execute_step import CollectionExecuteStep
+from bioguider.agents.collection_observe_step import CollectionObserveStep
 
 class CollectionTask(AgentTask):
-    def __init__(self, llm: BaseChatOpenAI, step_callback: Callable | None = None):
+    def __init__(
+        self, 
+        llm: BaseChatOpenAI, 
+        step_callback: Callable | None = None
+    ):
         super().__init__(llm, step_callback)
-        self._repo_path: str | None = None
-        self._gitignore_path: str | None = None
+        self.repo_path: str | None = None
+        self.gitignore_path: str | None = None
+        self.repo_structure: str | None = None
+        self.steps: list[PEOCommonStep] = []
     
+    def _token_usage_callback(self, token_usage: dict):
+        if self.step_callback is not None:
+            self.step_callback(
+                token_usage=token_usage,
+            )
+
     def _initialize(self):
+        # initialize the 1-level file structure of the repo
+        if not os.path.exists(self.repo_path):
+            raise ValueError(f"Repository path {self.repo_path} does not exist.")
+        files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
+        file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
+        self.repo_structure = ""
+        for f, f_type in file_pairs:
+            self.repo_structure += f"{f} - {f_type}\n"
+            
+        related_file_goal_item_desc = ChatPromptTemplate.from_template(RELATED_FILE_GOAL_ITEM).format(
+            goal_item="installation",
+            related_file_desc=COLLECTION_PROMPTS["installation"]["related_file_description"],
+        )
         self.tools = [
-            read_directory_tool(repo_path=self._repo_path),
+            read_directory_tool(repo_path=self.repo_path),
             summarize_file_tool(
-                llm=self._llm,
-                repo_path=self._repo_path,
+                llm=self.llm,
+                repo_path=self.repo_path,
                 token_usage_callback=self._token_usage_callback,
             ),
-            read_file_tool(repo_path=self._repo_path),
+            read_file_tool(repo_path=self.repo_path),
+            check_file_related_tool(
+                llm=self.llm,
+                repo_path=self.repo_path,
+                goal_item_desc=related_file_goal_item_desc,
+                token_usage_callback=self._token_usage_callback,
+            ),
         ]
         self.custom_tools = [Tool(
             name=tool.__class__.__name__,
@@ -47,11 +93,53 @@ class CollectionTask(AgentTask):
             description=tool.__class__.__doc__,
         ) for tool in self.tools]
         self.custom_tools.append(CustomPythonAstREPLTool())
+        self.steps = [
+            CollectionPlanStep(
+                llm=self.llm,
+                repo_path=self.repo_path,
+                repo_structure=self.repo_structure,
+                gitignore_path=self.gitignore_path,
+                custom_tools=self.custom_tools,
+            ),
+            CollectionExecuteStep(
+                llm=self.llm,
+                repo_path=self.repo_path,
+                repo_structure=self.repo_structure,
+                gitignore_path=self.gitignore_path,
+                custom_tools=self.custom_tools,
+            ),
+            CollectionObserveStep(
+                llm=self.llm,
+                repo_path=self.repo_path,
+                repo_structure=self.repo_structure,
+                gitignore_path=self.gitignore_path,
+            ),
+        ]
 
     def _compile(self, repo_path, gitignore_path):
-        self._repo_path = repo_path
-        self._gitignore_path = gitignore_path
+        self.repo_path = repo_path
+        self.gitignore_path = gitignore_path
         self._initialize()
+
+        def check_observe_step(state):
+            if "final_answer" in state and state["final_answer"] is not None:
+                return END
+            return "plan_step"
+
+        graph = StateGraph(CollectionWorkflowState)
+        graph.add_node("plan_step", self.steps[0].execute)
+        graph.add_node("execute_step", self.steps[1].execute)
+        graph.add_node("observe_step", self.steps[2].execute)
+        graph.add_edge(START, "plan_step")
+        graph.add_edge("plan_step", "execute_step")
+        graph.add_edge("execute_step", "observe_step")
+        graph.add_conditional_edges("observe_step", check_observe_step, {"plan_step", END})
+
+        self.graph = graph.compile()
+
+    def collect(self, goal: str):
+        s = self._go_graph({"goal_item": goal})
+        return s
 
         
 

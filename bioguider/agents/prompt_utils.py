@@ -89,7 +89,7 @@ You are an expert developer in the field of biomedical domain. Your goal is:
 {goal}
 
 ### **Repository File Structure**
-Here is the 3-level file structure of the repository (f - file, d - directory):
+Here is the 1-level file structure of the repository (f - file, d - directory):
 {repo_structure}
 
 ### **Function Tools**
@@ -189,7 +189,7 @@ Your goal is:
 {goal}
 
 ### **Repository File Structure**
-Here is the 3-level file structure of the repository (f - file, d - directory):
+Here is the 1-level file structure of the repository (f - file, d - directory):
 {repo_structure}
 
 ### **Intermediate Output**
@@ -217,4 +217,21 @@ If you find the current information insufficient, share your reasoning or though
 
 COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your reasoning process step by step, then provide the answer."
 
+COLLECTION_GOAL = """
+Your goal is to collect the names of all files that are relevant to **{goal_item}**.  
+Note: You only need to collect the **file names**, not their contents.
+"""
+
+COLLECTION_PROMPTS = {
+    "installation": {
+        "goal_item": "installation",
+        "related_file_description": """
+A file is considered **installation-related** if it contains any of the following:
+- Instructions on how to install software, packages, or dependencies  
+- Environment setup details (e.g., Python version, system requirements)  
+- Use of package managers (e.g., `pip install`, `conda`, `devtools::install_github`)  
+- Build or compilation steps.""",
+        
+    }
+}
 

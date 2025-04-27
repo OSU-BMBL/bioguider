@@ -6,21 +6,17 @@ from bioguider.agents.agent_utils import get_tool_names_and_descriptions
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep, PEOWorkflowState, PlanAgentResult, PlanAgentResultJsonSchema
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
-
-COLLECTION_PLAN_GOAL = ChatPromptTemplate.from_template("""
-Collect the names of all files that are relevant to **{goal_item}**.  
-Note: You only need to collect the **file names**, not their contents.
-""")
+from bioguider.agents.prompt_utils import COLLECTION_GOAL
 
 COLLECTION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
 ### **Goal**  
-You are an expert developer specializing in the biomedical domain. Your goal is:  
+You are an expert developer specializing in the biomedical domain. 
 **{goal}**
 
 ---
 
 ### **Repository File Structure**  
-Below is the 3-level file structure of the repository (`f` = file, `d` = directory):  
+Below is the 1-level file structure of the repository (`f` = file, `d` = directory):  
 **{repo_structure}**
 
 ---
@@ -93,17 +89,17 @@ class CollectionPlanStep(PEOCommonStep):
         self.custom_tools = custom_tools if custom_tools is not None else []
     
     @staticmethod
-    def _reset_step_state(state: PEOWorkflowState) -> PEOWorkflowState:
+    def _reset_step_state(state: CollectionWorkflowState) -> PEOWorkflowState:
         state["step_analysis"] = None
         state["step_thoughts"] = None
         state["step_output"] = None
         
-    def _prepare_system_prompt(self, state: PEOWorkflowState) -> str:
-        collection_state: CollectionWorkflowState = state
+    def _prepare_system_prompt(self, state: CollectionWorkflowState) -> str:
+        collection_state = state
         goal_item = collection_state["goal_item"]
         intermediate_steps = self._build_intermediate_steps(state)
         step_analysis, step_thoughts = self._build_intermediate_analysis_and_thoughts(state)
-        goal = COLLECTION_PLAN_GOAL.format(goal_item=goal_item)
+        goal = ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=goal_item)
         tool_names, tools_desc = get_tool_names_and_descriptions(self.custom_tools)
         system_prompt = COLLECTION_PLAN_SYSTEM_PROMPT.format(
             goal=goal,
@@ -132,7 +128,7 @@ class CollectionPlanStep(PEOCommonStep):
             plan_str += action_str
         return plan_str
 
-    def _execute_direct(self, state: PEOWorkflowState):
+    def _execute_direct(self, state: CollectionWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(

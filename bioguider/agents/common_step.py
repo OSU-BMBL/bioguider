@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Optional, TypedDict
 import logging
+from langchain_openai.chat_models.base import BaseChatOpenAI
 
 from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE
 
@@ -12,6 +13,7 @@ class CommonState(TypedDict):
     CommonState is a TypedDict that defines the structure of the state
     used in the CommonStep class.
     """
+    llm: Optional[BaseChatOpenAI]
     step_output_callback: Optional[Callable]
 
 class CommonStep(ABC):
@@ -24,20 +26,20 @@ class CommonStep(ABC):
         super().__init__()
         self.step_name = ""
 
-    def enter_step(self, state: CommonState):
+    def enter_step(self, state):
         if state["step_output_callback"] is None:
             return
         state["step_output_callback"](
             step_name=self.step_name, 
         )
 
-    def leave_step(self, state: CommonState, token_usage: Optional[dict[str, int]] = None):
+    def leave_step(self, state, token_usage: Optional[dict[str, int]] = None):
         if state["step_output_callback"] is None:
             return
         if token_usage is not None:
             state["step_output_callback"](token_usage=token_usage)
 
-    def execute(self, state: CommonState):
+    def execute(self, state):
         """
         Execute the step. This method should be overridden by subclasses.
         """
@@ -48,7 +50,7 @@ class CommonStep(ABC):
 
     def _print_step(
         self,
-        state: CommonState,
+        state,
         step_name: str | None = None,
         step_output: str | None = None,
         token_usage: dict | object | None = None,
@@ -68,7 +70,7 @@ class CommonStep(ABC):
         )                
 
     @abstractmethod
-    def _execute_direct(self, state: CommonState) -> tuple[dict, dict[str, int]]:
+    def _execute_direct(self, state) -> tuple[dict, dict[str, int]]:
         """
         Execute the step directly. This method should be overridden by subclasses.
         Args:

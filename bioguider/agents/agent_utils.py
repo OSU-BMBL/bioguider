@@ -16,6 +16,8 @@ from langchain.agents import AgentOutputParser
 from langgraph.prebuilt import create_react_agent
 import logging
 
+from pydantic import BaseModel, Field
+
 from .gitignore_checker import GitignoreChecker
 
 logger = logging.getLogger(__name__)
@@ -267,4 +269,9 @@ def generate_repo_structure_prompt(
     for f, f_type in file_pairs:
         repo_structure += f"{f} - {f_type}\n"
     return repo_structure
+
+class ObservationResult(BaseModel):
+    Analysis: Optional[str]=Field(description="Analyzing the goal, repository file structure and intermediate output.")
+    FinalAnswer: Optional[str]=Field(description="the final answer for the goal")
+    Thoughts: Optional[str]=Field(description="If the information is insufficient, the thoughts will be given and be taken into consideration in next round.")
 

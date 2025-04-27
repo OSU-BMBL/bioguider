@@ -15,57 +15,81 @@ from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep, PEOWorkflowState, PlanAgentResult, PlanAgentResultJsonSchema
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
 
-COLLECTION_EXECUTION_SYSTEM_PROMPT = ("""
-You are an expert Python developer.
-You are given a **plan** and are expected to complete it using Python code and the available tools.
+COLLECTION_EXECUTION_SYSTEM_PROMPT = """
+---
+
+You are an expert Python developer.  
+You are given a **plan** and must complete it strictly using Python code and the available tools.
 
 ---
-### **Available Tools**
+
+### **Available Tools**  
 {tools}
+
 ---
-### **Your Task**
-Execute the plan step by step using the format below:
+
+### **Your Task**  
+Follow the given plan step by step using the exact format below:
 
 ```
-Thought: Describe what you are thinking or planning to do next.
-Action: The tool you are going to use (must be one of: {tool_names})
-Action Input: The input to the selected action
-Observation: The result returned by the action
+Thought: Describe what you are thinking or planning to do next.  
+Action: The tool you are going to use (must be one of: {tool_names})  
+Action Input: The input to the selected action  
+Observation: The result returned by the action  
 ```
-You may repeat the **Thought → Action → Action Input → Observation** loop as many times as needed.
-Once the plan is fully completed, output the result in the following format:
+
+You may repeat the **Thought → Action → Action Input → Observation** loop as needed.  
+
+Once all steps in the plan have been executed, output all the file results using this format:
+
 ```
-Thought: I have completed the plan.
-Final Answer: Summarize all files related to the goal.:
-{{file_name1}}
-{{file_name2}}
+Thought: I have completed the plan.  
+Final Answer:
+{{file_name1}}: ({{tool_name}}) {{Observation1}}
+{{file_name2}}: ({{tool_name}}) {{Observation2}}
 ...
 ```
+
 ---
+
 ### **Example**
 ```
-Action: read_file
-Action Input: README.md
-Observation: No
+Action: read_file  
+Action Input: README.md  
+Observation: No  
 ...
 Final Answer:
-**README.md**
-**Dockerfile**
-**requirements.txt**
+README.md: (check_file_related_tool) No
+Dockerfile: (check_file_related_tool) Yes
+requirements.txt: (read_file_tool) scikit-learn\ntqdm\n...
 ...
 ```
----
-### **Notes**
-Please follow the plan exactly as speicified. **Do not take any actions** outside of the outlined steps.
 
-### **Plan**
+---
+
+### **Important Notes**
+
+- You must strictly follow the provided plan.  
+- **Do not take any additional or alternative actions**, even if:  
+  - No relevant result is found  
+  - The file content is missing, empty, or irrelevant  
+- If no information is found in a step, simply proceed to the next action in the plan without improvising.  
+- Only use the tools specified in the plan actions. No independent decisions or extra steps are allowed.
+
+---
+
+### **Plan**  
 {plan_actions}
-### **Actions Already Taken**
+
+### **Actions Already Taken**  
 {agent_scratchpad}
+
 ---
 
 {input}
-""")
+
+---
+"""
 
 class CollectionExecuteStep(PEOCommonStep):
     def __init__(
@@ -107,7 +131,7 @@ class CollectionExecuteStep(PEOCommonStep):
         agent_executor = AgentExecutor(
             agent=agent,
             tools=self.custom_tools,
-            max_iterations=5,
+            max_iterations=10,
         )
         response = agent_executor.invoke(
             input={"plan_actions": plan_actions, "input": "Now, let's begin."},

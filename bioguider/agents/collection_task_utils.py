@@ -1,5 +1,5 @@
 import os
-from typing import Callable
+from typing import Callable, Optional, TypedDict
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_core.messages import AIMessage
@@ -9,17 +9,23 @@ from bioguider.agents.agent_utils import read_file, summarize_file
 from bioguider.agents.peo_common_step import PEOWorkflowState
 from bioguider.agents.common_agent import CommonAgent
 
-class CollectionWorkflowState(PEOWorkflowState):
-    goal_item: str
 
-INSTALLATION_RELATED_GOAL_ITEM = """
-Your task is to determine whether the file is related to **installation instructions**.
+class CollectionWorkflowState(TypedDict):
+    llm: Optional[BaseChatOpenAI]
+    step_output_callback: Optional[Callable]
+    
+    intermediate_steps: Optional[str]
+    step_output: Optional[str]
+    step_analysis: Optional[str]
+    step_thoughts: Optional[str]
+    plan_actions: Optional[list[dict]]
 
-A file is considered **installation-related** if it contains any of the following:
-- Instructions on how to install software, packages, or dependencies  
-- Environment setup details (e.g., Python version, system requirements)  
-- Use of package managers (e.g., `pip install`, `conda`, `devtools::install_github`)  
-- Build or compilation steps  
+    goal_item: Optional[str]
+
+RELATED_FILE_GOAL_ITEM = """
+Your task is to determine whether the file is related to **{goal_item}**.
+
+{related_file_desc} 
 """
 
 CHECK_FILE_RELATED_USER_PROMPT = ChatPromptTemplate.from_template("""
@@ -68,9 +74,10 @@ Returns:
         file_content = read_file(file_path)
         if file_content is None:
             return False
-        summarized_content = summarize_file(self.llm, file_path, file_content, 6)
+        summarized_content, token_usage = summarize_file(self.llm, file_path, file_content, 6)
         if summarized_content is None:
             return False
+        self._print_token_usage(token_usage)
         
         prompt = CHECK_FILE_RELATED_USER_PROMPT.format(
             goal_item_desc=self.goal_item_desc,

@@ -64,7 +64,11 @@ class AgentTask(ABC):
         pass
 
     def _go_graph(self, input: dict) -> dict:
-        input = {**input, "llm": self.llm}
+        input = {
+            **input, 
+            "llm": self.llm,
+            "step_output_callback": self.step_callback,
+        }
         for s in self.graph.stream(input=input, stream_mode="values"):
             print(s)
 
