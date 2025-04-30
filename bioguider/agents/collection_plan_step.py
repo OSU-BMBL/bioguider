@@ -6,13 +6,14 @@ from bioguider.agents.agent_utils import get_tool_names_and_descriptions
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep, PEOWorkflowState, PlanAgentResult, PlanAgentResultJsonSchema
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
-from bioguider.agents.prompt_utils import COLLECTION_GOAL
+from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 
 COLLECTION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
 ### **Goal**  
 You are an expert developer specializing in the biomedical domain. 
 **{goal}**
 
+{related_file_description}
 ---
 
 ### **Repository File Structure**  
@@ -29,7 +30,7 @@ You have access to the following function tools:
 
 ### **Intermediate Steps**  
 Here are the results from previous steps:  
-**{intermediate_steps}**
+{intermediate_steps}
 
 ---
 
@@ -44,7 +45,7 @@ Here are the results from previous steps:
 1. We will iterate through multiple **Plan -> Execution -> Observation** loops as needed.  
    - All variables and tool outputs are **persisted across rounds**, so you can build on prior results.  
    - Develop your plan **incrementally**, and reflect on intermediate observations before proceeding.  
-   - Limit each step to **one or two actions**—avoid trying to complete everything in a single step.
+   - Limit each step to **one or two actions** — avoid trying to complete everything in a single step.
 
 2. Your task is to collect all files that are relevant to the goal.  
    - Start by using the `summarize_file` tool to inspect file content quickly.  
@@ -90,6 +91,14 @@ class CollectionPlanStep(PEOCommonStep):
     
     @staticmethod
     def _reset_step_state(state: CollectionWorkflowState) -> PEOWorkflowState:
+        # move step_output to intermediate steps
+        if "intermediate_steps" not in state or state["intermediate_steps"] is None:
+            state["intermediate_steps"] = []
+        intermediate_steps = state["intermediate_steps"]
+        if "step_output" in state and state["step_output"] is not None:
+            intermediate_steps.append(state["step_output"])
+        state["intermediate_steps"] = intermediate_steps
+
         state["step_analysis"] = None
         state["step_thoughts"] = None
         state["step_output"] = None
@@ -97,12 +106,15 @@ class CollectionPlanStep(PEOCommonStep):
     def _prepare_system_prompt(self, state: CollectionWorkflowState) -> str:
         collection_state = state
         goal_item = collection_state["goal_item"]
+        collection_item = COLLECTION_PROMPTS[goal_item]
         intermediate_steps = self._build_intermediate_steps(state)
         step_analysis, step_thoughts = self._build_intermediate_analysis_and_thoughts(state)
-        goal = ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=goal_item)
+        goal = ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=collection_item["goal_item"])
+        related_file_description = collection_item["related_file_description"]
         tool_names, tools_desc = get_tool_names_and_descriptions(self.custom_tools)
         system_prompt = COLLECTION_PLAN_SYSTEM_PROMPT.format(
             goal=goal,
+            related_file_description=related_file_description,
             repo_structure=self.repo_structure,
             tools=tools_desc,
             intermediate_steps=intermediate_steps,

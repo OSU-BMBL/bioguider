@@ -220,6 +220,6 @@ def step_callback():
 
 @pytest.fixture(scope="module")
 def plan_actions():
-    return 'Step: check_file_related_tool\nStep Input: .env.template\nStep: check_file_related_tool\nStep Input: README.md\n'
+    return 'Step: check_file_related_tool\nStep Input: pyproject.toml\nStep: check_file_related_tool\nStep Input: README.md\n'
 
 

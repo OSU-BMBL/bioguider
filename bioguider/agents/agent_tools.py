@@ -61,17 +61,18 @@ Returns:
         if file_path is None:
             return None
         file_path = file_path.strip()
-        if self.repo_path is not None and self.repo_path not in file_path:
-            file_path = os.path.join(self.repo_path, file_path)
-        if not os.path.isfile(file_path):
-            return None
-        file_content = read_file(file_path)
+        abs_file_path = file_path
+        if self.repo_path is not None and self.repo_path not in abs_file_path:
+            abs_file_path = os.path.join(self.repo_path, abs_file_path)
+        if not os.path.isfile(abs_file_path):
+            return f"{file_path} is not a file."
+        file_content = read_file(abs_file_path)
         summarized_content, token_usage = summarize_file(
-            self.llm, file_path, file_content, self.detailed_level
+            self.llm, abs_file_path, file_content, self.detailed_level
         )
         if self.token_usage_callback is not None:
             self.token_usage_callback(token_usage)
-        return summarized_content
+        return f"summarized content of file {file_path}: " + summarized_content
     
 class read_directory_tool:
     """Reads the contents of a directory, including files and subdirectories in it..
@@ -89,6 +90,7 @@ Returns:
         self.gitignore_path = gitignore_path if gitignore_path is not None else ""
 
     def run(self, dir_path):
+        dir_path = dir_path.strip()
         full_path = dir_path
         if full_path == "." or full_path == "..":
             return f"Please skip this folder {dir_path}"
@@ -101,4 +103,4 @@ Returns:
         dir_structure = ""
         for f, f_type in file_pairs:
             dir_structure += f"{os.path.join(dir_path, f)} - {f_type}\n"
-        return dir_structure
+        return f"The 1-level content of directory {dir_path}: " + dir_structure

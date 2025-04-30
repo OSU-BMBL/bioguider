@@ -3,6 +3,7 @@ from typing import Callable
 from abc import ABC, abstractmethod
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
+from langgraph.graph.graph import CompiledGraph
 
 from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE
 
@@ -21,7 +22,7 @@ class AgentTask(ABC):
         """
         self.llm = llm
         self.step_callback = step_callback
-        self.graph = None
+        self.graph: CompiledGraph | None = None
 
     def _print_step(
         self,
@@ -69,7 +70,11 @@ class AgentTask(ABC):
             "llm": self.llm,
             "step_output_callback": self.step_callback,
         }
-        for s in self.graph.stream(input=input, stream_mode="values"):
+        for s in self.graph.stream(
+            input=input, 
+            stream_mode="values",
+            config={"recursion_limit": 500},
+        ):
             print(s)
 
         return s

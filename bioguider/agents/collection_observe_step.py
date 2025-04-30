@@ -6,19 +6,24 @@ from langchain_core.prompts import ChatPromptTemplate
 from bioguider.agents.agent_utils import ObservationResult
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
-from bioguider.agents.prompt_utils import COLLECTION_GOAL
+from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 
 
 COLLECTION_OBSERVE_SYSTEM_PROMPT = """
 You are an expert software developer and technical documentation analyst.
 {goal_item_desc}
 
+{related_file_description}
+---
+
 ### **Repository Structure**
 Here is the 1-level file structure of the repository (`f` = file, `d` = directory):
 {repo_structure}
+---
 
 ### **Intermediate Output**
 {intermediate_output}
+---
 
 ### **Instructions**
 1. Your goal is to identify files that are relevant to the goal item.
@@ -35,6 +40,7 @@ Here is the 1-level file structure of the repository (`f` = file, `d` = director
   **Thoughts**: your thoughts here
   ```
 Be precise and support your reasoning with evidence from the input.
+---
 
 ### Notes
 We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
@@ -56,13 +62,16 @@ class CollectionObserveStep(PEOCommonStep):
         self.step_name = "Collection Observation Step"
 
     def _build_prompt(self, state):
+        goal_item = state["goal_item"]
+        collection_item = COLLECTION_PROMPTS[goal_item]
         goal_item_desc = \
-            ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=state["goal_item"])
+            ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=collection_item["goal_item"])
         repo_structure = self.repo_structure
         intermediate_steps = self._build_intermediate_steps(state)
         prompt = ChatPromptTemplate.from_template(COLLECTION_OBSERVE_SYSTEM_PROMPT)
         return prompt.format(
             goal_item_desc=goal_item_desc,
+            related_file_description=collection_item["related_file_description"],
             repo_structure=repo_structure,
             intermediate_output=intermediate_steps,
         )

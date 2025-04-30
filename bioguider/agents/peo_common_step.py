@@ -63,7 +63,7 @@ class PEOCommonStep(CommonStep):
             else state["step_analysis"]
         intermediate_thoughts = "N/A" if "step_thoughts" not in state or \
             state["step_thoughts"] is None \
-            else state["step_analysis"]
+            else state["step_thoughts"]
         return intermediate_analysis, intermediate_thoughts
 
 

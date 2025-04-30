@@ -1,3 +1,4 @@
+from enum import Enum
 from langchain_core.prompts import ChatPromptTemplate
 
 USER_INSTRUCTION = """
@@ -217,21 +218,47 @@ If you find the current information insufficient, share your reasoning or though
 
 COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your reasoning process step by step, then provide the answer."
 
+class CollectionGoalItemEnum(Enum):
+    UserGuide = "User Guide"
+    Tutorial = "Tutorials & Vignettes"
+
+
+
 COLLECTION_GOAL = """
 Your goal is to collect the names of all files that are relevant to **{goal_item}**.  
 Note: You only need to collect the **file names**, not their contents.
 """
 
 COLLECTION_PROMPTS = {
-    "installation": {
-        "goal_item": "installation",
+    "UserGuide": {
+        "goal_item": "User Guide",
         "related_file_description": """
-A file is considered **installation-related** if it contains any of the following:
-- Instructions on how to install software, packages, or dependencies  
-- Environment setup details (e.g., Python version, system requirements)  
-- Use of package managers (e.g., `pip install`, `conda`, `devtools::install_github`)  
-- Build or compilation steps.""",
-        
-    }
+A document qualifies as a User Guide if it includes:​
+ - Installation Instructions: Step-by-step setup procedures.
+ - Input/Output Specifications: Detailed information on the data the software accepts and produces.
+ - Configuration Options: Descriptions of settings and parameters that can be adjusted.
+ - Function/Interface Listings: Comprehensive lists of available functions or interfaces, including their descriptions, parameters, and return values.
+ - Mathematical Equations/Numerical Methods: Embedded documentation explaining the underlying mathematical concepts or algorithms.
+ - Developer Guidance: Instructions on how to extend the software or contribute to its development.​
+
+**Do not** classify the document as a User Guide if it primarily serves as a Tutorial or Example. Such documents typically include:​
+ - Sample Datasets: Example data used to illustrate functionality.
+ - Narrative Explanations: Story-like descriptions guiding the user through examples.
+ - Code Walkthroughs: Detailed explanations of code snippets in a tutorial format.​
+**Do not** classify the document as a User Guide if it is souce code or a script (*.py, *.R) that is not intended for end-user interaction.​
+
+""",
+    },
+    "Tutorial": {
+        "goal_item": "Tutorials & Vignettes",
+        "related_file_description": """
+Tutorials and Vignettes are instructional documents or interactive notebooks that provide step-by-step guidance on using a software package or library. They typically include:
+ - Code Examples: Practical code snippets demonstrating how to use the software's features and functions.​
+ - Explanatory Text: Clear explanations accompanying the code examples to help users understand the concepts and techniques being presented.​
+ - Visualizations: Graphical representations of data or results to enhance understanding.​
+ - Interactive Elements: Features that allow users to experiment with the code in real-time, such as Jupyter notebooks or R Markdown files.​
+ - Use Cases: Real-world applications or scenarios where the software can be applied effectively.​
+""",
+    },
 }
 

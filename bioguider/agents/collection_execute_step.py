@@ -35,7 +35,7 @@ Follow the given plan step by step using the exact format below:
 Thought: Describe what you are thinking or planning to do next.  
 Action: The tool you are going to use (must be one of: {tool_names})  
 Action Input: The input to the selected action  
-Observation: The result returned by the action  
+Observation: The result returned by the action
 ```
 
 You may repeat the **Thought → Action → Action Input → Observation** loop as needed.  
@@ -43,10 +43,16 @@ You may repeat the **Thought → Action → Action Input → Observation** loop 
 Once all steps in the plan have been executed, output all the file results using this format:
 
 ```
-Thought: I have completed the plan.  
+Thought: I have completed the plan.
 Final Answer:
-{{file_name1}}: ({{tool_name}}) {{Observation1}}
-{{file_name2}}: ({{tool_name}}) {{Observation2}}
+Action: {{tool_name}}
+Action Input: {{file_name1}}
+Action Observation: {{Observation1}}
+---
+Action: {{tool_name}}
+Action Input: {{file_name2}}
+Action Observation: {{Observation2}}
+---
 ...
 ```
 

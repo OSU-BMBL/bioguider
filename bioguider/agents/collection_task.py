@@ -43,6 +43,7 @@ from bioguider.agents.collection_observe_step import CollectionObserveStep
 class CollectionTask(AgentTask):
     def __init__(
         self, 
+        goal_item: str,
         llm: BaseChatOpenAI, 
         step_callback: Callable | None = None
     ):
@@ -50,6 +51,7 @@ class CollectionTask(AgentTask):
         self.repo_path: str | None = None
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
+        self.goal_item = goal_item
         self.steps: list[PEOCommonStep] = []
     
     def _token_usage_callback(self, token_usage: dict):
@@ -68,9 +70,10 @@ class CollectionTask(AgentTask):
         for f, f_type in file_pairs:
             self.repo_structure += f"{f} - {f_type}\n"
             
+        collection_item = COLLECTION_PROMPTS[self.goal_item]
         related_file_goal_item_desc = ChatPromptTemplate.from_template(RELATED_FILE_GOAL_ITEM).format(
-            goal_item="installation",
-            related_file_desc=COLLECTION_PROMPTS["installation"]["related_file_description"],
+            goal_item=collection_item["goal_item"],
+            related_file_description=collection_item["related_file_description"],
         )
         self.tools = [
             read_directory_tool(repo_path=self.repo_path),
@@ -116,13 +119,15 @@ class CollectionTask(AgentTask):
             ),
         ]
 
-    def _compile(self, repo_path, gitignore_path):
+    def _compile(self, repo_path: str, gitignore_path: str):
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path
         self._initialize()
 
         def check_observe_step(state):
             if "final_answer" in state and state["final_answer"] is not None:
+                self._print_step(step_name="Final Answer")
+                self._print_step(step_output=state["final_answer"])
                 return END
             return "plan_step"
 
@@ -137,8 +142,8 @@ class CollectionTask(AgentTask):
 
         self.graph = graph.compile()
 
-    def collect(self, goal: str):
-        s = self._go_graph({"goal_item": goal})
+    def collect(self):
+        s = self._go_graph({"goal_item": self.goal_item})
         return s
 
         

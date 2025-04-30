@@ -25,7 +25,7 @@ class CollectionWorkflowState(TypedDict):
 RELATED_FILE_GOAL_ITEM = """
 Your task is to determine whether the file is related to **{goal_item}**.
 
-{related_file_desc} 
+{related_file_description} 
 """
 
 CHECK_FILE_RELATED_USER_PROMPT = ChatPromptTemplate.from_template("""
@@ -66,17 +66,17 @@ Returns:
         self.repo_path = repo_path
         self.goal_item_desc = goal_item_desc
 
-    def run(self, file_path: str) -> bool:
+    def run(self, file_path: str) -> str:
         if not self.repo_path in file_path:
             file_path = os.path.join(self.repo_path, file_path)
         if not os.path.isfile(file_path):
-            return False
+            return "Can't read file"
         file_content = read_file(file_path)
         if file_content is None:
-            return False
+            return "Failed to read file"
         summarized_content, token_usage = summarize_file(self.llm, file_path, file_content, 6)
         if summarized_content is None:
-            return False
+            return "Failed to summarize file"
         self._print_token_usage(token_usage)
         
         prompt = CHECK_FILE_RELATED_USER_PROMPT.format(
@@ -92,4 +92,10 @@ Returns:
             "total_tokens": res.usage_metadata["total_tokens"],
         }
         self._print_token_usage(token_usage)
-        return out
+        out = out.strip()
+        if out.lower() == "yes":
+            return "Yes, the file is related to the goal item."
+        elif out.lower() == "no":
+            return "No, the file **is not** related to the goal item."
+        else:
+            return out
