@@ -44,7 +44,7 @@ class CommonStep(ABC):
         Execute the step. This method should be overridden by subclasses.
         """
         self.enter_step(state)
-        state, token_usage = self._execute_direct(state)
+        state, token_usage = self._execute_directly(state)
         self.leave_step(state, token_usage)
         return state
 
@@ -70,7 +70,7 @@ class CommonStep(ABC):
         )                
 
     @abstractmethod
-    def _execute_direct(self, state) -> tuple[dict, dict[str, int]]:
+    def _execute_directly(self, state) -> tuple[dict, dict[str, int]]:
         """
         Execute the step directly. This method should be overridden by subclasses.
         Args:

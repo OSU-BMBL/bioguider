@@ -1,25 +1,19 @@
 import pytest
-from langchain.tools import Tool
-from bioguider.agents.agent_tools import (
-    read_directory_tool, 
-    read_file_tool, 
-    summarize_file_tool
-)
-from bioguider.agents.collection_task_utils import (
-    check_file_related_tool,
-)
-from bioguider.agents.collection_plan_step import (
-    CollectionPlanStep,
-    CollectionWorkflowState,
-)
-from bioguider.agents.agent_utils import (
-    read_directory,
-    generate_repo_structure_prompt
-)
-from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
-from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
 
-def test_collection_plan_step(llm, step_callback):
+from langchain.tools import Tool
+
+from bioguider.agents.agent_tools import read_directory_tool, read_file_tool, summarize_file_tool
+from bioguider.agents.agent_utils import generate_repo_structure_prompt, read_directory
+from bioguider.agents.identification_execute_step import (
+    IdentificationExecuteStep,
+)
+from bioguider.agents.identification_task_utils import (
+    IdentificationWorkflowState,
+)
+from bioguider.agents.prompt_utils import IDENTIFICATION_GOAL_PROJECT_TYPE
+from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
+
+def test_identification_plan_step(llm, step_callback):
     repo_path = "/home/ubuntu/projects/github/tabula-data"
     gitignore_path = "/home/ubuntu/projects/github/tabula-data/.gitignore"
     files = read_directory(repo_path, gitignore_path)
@@ -32,12 +26,6 @@ def test_collection_plan_step(llm, step_callback):
             repo_path=repo_path,
             token_usage_callback=step_callback,
         ),
-        check_file_related_tool(
-            llm=llm,
-            repo_path=repo_path,
-            goal_item_desc=COLLECTION_PROMPTS["UserGuide"]["related_file_description"],
-            token_usage_callback=step_callback,
-        ),
         read_file_tool(repo_path=repo_path),
     ]
     custom_tools = [Tool(
@@ -47,21 +35,21 @@ def test_collection_plan_step(llm, step_callback):
     ) for tool in tools]
     custom_tools.append(CustomPythonAstREPLTool())
 
-    step = CollectionPlanStep(
+    step = IdentificationExecuteStep(
         llm=llm,
         repo_path=repo_path,
         repo_structure=repo_structure,
         gitignore_path=gitignore_path,
         custom_tools=custom_tools,
     )
-    state = CollectionWorkflowState(
+    state = IdentificationWorkflowState(
         intermediate_steps=[],
-        goal_item="installation",
+        goal=IDENTIFICATION_GOAL_PROJECT_TYPE,
         step_output_callback=step_callback,
+        plan_actions="Step: summarize_file_tool\nStep Input: pyproject.toml\n"
     )
+
     state = step.execute(state)
 
     assert state is not None
-    assert "plan_actions" in state and len(state["plan_actions"]) > 0
-
-    
+    assert "step_output" in state and len(state["step_output"]) > 0

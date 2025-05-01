@@ -75,7 +75,7 @@ class CollectionObserveStep(PEOCommonStep):
             repo_structure=repo_structure,
             intermediate_output=intermediate_steps,
         )
-    def _execute_direct(self, state):
+    def _execute_directly(self, state):
         system_prompt = self._build_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(

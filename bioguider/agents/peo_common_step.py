@@ -66,4 +66,16 @@ class PEOCommonStep(CommonStep):
             else state["step_thoughts"]
         return intermediate_analysis, intermediate_thoughts
 
+    @staticmethod
+    def _reset_step_state(state):
+        # move step_output to intermediate steps
+        if "intermediate_steps" not in state or state["intermediate_steps"] is None:
+            state["intermediate_steps"] = []
+        intermediate_steps = state["intermediate_steps"]
+        if "step_output" in state and state["step_output"] is not None:
+            intermediate_steps.append(state["step_output"])
+        state["intermediate_steps"] = intermediate_steps
 
+        state["step_analysis"] = None
+        state["step_thoughts"] = None
+        state["step_output"] = None

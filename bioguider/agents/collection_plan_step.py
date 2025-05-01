@@ -89,19 +89,6 @@ class CollectionPlanStep(PEOCommonStep):
         self.gitignore_path = gitignore_path
         self.custom_tools = custom_tools if custom_tools is not None else []
     
-    @staticmethod
-    def _reset_step_state(state: CollectionWorkflowState) -> PEOWorkflowState:
-        # move step_output to intermediate steps
-        if "intermediate_steps" not in state or state["intermediate_steps"] is None:
-            state["intermediate_steps"] = []
-        intermediate_steps = state["intermediate_steps"]
-        if "step_output" in state and state["step_output"] is not None:
-            intermediate_steps.append(state["step_output"])
-        state["intermediate_steps"] = intermediate_steps
-
-        state["step_analysis"] = None
-        state["step_thoughts"] = None
-        state["step_output"] = None
         
     def _prepare_system_prompt(self, state: CollectionWorkflowState) -> str:
         collection_state = state
@@ -140,7 +127,7 @@ class CollectionPlanStep(PEOCommonStep):
             plan_str += action_str
         return plan_str
 
-    def _execute_direct(self, state: CollectionWorkflowState):
+    def _execute_directly(self, state: CollectionWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
@@ -148,7 +135,7 @@ class CollectionPlanStep(PEOCommonStep):
             instruction_prompt="Now, let's begin the collection plan step.",
             schema=PlanAgentResultJsonSchema,
         )
-        CollectionPlanStep._reset_step_state(state)
+        PEOCommonStep._reset_step_state(state)
         res = PlanAgentResult(**res)
         self._print_step(state, step_output=f"**Reasoning Process**\n{reasoning_process}")
         self._print_step(state, step_output=f"**Plan**\n{str(res.actions)}")
