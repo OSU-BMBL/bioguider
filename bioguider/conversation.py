@@ -49,7 +49,6 @@ class DeepSeekConversation(Conversation):
             self.chatter = None
             return False
 
-
     def chat(
         self,
         question: str,

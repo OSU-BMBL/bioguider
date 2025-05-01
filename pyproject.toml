@@ -25,10 +25,23 @@ classifiers = [
 python = "^3.11"
 langchain = "^0.3.20"
 langchain-deepseek = "^0.1.2"
+pydantic-settings = "^2.8.1"
+python-iso639 = "^2025.2.18"
+tqdm = "^4.67.1"
+pydantic = "^2.10.6"
+langchain-openai = "^0.3.8"
+langchain-anthropic = "^0.3.10"
+langgraph = "^0.3.11"
+python-dotenv = "^1.0.1"
+langchain-experimental = "^0.3.4"
+grandalf = "^0.8"
+pytest = "^8.3.5"
+tenacity = "^9.1.2"
 
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
+bump2version = "^1.0.1"
 
 [build-system]
 requires = ["poetry-core"]

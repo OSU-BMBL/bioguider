@@ -1,0 +1,277 @@
+
+import json
+import os
+import re
+from typing import List, Optional, Tuple, Union
+from langchain_openai import AzureChatOpenAI
+from langchain_deepseek import ChatDeepSeek
+from langchain_core.utils.interactive_env import is_interactive_env
+from langchain_core.messages.base import get_msg_title_repr
+from langchain_core.prompts import ChatPromptTemplate, StringPromptTemplate
+from langchain_core.messages import AIMessage
+from langchain_openai.chat_models.base import BaseChatOpenAI
+from langchain.tools import BaseTool
+from langchain.schema import AgentAction, AgentFinish
+from langchain.agents import AgentOutputParser
+from langgraph.prebuilt import create_react_agent
+import logging
+
+from pydantic import BaseModel, Field
+
+from .gitignore_checker import GitignoreChecker
+
+logger = logging.getLogger(__name__)
+
+def get_openai():
+    return get_llm(
+        api_key=os.environ.get("OPENAI_4O_API_KEY"),
+        model_name=os.environ.get("OPENAI_4O_MODEL"),
+        azure_endpoint=os.environ.get("AZURE_OPENAI_4O_ENDPOINT"),
+        api_version=os.environ.get("OPENAI_4O_API_VERSION"),
+        azure_deployment=os.environ.get("OPENAI_4O_DEPLOYMENT_NAME"),
+        max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKEN"),
+    )
+
+def get_llm(
+    api_key: str,
+    model_name: str="gpt-4o",
+    azure_endpoint: str=None,
+    api_version: str=None,
+    azure_deployment: str=None,
+    temperature: float = 0.0,
+    max_tokens: int = 4096,
+):
+    if model_name.startswith("deepseek"):
+        chat = ChatDeepSeek(
+            api_key=api_key,
+            model=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    elif model_name.startswith("gpt"):
+        chat = AzureChatOpenAI(
+            api_key=api_key,
+            azure_endpoint=azure_endpoint,
+            api_version=api_version,
+            azure_deployment=azure_deployment,
+            model=model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    else:
+        raise ValueError("Invalid model name")
+    # validate chat
+    try:
+        chat.invoke("Hi")
+    except Exception as e:
+        print(e)
+        return None
+    return chat
+
+def pretty_print(message, printout = True):
+    if isinstance(message, tuple):
+        title = message
+    else:
+        if isinstance(message.content, list):
+            title = get_msg_title_repr(message.type.title().upper() + " Message", bold=is_interactive_env())
+            if message.name is not None:
+                title += f"\nName: {message.name}"
+
+            for i in message.content:
+                if i['type'] == 'text':
+                    title += f"\n{i['text']}\n"
+                elif i['type'] == 'tool_use':
+                    title += f"\nTool: {i['name']}"
+                    title += f"\nInput: {i['input']}"
+            if printout:
+                print(f"{title}")
+        else:
+            title = get_msg_title_repr(message.type.title() + " Message", bold=is_interactive_env())
+            if message.name is not None:
+                title += f"\nName: {message.name}"
+            title += f"\n\n{message.content}"
+            if printout:
+                print(f"{title}")
+    return title
+
+HUGE_FILE_LENGTH = 10 * 1024 # 10K
+
+def read_file(
+    file_path: str,    
+) -> str | None:
+    if not os.path.isfile(file_path):
+        return None
+    with open(file_path, 'r') as f:
+        content = f.read()
+        return content
+    
+def read_directory(
+    dir_path: str,
+    gitignore_path: str,
+    level: int=1,
+) -> list[str] | None:
+    if not os.path.isdir(dir_path):
+        return None
+    gitignore_checker = GitignoreChecker(
+        directory=dir_path,
+        gitignore_path=gitignore_path
+    )
+    files = gitignore_checker.check_files_and_folders(level=level)
+    return files
+
+
+EVALUATION_SUMMARIZE_FILE_PROMPT = ChatPromptTemplate.from_template("""
+You are provided with the content of the file **{file_name}**:  
+```
+{file_content}
+```
+
+The content is lengthy. Please generate a concise summary ({sentence_num1}-{sentence_num2} sentences).
+""")
+
+MAX_FILE_LENGTH=20 *1024 # 20K
+MAX_SENTENCE_NUM=10
+def summarize_file(
+    llm: BaseChatOpenAI, 
+    name: str, 
+    content: str | None = None, 
+    level: int = 3,
+) -> Tuple[str, dict]:
+    if content is None:
+        try:
+            with open(name, "r") as fobj:
+                content = fobj.read()
+        except Exception as e:
+            logger.error(e)
+            return ""
+    file_content = content
+    level = level if level > 0 else 1
+    level = level if level < MAX_SENTENCE_NUM+1 else MAX_SENTENCE_NUM
+    if len(file_content) > MAX_FILE_LENGTH:
+        file_content = content[:MAX_FILE_LENGTH] + " ..."
+    prompt = EVALUATION_SUMMARIZE_FILE_PROMPT.format(
+        file_name=name, 
+        file_content=file_content, 
+        sentence_num1=level,
+        sentence_num2=level+1,
+    )
+    
+    config = {"recursion_limit": 500}
+    res: AIMessage = llm.invoke([("human", prompt)], config=config)
+    out = res.content
+    token_usage = {
+        "prompt_tokens": res.usage_metadata["input_tokens"],
+        "completion_tokens": res.usage_metadata["output_tokens"],
+        "total_tokens": res.usage_metadata["total_tokens"],
+    }
+
+    # for s in app.stream(inputs, stream_mode="values", config=config):
+    #     out = s['messages'][-1].content
+    
+    return out, token_usage
+
+DEFAULT_TOKEN_USAGE = {
+    "total_tokens": 0,
+    "completion_tokens": 0,
+    "prompt_tokens": 0,
+}
+
+def increase_token_usage(
+    token_usage: Optional[dict] = None,
+    incremental: dict = {**DEFAULT_TOKEN_USAGE},
+):
+    if token_usage is None:
+        token_usage = {**DEFAULT_TOKEN_USAGE}
+    token_usage["total_tokens"] += incremental["total_tokens"]
+    token_usage["completion_tokens"] += incremental["completion_tokens"]
+    token_usage["prompt_tokens"] += incremental["prompt_tokens"]
+
+    return token_usage
+
+
+  # Set up a prompt template
+class CustomPromptTemplate(StringPromptTemplate):
+    # The template to use
+    template: str
+    # The list of tools available
+    tools: List[BaseTool]
+    # Plan
+    plan_actions: str
+
+    def format(self, **kwargs) -> str:
+        # Get the intermediate steps (AgentAction, Observation tuples)
+        # Format them in a particular way
+        intermediate_steps = kwargs.pop("intermediate_steps")
+        thoughts = ""
+        for action, observation in intermediate_steps:
+            thoughts += action.log
+            thoughts += f"\nObservation: {observation}\n"
+        # Set plan_step
+        kwargs["plan_actions"] = self.plan_actions
+        # Set the agent_scratchpad variable to that value
+        kwargs["agent_scratchpad"] = thoughts
+        # Create a tools variable from the list of tools provided
+        kwargs["tools"] = "\n".join([f"{tool.name}: {tool.description}" for tool in self.tools])
+        # Create a list of tool names for the tools provided
+        kwargs["tool_names"] = ", ".join([tool.name for tool in self.tools])
+        prompt = self.template.format(**kwargs)
+        # print([prompt])
+        return prompt
+    
+class CustomOutputParser(AgentOutputParser):
+    def parse(self, llm_output: str) -> Union[AgentAction, AgentFinish]:
+        # Check if agent should finish
+        if "Final Answer:" in llm_output:
+            return AgentFinish(
+                return_values={"output": llm_output},
+                log=llm_output,
+            )
+        # Parse out the action and action input
+        regex = r"Action\s*\d*\s*:(.*?)\nAction\s*\d*\s*Input\s*\d*\s*:[\s]*(.*)"
+        match = re.search(regex, llm_output, re.DOTALL)
+        if not match:
+            # raise ValueError(f"Could not parse LLM output: `{llm_output}`")
+            print(f"Warning: could not parse LLM output: `{llm_output}`, finishing chain...")
+            return AgentFinish(
+                return_values={"output": llm_output},
+                log=llm_output,
+            )
+        action = match.group(1).strip()
+        action_input = match.group(2)
+        # Return the action and action input
+        action_dict = None
+        action_input = action_input.strip(" ").strip('"')
+        action_input_replaced = action_input.replace("'", '"')
+        try:
+            action_dict = json.loads(action_input_replaced)
+        except json.JSONDecodeError:
+            pass
+        return AgentAction(
+            tool=action, 
+            tool_input=action_dict if action_dict is not None else action_input, 
+            log=llm_output
+        )
+
+def get_tool_names_and_descriptions(tools: List[BaseTool]) -> str:
+    tool_names = []
+    tools_descriptions = ""
+    for tool in tools:
+        tools_descriptions += f"name: {tool.name}, description: {tool.description}\n"
+        tool_names.append(tool.name)
+    return str(tool_names), tools_descriptions
+
+def generate_repo_structure_prompt(
+    files: List[str],
+) -> str:
+    # Convert the repo structure to a string
+    file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
+    repo_structure = ""
+    for f, f_type in file_pairs:
+        repo_structure += f"{f} - {f_type}\n"
+    return repo_structure
+
+class ObservationResult(BaseModel):
+    Analysis: Optional[str]=Field(description="Analyzing the goal, repository file structure and intermediate output.")
+    FinalAnswer: Optional[str]=Field(description="the final answer for the goal")
+    Thoughts: Optional[str]=Field(description="If the information is insufficient, the thoughts will be given and be taken into consideration in next round.")
+
