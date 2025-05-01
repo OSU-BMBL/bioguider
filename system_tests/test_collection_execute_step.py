@@ -30,7 +30,7 @@ def test_collection_execute_step(
     repo_path = "/home/ubuntu/projects/github/scanpy"
     gitignore_path = "/home/ubuntu/projects/github/scanpy/.gitignore"
     files = read_directory(repo_path, gitignore_path)
-    repo_structure = generate_repo_structure_prompt(files)
+    repo_structure = generate_repo_structure_prompt(files, repo_path)
     goal_item_enum = CollectionGoalItemEnum.UserGuide.name
     related_file_goal_item_desc = ChatPromptTemplate.from_template(RELATED_FILE_GOAL_ITEM).format(
         goal_item=COLLECTION_PROMPTS[goal_item_enum]["goal_item"],

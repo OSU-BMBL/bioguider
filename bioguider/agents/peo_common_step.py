@@ -48,12 +48,12 @@ class PEOCommonStep(CommonStep):
         # previous steps
         if "intermediate_steps" in state:
             for i in range(len(state['intermediate_steps'])):
-                step = state['intermediate_steps'][i].replace("{", "_").replace("}", "_")
+                step = state['intermediate_steps'][i].replace("{", "(").replace("}", ")")
                 intermediate_steps += step + "\n"
         # current step
         if "step_output" in state and state["step_output"] is not None:
             step_content = state["step_output"]
-            step_content = step_content.replace("{", "_").replace("}", "_")
+            step_content = step_content.replace("{", "(").replace("}", ")")
             intermediate_steps += step_content
         return intermediate_steps
     

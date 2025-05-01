@@ -8,8 +8,7 @@ from bioguider.agents.peo_common_step import PEOCommonStep, PEOWorkflowState, Pl
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 
-COLLECTION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
-### **Goal**  
+COLLECTION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""### **Goal**  
 You are an expert developer specializing in the biomedical domain. 
 **{goal}**
 
@@ -17,14 +16,14 @@ You are an expert developer specializing in the biomedical domain.
 ---
 
 ### **Repository File Structure**  
-Below is the 1-level file structure of the repository (`f` = file, `d` = directory):  
-**{repo_structure}**
+Below is the 2-level file structure of the repository (`f` = file, `d` = directory, `l` - symlink, `u` - unknown):  
+{repo_structure}
 
 ---
 
 ### **Function Tools**  
 You have access to the following function tools:  
-**{tools}**
+{tools}
 
 ---
 

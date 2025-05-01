@@ -10,13 +10,12 @@ from bioguider.agents.identification_task_utils import IdentificationWorkflowSta
 from bioguider.agents.peo_common_step import PEOCommonStep
 
 ## plan system prompt
-IDENTIFICATION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
-### **Goal**
+IDENTIFICATION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""### **Goal**
 You are an expert developer in the field of biomedical domain. Your goal is:
 {goal}
 
 ### **Repository File Structure**
-Here is the 1-level file structure of the repository (f - file, d - directory):
+Here is the 2-level file structure of the repository (f - file, d - directory, l - symlink, u - unknown):
 {repo_structure}
 
 ### **Function Tools**

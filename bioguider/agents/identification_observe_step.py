@@ -8,12 +8,11 @@ from bioguider.agents.peo_common_step import PEOWorkflowState, PEOCommonStep
 
 
 ## observation system prompt
-IDENTIFICATION_OBSERVATION_SYSTEM_PROMPT = """
-Your goal is:
+IDENTIFICATION_OBSERVATION_SYSTEM_PROMPT = """Your goal is:
 {goal}
 
 ### **Repository File Structure**
-Here is the 1-level file structure of the repository (f - file, d - directory):
+Here is the 2-level file structure of the repository (f - file, d - directory, l - symlink, u - unknown):
 {repo_structure}
 
 ### **Intermediate Output**

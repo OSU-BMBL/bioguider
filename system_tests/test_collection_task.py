@@ -5,8 +5,8 @@ from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 
 def test_collection_task(llm, step_callback):
-    repo_path = "/home/ubuntu/projects/github/seurat"
-    gitignore_path = "/home/ubuntu/projects/github/seurat/.gitignore"
+    repo_path = "/home/ubuntu/projects/github/scanpy"
+    gitignore_path = "/home/ubuntu/projects/github/scanpy/.gitignore"
     
     task = CollectionTask(
         llm=llm,

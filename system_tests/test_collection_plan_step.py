@@ -23,7 +23,7 @@ def test_collection_plan_step(llm, step_callback):
     repo_path = "/home/ubuntu/projects/github/tabula-data"
     gitignore_path = "/home/ubuntu/projects/github/tabula-data/.gitignore"
     files = read_directory(repo_path, gitignore_path)
-    repo_structure = generate_repo_structure_prompt(files)
+    repo_structure = generate_repo_structure_prompt(files, repo_path)
 
     tools = [
         read_directory_tool(repo_path=repo_path),

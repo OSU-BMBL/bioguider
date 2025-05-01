@@ -18,6 +18,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
+from bioguider.utils.file_utils import get_file_type
 from .gitignore_checker import GitignoreChecker
 
 logger = logging.getLogger(__name__)
@@ -262,9 +263,10 @@ def get_tool_names_and_descriptions(tools: List[BaseTool]) -> str:
 
 def generate_repo_structure_prompt(
     files: List[str],
+    dir_path: str="",
 ) -> str:
     # Convert the repo structure to a string
-    file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
+    file_pairs = [(f, get_file_type(os.path.join(dir_path, f)).value) for f in files]
     repo_structure = ""
     for f, f_type in file_pairs:
         repo_structure += f"{f} - {f_type}\n"

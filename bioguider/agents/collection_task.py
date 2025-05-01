@@ -20,6 +20,7 @@ from langchain.schema import (
 )
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_utils import read_directory
 from bioguider.agents.collection_task_utils import (
     RELATED_FILE_GOAL_ITEM,
@@ -61,11 +62,11 @@ class CollectionTask(AgentTask):
             )
 
     def _initialize(self):
-        # initialize the 1-level file structure of the repo
+        # initialize the 2-level file structure of the repo
         if not os.path.exists(self.repo_path):
             raise ValueError(f"Repository path {self.repo_path} does not exist.")
         files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
-        file_pairs = [(f, "f" if os.path.isfile(f) else "d") for f in files]
+        file_pairs = [(f, get_file_type(os.path.join(self.repo_path, f)).value) for f in files]
         self.repo_structure = ""
         for f, f_type in file_pairs:
             self.repo_structure += f"{f} - {f_type}\n"

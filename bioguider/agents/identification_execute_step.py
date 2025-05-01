@@ -14,8 +14,7 @@ from bioguider.agents.peo_common_step import (
 logger = logging.getLogger(__name__)
 
 ## execution system prompt
-IDENTIFICATION_EXECUTION_SYSTEM_PROMPT = """
-You are an expert Python developer.
+IDENTIFICATION_EXECUTION_SYSTEM_PROMPT = """You are an expert Python developer.
 
 You are given a **plan** and are expected to complete it using Python code and the available tools.
 

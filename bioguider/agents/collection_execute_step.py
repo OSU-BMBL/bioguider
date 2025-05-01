@@ -17,8 +17,7 @@ from bioguider.agents.collection_task_utils import CollectionWorkflowState
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_EXECUTION_SYSTEM_PROMPT = """
----
+COLLECTION_EXECUTION_SYSTEM_PROMPT = """---
 
 You are an expert Python developer.  
 You are given a **plan** and must complete it strictly using Python code and the available tools.

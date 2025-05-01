@@ -89,6 +89,7 @@ class CommonAgentTwoSteps(CommonAgent):
             logger.error(str(e))
             raise e
         
+        # Then use the reasoning process to do the structured output
         updated_prompt = self._build_prompt_for_final_step(
             system_prompt=system_prompt,
             cot_msg=reasoning_process,

@@ -9,15 +9,14 @@ from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 
 
-COLLECTION_OBSERVE_SYSTEM_PROMPT = """
-You are an expert software developer and technical documentation analyst.
+COLLECTION_OBSERVE_SYSTEM_PROMPT = """You are an expert software developer and technical documentation analyst.
 {goal_item_desc}
 
 {related_file_description}
 ---
 
 ### **Repository Structure**
-Here is the 1-level file structure of the repository (`f` = file, `d` = directory):
+Here is the 2-level file structure of the repository (`f` = file, `d` = directory, `l` - symlink, `u` - unknown):
 {repo_structure}
 ---
 

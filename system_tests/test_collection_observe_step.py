@@ -14,7 +14,7 @@ def test_collection_observe_step(llm, step_callback):
     repo_path = "/home/ubuntu/projects/github/scanpy"
     gitignore_path = "/home/ubuntu/projects/github/scanpy/.gitignore"
     files = read_directory(repo_path, gitignore_path)
-    repo_structure = generate_repo_structure_prompt(files)
+    repo_structure = generate_repo_structure_prompt(files, repo_path)
 
     step = CollectionObserveStep(
         llm=llm,

@@ -1,6 +1,7 @@
 import os
 from typing import Callable
 from langchain_openai.chat_models.base import BaseChatOpenAI
+from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_utils import read_directory, read_file, summarize_file
 
 class agent_tool:
@@ -99,8 +100,8 @@ Returns:
         files = read_directory(full_path, gitignore_path=self.gitignore_path, level=1)
         if files is None:
             return "N/A"
-        file_pairs = [(f, "f" if os.path.isfile(os.path.join(full_path, f)) else "d") for f in files]
+        file_pairs = [(f, get_file_type(os.path.join(full_path, f)).value) for f in files]
         dir_structure = ""
         for f, f_type in file_pairs:
             dir_structure += f"{os.path.join(dir_path, f)} - {f_type}\n"
-        return f"The 1-level content of directory {dir_path}: " + dir_structure
+        return f"The 2-level content of directory {dir_path}: " + dir_structure
