@@ -87,7 +87,9 @@ COLLECTION_GOAL = """Your goal is to collect the names of all files that are rel
 COLLECTION_PROMPTS = {
     "UserGuide": {
         "goal_item": "User Guide",
-        "related_file_description": """A document qualifies as a **User Guide** if it includes:
+        "related_file_description": """A document qualifies as a **User Guide** if it includes **at least one** of the following elements.
+If **any one** of these is present, the document should be classified as a User Guide — full coverage is **not required**:
+ - Overview: A brief introduction to the software, its purpose, and its intended audience.
  - Installation Instructions: Step-by-step setup procedures.
  - Input/Output Specifications: Detailed information on the data the software accepts and produces.
  - Configuration Options: Descriptions of settings and parameters that can be adjusted.

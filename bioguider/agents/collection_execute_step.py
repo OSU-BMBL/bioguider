@@ -147,7 +147,10 @@ class CollectionExecuteStep(PEOCommonStep):
         )
         response = agent_executor.invoke(
             input={"plan_actions": plan_actions, "input": "Now, let's begin."},
-            config={"callbacks": [callback_handler]},
+            config={
+                "callbacks": [callback_handler],
+                "recursion_limit": 20,
+            },
         )
 
         # parse the response

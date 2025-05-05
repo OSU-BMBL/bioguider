@@ -54,12 +54,6 @@ class CollectionTask(AgentTask):
         self.repo_structure: str | None = None
         self.goal_item = goal_item
         self.steps: list[PEOCommonStep] = []
-    
-    def _token_usage_callback(self, token_usage: dict):
-        if self.step_callback is not None:
-            self.step_callback(
-                token_usage=token_usage,
-            )
 
     def _initialize(self):
         # initialize the 2-level file structure of the repo
@@ -81,14 +75,14 @@ class CollectionTask(AgentTask):
             summarize_file_tool(
                 llm=self.llm,
                 repo_path=self.repo_path,
-                token_usage_callback=self._token_usage_callback,
+                output_callback=self.step_callback,
             ),
             read_file_tool(repo_path=self.repo_path),
             check_file_related_tool(
                 llm=self.llm,
                 repo_path=self.repo_path,
                 goal_item_desc=related_file_goal_item_desc,
-                token_usage_callback=self._token_usage_callback,
+                output_callback=self.step_callback,
             ),
         ]
         self.custom_tools = [Tool(

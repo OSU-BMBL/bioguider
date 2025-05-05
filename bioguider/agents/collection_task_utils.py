@@ -3,11 +3,13 @@ from typing import Callable, Optional, TypedDict
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_core.messages import AIMessage
+from pydantic import BaseModel, Field
 
 from bioguider.agents.agent_tools import agent_tool
 from bioguider.agents.agent_utils import read_file, summarize_file
 from bioguider.agents.peo_common_step import PEOWorkflowState
 from bioguider.agents.common_agent import CommonAgent
+from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 
 
 class CollectionWorkflowState(TypedDict):
@@ -48,6 +50,9 @@ Respond with a single word: "Yes" or "No" to indicate whether the file is relate
 Do not include any additional text, explanation, or formatting.
 """)
 
+class CheckFileRelatedResult(BaseModel):
+    is_related: bool = Field(description="True if the file is related to the goal item, False otherwise.")
+
 class check_file_related_tool(agent_tool):
     """ Check if the file is related to the goal item
 Args:
@@ -60,9 +65,9 @@ Returns:
         llm: BaseChatOpenAI, 
         repo_path: str,
         goal_item_desc: str,
-        token_usage_callback: Callable | None = None,
+        output_callback: Callable | None = None,
     ):
-        super().__init__(llm=llm, token_usage_callback=token_usage_callback)
+        super().__init__(llm=llm, output_callback=output_callback)
         self.repo_path = repo_path
         self.goal_item_desc = goal_item_desc
 
@@ -84,18 +89,20 @@ Returns:
             summarized_file_content=summarized_content,
         )
 
-        res: AIMessage = self.llm.invoke([("human", prompt)])
-        out = res.content
-        token_usage = {
-            "prompt_tokens": res.usage_metadata["input_tokens"],
-            "completion_tokens": res.usage_metadata["output_tokens"],
-            "total_tokens": res.usage_metadata["total_tokens"],
-        }
+        agent = CommonAgentTwoSteps(llm=self.llm)
+        res, _, token_usage, reasoning = agent.go(
+            system_prompt=prompt,
+            instruction_prompt="Now, please check if the file is related to the goal item.",
+            schema=CheckFileRelatedResult,
+        )
+        # res: AIMessage = self.llm.invoke([("human", prompt)])
+        res: CheckFileRelatedResult = res
+        out = res.is_related
+        
+        self._print_step_output(step_output=reasoning)
         self._print_token_usage(token_usage)
-        out = out.strip()
-        if out.lower() == "yes":
+        if out:
             return "Yes, the file is related to the goal item."
-        elif out.lower() == "no":
-            return "No, the file **is not** related to the goal item."
         else:
-            return out
+            return "No, the file **is not** related to the goal item."
+        

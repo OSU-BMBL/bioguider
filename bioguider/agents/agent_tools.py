@@ -8,14 +8,17 @@ class agent_tool:
     def __init__(
         self,
         llm: BaseChatOpenAI | None = None,
-        token_usage_callback:Callable[[dict], None] = None,
+        output_callback:Callable[[dict], None] = None,
     ):
         self.llm = llm
-        self.token_usage_callback = token_usage_callback
+        self.output_callback = output_callback
 
     def _print_token_usage(self, token_usage: dict):
-        if self.token_usage_callback is not None:
-            self.token_usage_callback(token_usage=token_usage)
+        if self.output_callback is not None:
+            self.output_callback(token_usage=token_usage)
+    def _print_step_output(self, step_output: str):
+        if self.output_callback is not None:
+            self.output_callback(step_output=step_output)
 
 class read_file_tool:
     """ read file
@@ -48,10 +51,10 @@ Returns:
         self, 
         llm: BaseChatOpenAI,
         repo_path: str | None = None,
-        token_usage_callback: Callable | None = None,
+        output_callback: Callable | None = None,
         detailed_level: int | None = 6,
     ):
-        super().__init__(llm=llm, token_usage_callback=token_usage_callback)
+        super().__init__(llm=llm, output_callback=output_callback)
         self.repo_path = repo_path
         detailed_level = detailed_level if detailed_level is not None else 6
         detailed_level = detailed_level if detailed_level > 0 else 1
@@ -71,8 +74,7 @@ Returns:
         summarized_content, token_usage = summarize_file(
             self.llm, abs_file_path, file_content, self.detailed_level
         )
-        if self.token_usage_callback is not None:
-            self.token_usage_callback(token_usage)
+        self._print_token_usage(token_usage)
         return f"summarized content of file {file_path}: " + summarized_content
     
 class read_directory_tool:

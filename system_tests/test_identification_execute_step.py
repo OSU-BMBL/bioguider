@@ -24,7 +24,7 @@ def test_identification_plan_step(llm, step_callback):
         summarize_file_tool(
             llm=llm,
             repo_path=repo_path,
-            token_usage_callback=step_callback,
+            output_callback=step_callback,
         ),
         read_file_tool(repo_path=repo_path),
     ]

@@ -82,7 +82,7 @@ class IdentificationTask(AgentTask):
             self.repo_structure += f"{f} - {f_type}\n"
 
         self.tools = [
-            summarize_file_tool(llm=self.llm, repo_path=self.repo_path, token_usage_callback=self._print_step),
+            summarize_file_tool(llm=self.llm, repo_path=self.repo_path, output_callback=self._print_step),
             read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path),
         ]
         self.custom_tools = [Tool(
