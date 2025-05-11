@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import subprocess
 from typing import List, Optional, Tuple, Union
 from langchain_openai import AzureChatOpenAI
 from langchain_deepseek import ChatDeepSeek
@@ -22,6 +23,25 @@ from bioguider.utils.file_utils import get_file_type
 from .gitignore_checker import GitignoreChecker
 
 logger = logging.getLogger(__name__)
+
+class PlanAgentResult(BaseModel):
+    """ Identification Plan Result """
+    actions: list[dict] = Field(description="a list of action dictionary, e.g. [{'name': 'read_file', 'input': 'README.md'}, ...]")
+
+PlanAgentResultJsonSchema = {
+    "title": "identification_plan_result",
+    "description": "plan result",
+    "type": "object",
+    "properties": {
+        "actions": {
+            "type": "array",
+            "description": """a list of action dictionary, e.g. [{'name': 'read_file', 'input': 'README.md'}, ...]""",
+            "title": "Actions",
+            "items": {"type": "object"}
+        },
+    },
+    "required": ["actions"],
+}
 
 def get_openai():
     return get_llm(
@@ -105,7 +125,16 @@ def read_file(
     with open(file_path, 'r') as f:
         content = f.read()
         return content
-    
+
+def write_file(file_path: str, content: str):
+    try:
+        with open(file_path, "w") as fobj:
+            fobj.write(content)
+            return True
+    except Exception as e:
+        logger.error(e)
+        return False
+
 def read_directory(
     dir_path: str,
     gitignore_path: str,
@@ -277,3 +306,27 @@ class ObservationResult(BaseModel):
     FinalAnswer: Optional[str]=Field(description="the final answer for the goal")
     Thoughts: Optional[str]=Field(description="If the information is insufficient, the thoughts will be given and be taken into consideration in next round.")
 
+def convert_plan_to_string(plan: PlanAgentResult) -> str:
+    plan_str = ""
+    for action in plan.actions:
+        action_str = f"Step: {action['name']}\n"
+        action_str += f"Step Input: {action['input']}\n"
+        plan_str += action_str
+    return plan_str
+
+def run_command(command: list, cwd: str = None, timeout: int = None):
+    """
+    Run a shell command with optional timeout and return stdout, stderr, and return code.
+    """
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout
+        )
+        return result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired as e:
+        return e.stdout or "", e.stderr or f"Command timed out after {timeout} seconds", -1

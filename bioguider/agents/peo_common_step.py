@@ -12,25 +12,6 @@ class PEOWorkflowState(CommonState):
     step_thoughts: Optional[str]
     plan_actions: Optional[list[dict]]
 
-class PlanAgentResult(BaseModel):
-    """ Identification Plan Result """
-    actions: list[dict] = Field(description="a list of action dictionary, e.g. [{'name': 'read_file', 'input': 'README.md'}, ...]")
-
-PlanAgentResultJsonSchema = {
-    "title": "identification_plan_result",
-    "description": "plan result",
-    "type": "object",
-    "properties": {
-        "actions": {
-            "type": "array",
-            "description": """a list of action dictionary, e.g. [{'name': 'read_file', 'input': 'README.md'}, ...]""",
-            "title": "Actions",
-            "items": {"type": "object"}
-        },
-    },
-    "required": ["actions"],
-}
-
 class PEOCommonStep(CommonStep):
     """
     This class is a placeholder for common step functionality in the PEO agent.

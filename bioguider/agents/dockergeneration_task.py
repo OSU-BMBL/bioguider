@@ -20,41 +20,41 @@ from langchain.schema import (
 )
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.utils.file_utils import get_file_type
-from bioguider.agents.agent_utils import read_directory
+from bioguider.agents.agent_utils import read_directory, read_file
 from bioguider.agents.collection_task_utils import (
     RELATED_FILE_GOAL_ITEM,
     CollectionWorkflowState, 
     check_file_related_tool,
 )
 from bioguider.agents.common_agent import CommonAgent
-from bioguider.agents.agent_tools import (
-    read_directory_tool, 
-    summarize_file_tool, 
-    read_file_tool,
+from bioguider.agents.dockergeneration_task_utils import (
+    generate_Dockerfile_tool,
+    prepare_provided_files_string,
+    write_file_tool,
+    extract_python_file_from_notebook_tool,
 )
-from bioguider.agents.peo_common_step import PEOCommonStep
-from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
-from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
+from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool, PythonAstREPLTool
+from bioguider.agents.dockergeneration_plan_step import DockerGenerationPlanStep
+from bioguider.agents.dockergeneration_execute_step import DockerGenerationExecuteStep
+from bioguider.agents.dockergeneration_observe_step import DockerGenerationObserveStep
+from bioguider.agents.dockergeneration_task_utils import DockerGenerationWorkflowState
 from bioguider.agents.agent_task import AgentTask
-from bioguider.agents.collection_plan_step import CollectionPlanStep
-from bioguider.agents.collection_execute_step import CollectionExecuteStep
-from bioguider.agents.collection_observe_step import CollectionObserveStep
 
-class CollectionTask(AgentTask):
+class DockerGenerationTask(AgentTask):
     def __init__(
         self, 
-        llm: BaseChatOpenAI, 
-        step_callback: Callable | None = None
+        llm, 
+        step_callback = None
     ):
         super().__init__(llm, step_callback)
         self.repo_path: str | None = None
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
-        self.goal_item: str | None = None
         self.steps: list[PEOCommonStep] = []
         self.tools: list[any] | None = None
-        self.custom_tools: list[Tool] | None = None
+        self.provided_files: list[str] | None = None
 
     def _initialize(self):
         # initialize the 2-level file structure of the repo
@@ -65,26 +65,25 @@ class CollectionTask(AgentTask):
         self.repo_structure = ""
         for f, f_type in file_pairs:
             self.repo_structure += f"{f} - {f_type}\n"
-            
-        collection_item = COLLECTION_PROMPTS[self.goal_item]
-        related_file_goal_item_desc = ChatPromptTemplate.from_template(RELATED_FILE_GOAL_ITEM).format(
-            goal_item=collection_item["goal_item"],
-            related_file_description=collection_item["related_file_description"],
-        )
+
+        # initialize extracted files string
+        if self.provided_files is not None:
+            self.str_extracted_files = prepare_provided_files_string(
+                self.repo_path, self.provided_files
+            )
+
         self.tools = [
-            read_directory_tool(repo_path=self.repo_path),
-            summarize_file_tool(
-                llm=self.llm,
-                repo_path=self.repo_path,
-                output_callback=self.step_callback,
+            write_file_tool(self.repo_path),
+            generate_Dockerfile_tool(
+                self.llm,
+                self.repo_path,
+                self.str_extracted_files,
+                self.repo_structure,
+                self.step_callback,
             ),
-            read_file_tool(repo_path=self.repo_path),
-            check_file_related_tool(
-                llm=self.llm,
-                repo_path=self.repo_path,
-                goal_item_desc=related_file_goal_item_desc,
-                output_callback=self.step_callback,
-            ),
+            extract_python_file_from_notebook_tool(
+                self.repo_path,
+            )
         ]
         self.custom_tools = [Tool(
             name=tool.__class__.__name__,
@@ -93,42 +92,40 @@ class CollectionTask(AgentTask):
         ) for tool in self.tools]
         self.custom_tools.append(CustomPythonAstREPLTool())
         self.steps = [
-            CollectionPlanStep(
+            DockerGenerationPlanStep(
                 llm=self.llm,
                 repo_path=self.repo_path,
                 repo_structure=self.repo_structure,
                 gitignore_path=self.gitignore_path,
                 custom_tools=self.custom_tools,
             ),
-            CollectionExecuteStep(
+            DockerGenerationExecuteStep(
                 llm=self.llm,
                 repo_path=self.repo_path,
                 repo_structure=self.repo_structure,
                 gitignore_path=self.gitignore_path,
                 custom_tools=self.custom_tools,
             ),
-            CollectionObserveStep(
+            DockerGenerationObserveStep(
                 llm=self.llm,
                 repo_path=self.repo_path,
-                repo_structure=self.repo_structure,
-                gitignore_path=self.gitignore_path,
-            ),
+            )
         ]
 
-    def _compile(self, repo_path: str, gitignore_path: str, **kwargs):
+    def _compile(self, repo_path, gitignore_path, **kwargs):
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path
-        self.goal_item = kwargs.get("goal_item")
+        self.provided_files = kwargs.get("provided_files")
         self._initialize()
 
-        def check_observe_step(state):
-            if "final_answer" in state and state["final_answer"] is not None:
+        def check_observe_step(state: DockerGenerationWorkflowState):
+            if "final_answer" in state and state["final_anwser"] is not None:
                 self._print_step(step_name="Final Answer")
                 self._print_step(step_output=state["final_answer"])
                 return END
             return "plan_step"
-
-        graph = StateGraph(CollectionWorkflowState)
+        
+        graph = StateGraph(DockerGenerationWorkflowState)
         graph.add_node("plan_step", self.steps[0].execute)
         graph.add_node("execute_step", self.steps[1].execute)
         graph.add_node("observe_step", self.steps[2].execute)
@@ -139,14 +136,7 @@ class CollectionTask(AgentTask):
 
         self.graph = graph.compile()
 
-    def collect(self):
-        s = self._go_graph({"goal_item": self.goal_item})
+    def generate(self):
+        s = self._go_graph({"provided_files": self.provided_files})
         return s
-
-        
-
-            
-
-
-
 

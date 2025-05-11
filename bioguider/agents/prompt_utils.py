@@ -76,6 +76,7 @@ COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your 
 class CollectionGoalItemEnum(Enum):
     UserGuide = "User Guide"
     Tutorial = "Tutorials & Vignettes"
+    DockerGeneration = "Docker Generation"
 
 
 
@@ -113,5 +114,24 @@ If **any one** of these is present, the document should be classified as a User 
  - Use Cases: Real-world applications or scenarios where the software can be applied effectively.​
 """,
     },
+    "DockerGeneration": {
+        "goal_item": "Generating a Dockerfile for reproducibility testing",
+        "related_file_description": """A document qualifies **Dockerfile Generation** related if it includes **at least one** of the following elements.
+If **any one** of these is present, the document should be classified as a Dockerfile — full coverage is **not required**:
+ - Existing Docker Configuration
+   * Files like `Dockerfile`, `docker-compose.yml`, or any Docker-related build scripts.
+ - Installation & Environment Setup
+   * Files used to define or install dependencies.
+     * Examples: `README.md` `requirements.txt`, `environment.yml`, `setup.py`, `install.R`, `DESCRIPTION`, `pyproject.toml`, etc.
+ - Build/Runtime Scripts
+   * Shell or batch scripts used for setup, building, or launching the application.
+     * Examples: `install.sh`, `build.sh`, `run.sh`, etc.
+ - Minimal Code Examples or Get-Started Files
+   * Files that demonstrate a minimal working example of the software (e.g., for testing or reproducing results).
+     * Examples: `example.py`, `main.py`, `demo.R`, `notebooks/get_started.ipynb`, etc.
+     * These should be runnable with minimal configuration.""",
+        "important_instructions": """- Only include minimal code examples that demonstrate basic functionality.
+If multiple example files are found, select only the simplest and most lightweight one that is sufficient to verify the repository works."""
+    }
 }
 

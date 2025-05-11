@@ -2,9 +2,14 @@
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain.tools import BaseTool
 from langchain_core.prompts import ChatPromptTemplate, StringPromptTemplate
-from bioguider.agents.agent_utils import get_tool_names_and_descriptions
+from bioguider.agents.agent_utils import (
+    convert_plan_to_string, 
+    get_tool_names_and_descriptions,
+    PlanAgentResultJsonSchema,
+    PlanAgentResult,
+)
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
-from bioguider.agents.peo_common_step import PEOCommonStep, PEOWorkflowState, PlanAgentResult, PlanAgentResultJsonSchema
+from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 
@@ -118,14 +123,6 @@ class CollectionPlanStep(PEOCommonStep):
         )
         return system_prompt
 
-    def _convert_plan(self, plan: PlanAgentResult) -> str:
-        plan_str = ""
-        for action in plan.actions:
-            action_str = f"Step: {action['name']}\n"
-            action_str += f"Step Input: {action['input']}\n"
-            plan_str += action_str
-        return plan_str
-
     def _execute_directly(self, state: CollectionWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
@@ -138,7 +135,7 @@ class CollectionPlanStep(PEOCommonStep):
         res = PlanAgentResult(**res)
         self._print_step(state, step_output=f"**Reasoning Process**\n{reasoning_process}")
         self._print_step(state, step_output=f"**Plan**\n{str(res.actions)}")
-        state["plan_actions"] = self._convert_plan(res)
+        state["plan_actions"] = convert_plan_to_string(res)
 
         return state, token_usage
         

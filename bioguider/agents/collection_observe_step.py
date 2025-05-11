@@ -38,12 +38,14 @@ Here is the 2-level file structure of the repository (`f` = file, `d` = director
   ```
   **Thoughts**: your thoughts here
   ```
+3. Important instructions:
+  {important_instructions}
 Be precise and support your reasoning with evidence from the input.
 ---
 
 ### Notes
-We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
-If you find the current information insufficient, share your thoughts instead—we’ll continue with the next round accordingly.
+- We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
+  If you find the current information insufficient, share your thoughts instead—we’ll continue with the next round accordingly.
 """
 
 class CollectionObserveStep(PEOCommonStep):
@@ -68,11 +70,14 @@ class CollectionObserveStep(PEOCommonStep):
         repo_structure = self.repo_structure
         intermediate_steps = self._build_intermediate_steps(state)
         prompt = ChatPromptTemplate.from_template(COLLECTION_OBSERVE_SYSTEM_PROMPT)
+        important_instructions = "N/A" if "important_instructions" not in goal_item or len(goal_item["important_instructions"]) == 0 \
+            else goal_item["important_instructions"]
         return prompt.format(
             goal_item_desc=goal_item_desc,
             related_file_description=collection_item["related_file_description"],
             repo_structure=repo_structure,
             intermediate_output=intermediate_steps,
+            important_instructions=important_instructions,
         )
     def _execute_directly(self, state):
         system_prompt = self._build_prompt(state)
