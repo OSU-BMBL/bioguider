@@ -20,8 +20,25 @@ from bioguider.agents.dockergeneration_observe_step import (
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.utils.file_utils import extract_code_from_notebook
 
+@pytest.mark.skip()
 def test_DockerGenerationExecuteStep(llm, step_callback):
-    dockerfile = "demo-bioguider-wvHOMqOxcZ.Dockerfile"
+    dockerfile = "demo-bioguider-92w3j152nl.Dockerfile"
+    repo_path = "/home/ubuntu/projects/github/Slide_recon"
+    
+    step = DockerGenerationObserveStep(
+        llm=llm,
+        repo_path=repo_path,
+    )
+    state = DockerGenerationWorkflowState(
+        llm=llm,
+        step_output_callback=step_callback,
+        dockerfile=dockerfile,
+    )
+    state = step.execute(state)
+    assert state is not None
+
+def test_DockerGenerationExecuteStep(llm, step_callback):
+    dockerfile = "demo-bioguider-519e9t9bdx.Dockerfile"
     repo_path = "/home/ubuntu/projects/github/Slide_recon"
     
     step = DockerGenerationObserveStep(

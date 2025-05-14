@@ -1,20 +1,20 @@
 
 import logging
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain.tools import Tool, BaseTool
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.tools import BaseTool
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
-from nanoid import generate
 
 from bioguider.agents.agent_utils import (
     DEFAULT_TOKEN_USAGE,
     CustomPromptTemplate,
     CustomOutputParser,
-    get_tool_names_and_descriptions,
 )
 from bioguider.agents.peo_common_step import PEOCommonStep
-from bioguider.agents.dockergeneration_task_utils import DockerGenerationWorkflowState
+from bioguider.agents.dockergeneration_task_utils import (
+    DockerGenerationWorkflowState, 
+    generate_Dockerfile_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +98,23 @@ class DockerGenerationExecuteStep(PEOCommonStep):
         self.repo_structure = repo_structure
         self.gitignore_path = gitignore_path
         self.custom_tools = custom_tools if custom_tools is not None else []
+        self.generate_tool: generate_Dockerfile_tool | None = None
+    
+    def set_generate_Dockerfile_tool(self, tool: generate_Dockerfile_tool):
+        self.generate_tool = tool
 
     def _execute_directly(self, state: DockerGenerationWorkflowState):
         plan_actions = state["plan_actions"]
         plan_thoughts = state["plan_thoughts"]
+        step_output = state["step_output"] if "step_output" in state and \
+            state["step_output"] is not None else "N/A"
+        step_dockerfile_content = state["step_dockerfile_content"] if "step_dockerfile_content" in state and \
+            state["step_dockerfile_content"] is not None else "N/A"
+        self.generate_tool.set_intermediate_output(
+            plan_thoughts=plan_thoughts,
+            step_error=step_output,
+            step_dockerfile_content=step_dockerfile_content,
+        )
         prompt = CustomPromptTemplate(
             template=DOCKERGENERATION_EXECUTION_SYSTEM_PROMPT,
             tools=self.custom_tools,

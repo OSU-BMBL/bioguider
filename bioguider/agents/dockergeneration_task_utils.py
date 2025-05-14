@@ -51,6 +51,18 @@ You are given the contents of the following files extracted from the repository:
 ### **plan thoughts**
 Here is the plan thoughts, you are in **generate_Dockerfile_tool** action:
 {plan_thoughts}
+
+---
+
+### **Intermediate Output**
+Here is the Dockerfile you generate before.
+{step_dockerfile_content}
+
+---
+
+### **Intermediate Error**
+Here is the error occurred in building or running the above generated Dockerfile:
+{step_error}
                                                                   
 ### **Requirements:**
 1. **Environment Setup**
@@ -58,12 +70,14 @@ Here is the plan thoughts, you are in **generate_Dockerfile_tool** action:
    * Choose an appropriate base image (e.g., `python:3.10`, `r-base`, etc.) based on the language and setup instructions.
 2. **Dependency Installation**
    * Include all commands necessary to install packages, tools, or dependencies as specified in the input files.
+   * Make sure to always install common system utilities and development tools such as gcc, g++, build-essential, curl, wget, and similar essential packages.
 3. **Running a Get-Started Example**
    * Identify a minimal executable script or command (e.g., `python example.py`, `Rscript demo.R`, `jupyter nbconvert --execute`) that demonstrates the basic functionality of the repository.
 4. **Keep the Dockerfile Minimal and Reproducible**
    * Use best practices such as specifying exact versions where possible, minimizing layers, and using `COPY`, `WORKDIR`, and `CMD` appropriately.
 5. The Dockerfile will be placed at the root of the repository.
    Therefore, in the Dockerfile, you can assume all repository files are accessible and can be copied as needed.
+6. If the **Intermediate Output** and **Intermediate Error** are provided, you need to analyze them carefully, and try to fix them in the generated Dockerfile.
 ---
 ### **Output Format:**
 Return only the Dockerfile content enclosed in triple backticks:
@@ -87,16 +101,21 @@ Returns:
         repo_path: str,
         extracted_files: str,
         repo_structure: str,
-        plan_thoughts: str,
         output_callback: Callable | None = None,
     ):
         super().__init__(llm, output_callback=output_callback)
         self.repo_path = repo_path
         self.repo_struture = repo_structure
         self.extracted_files = extracted_files
+        self.plan_thoughts = None
+        self.step_error: str = None
+        self.step_dockerfile_content: str = None
+
+    def set_intermediate_output(self, plan_thoughts: str, step_error: str, step_dockerfile_content: str):
+        plan_thoughts = plan_thoughts.replace("{", "{{").replace("}", "}}")
         self.plan_thoughts = plan_thoughts
-        if self.plan_thoughts is not None:
-            self.plan_thoughts = self.plan_thoughts.replace('{', '{{').replace('}', '}}')
+        self.step_error = step_error
+        self.step_dockerfile_content = step_dockerfile_content
 
     def run(self, output_path: str):
         agent = CommonAgentTwoSteps(llm=self.llm)
@@ -104,6 +123,8 @@ Returns:
             repo_structure = self.repo_struture,
             extracted_files = self.extracted_files,
             plan_thoughts=self.plan_thoughts,
+            step_error=self.step_error,
+            step_dockerfile_content=self.step_dockerfile_content
         )
         res, _, token_usage, reasoning = agent.go(
             system_prompt=system_prompt,
@@ -153,7 +174,7 @@ Returns:
 class extract_python_file_from_notebook_tool:
     """extract code in a notebook to a python file
 Args:
-    notebool_path str: a string speicifies notebook path to extract.
+    notebook_path str: a string speicifies notebook path to extract.
     output_path str: a string specifies output python file path.
 Returns:
     bool True if it is succeeded to extract to python file, otherwise False

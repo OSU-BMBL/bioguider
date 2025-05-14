@@ -71,46 +71,61 @@ class DockerGenerationTask(AgentTask):
             self.str_extracted_files = prepare_provided_files_string(
                 self.repo_path, self.provided_files
             )
-
+        write_tool = write_file_tool(self.repo_path)
+        generate_tool = generate_Dockerfile_tool(
+            llm=self.llm,
+            repo_path=self.repo_path,
+            extracted_files=self.str_extracted_files,
+            repo_structure=self.repo_structure,
+            output_callback=self.step_callback,
+        )
+        extract_tool = extract_python_file_from_notebook_tool(
+            repo_path=self.repo_path,
+        )
         self.tools = [
-            write_file_tool(self.repo_path),
-            generate_Dockerfile_tool(
-                self.llm,
-                self.repo_path,
-                self.str_extracted_files,
-                self.repo_structure,
-                self.step_callback,
+            write_tool, generate_tool, extract_tool,
+        ]
+        self.custom_tools = [
+            StructuredTool.from_function(
+                write_tool.run,
+                description=write_tool.__class__.__doc__,
+                name=write_tool.__class__.__name__,
             ),
-            extract_python_file_from_notebook_tool(
-                self.repo_path,
+            Tool(
+                func=generate_tool.run,
+                description=generate_tool.__class__.__doc__,
+                name=generate_tool.__class__.__name__,
+            ),
+            StructuredTool.from_function(
+                extract_tool.run,
+                description=extract_tool.__class__.__doc__,
+                name=extract_tool.__class__.__name__,
             )
         ]
-        self.custom_tools = [Tool(
-            name=tool.__class__.__name__,
-            func=tool.run,
-            description=tool.__class__.__doc__,
-        ) for tool in self.tools]
         self.custom_tools.append(CustomPythonAstREPLTool())
+        plan_step = DockerGenerationPlanStep(
+            llm=self.llm,
+            repo_path=self.repo_path,
+            repo_structure=self.repo_structure,
+            gitignore_path=self.gitignore_path,
+            custom_tools=self.custom_tools,
+        )
+        execute_step = DockerGenerationExecuteStep(
+            llm=self.llm,
+            repo_path=self.repo_path,
+            repo_structure=self.repo_structure,
+            gitignore_path=self.gitignore_path,
+            custom_tools=self.custom_tools,
+        )
+        observe_step = DockerGenerationObserveStep(
+            llm=self.llm,
+            repo_path=self.repo_path,
+        )
         self.steps = [
-            DockerGenerationPlanStep(
-                llm=self.llm,
-                repo_path=self.repo_path,
-                repo_structure=self.repo_structure,
-                gitignore_path=self.gitignore_path,
-                custom_tools=self.custom_tools,
-            ),
-            DockerGenerationExecuteStep(
-                llm=self.llm,
-                repo_path=self.repo_path,
-                repo_structure=self.repo_structure,
-                gitignore_path=self.gitignore_path,
-                custom_tools=self.custom_tools,
-            ),
-            DockerGenerationObserveStep(
-                llm=self.llm,
-                repo_path=self.repo_path,
-            )
+            plan_step, execute_step, observe_step,
         ]
+        # pass generate_Dockerfile_tool to execute step
+        execute_step.set_generate_Dockerfile_tool(generate_tool)
 
     def _compile(self, repo_path, gitignore_path, **kwargs):
         self.repo_path = repo_path

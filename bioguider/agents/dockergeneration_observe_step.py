@@ -1,10 +1,9 @@
 
 import os
 from langchain.prompts import ChatPromptTemplate
-from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, ObservationResult, run_command, read_file
+from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, run_command, read_file
 from bioguider.agents.dockergeneration_task_utils import DockerGenerationWorkflowState
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
@@ -35,6 +34,8 @@ we'll continue with the next round accordingly
 class DockerGenerationObserveResult(BaseModel):
     thoughts: str = Field(description="thoughts on input")
 
+MAX_TIMEOUT = 900 # 15 mins
+MAX_ERROR_OUTPTU_LENGTH = 2048 # 2k
 class DockerGenerationObserveStep(PEOCommonStep):
     def __init__(self, llm, repo_path: str):
         super().__init__(llm)
@@ -56,7 +57,24 @@ class DockerGenerationObserveStep(PEOCommonStep):
             docker_run_output=run_error,
         )
     
+    @staticmethod
+    def _extract_error_message(output: str):
+        extracted_msg = ""
+        output_lower = output.lower()
+        if "error:" in output_lower:
+            ix = output_lower.find("error:")
+            extracted_msg = output[ix:]
+        elif "error" in output_lower:
+            ix = output_lower.find("error")
+            extracted_msg = output[ix:]
+        else:
+            extracted_msg = output
+        if len(extracted_msg) > MAX_ERROR_OUTPTU_LENGTH:
+            extracted_msg = extracted_msg[((-1) * MAX_ERROR_OUTPTU_LENGTH):]
+        return extracted_msg
+
     def _execute_directly(self, state: DockerGenerationWorkflowState):
+        token_usage = {**DEFAULT_TOKEN_USAGE}
         if "dockerfile" in state and len(state["dockerfile"]) > 0:
             dockerfile=state["dockerfile"]
             dockerfile_path = os.path.join(self.repo_path, dockerfile)
@@ -68,9 +86,10 @@ class DockerGenerationObserveStep(PEOCommonStep):
                 "-t", docker_image_name, 
                 "-f", dockerfile_path,
                 self.repo_path
-            ], timeout=600)
+            ], timeout=MAX_TIMEOUT)
             if code != 0:
-                system_prompt = self._build_system_prompt(state, error, "N/A")
+                error_msg = DockerGenerationObserveStep._extract_error_message(error)
+                system_prompt = self._build_system_prompt(state, error_msg, "N/A")
                 agent = CommonAgentTwoSteps(llm=self.llm)
                 res, _, token_usage, reasoning = agent.go(
                     system_prompt=system_prompt,
@@ -78,7 +97,7 @@ class DockerGenerationObserveStep(PEOCommonStep):
                     schema=DockerGenerationObserveResult,
                 )
                 state["step_dockerfile_content"] = read_file(dockerfile_path)
-                state["step_output"] = error
+                state["step_output"] = error_msg
                 state["step_thoughts"] = res.thoughts
                 self._print_step(
                     state,
@@ -89,14 +108,14 @@ class DockerGenerationObserveStep(PEOCommonStep):
                 "docker", "run",
                 "--name", "bioguider_demo",
                 docker_image_name
-            ], timeout=600)
+            ], timeout=MAX_TIMEOUT)
             run_command([
                 "docker", "rm", "-f",
                 "bioguider_demo"
-            ], timeout=600)
+            ], timeout=MAX_TIMEOUT)
             run_command([
                 "docker", "rmi", docker_image_name
-            ], timeout=600)
+            ], timeout=MAX_TIMEOUT)
             if code != 0:
                 system_prompt = self._build_system_prompt(
                     state, 
@@ -122,7 +141,6 @@ class DockerGenerationObserveStep(PEOCommonStep):
             return state, token_usage
         
         state["step_thoughts"] = "No Dockerfile is generated."
-        token_usage = {**DEFAULT_TOKEN_USAGE}
         return state, token_usage
 
 
