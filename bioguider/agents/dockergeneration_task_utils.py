@@ -192,9 +192,13 @@ Returns:
         if self.repo_path not in output_path:
             output_path = os.path.join(self.repo_path, output_path)
         content = extract_code_from_notebook(notebook_path)
-        with open(output_path, "w") as fobj:
-            fobj.write(content)
-            return True
+        try:
+            with open(output_path, "w") as fobj:
+                fobj.write(content)
+                return True
+        except FileNotFoundError as e:
+            logger.error(str(e))
+            return f"False, {output_path} does not exist."
         
 
 def prepare_provided_files_string(repo_path: str, provided_files: list[str]):
