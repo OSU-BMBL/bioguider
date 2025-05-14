@@ -8,6 +8,8 @@ import logging
 
 from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, increase_token_usage
 
+load_dotenv()
+
 def get_openai():
     return ChatOpenAI(
         api_key=os.getenv("OPENAI_API_KEY"),

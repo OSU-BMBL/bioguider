@@ -134,7 +134,7 @@ class DockerGenerationTask(AgentTask):
         self._initialize()
 
         def check_observe_step(state: DockerGenerationWorkflowState):
-            if "final_answer" in state and state["final_anwser"] is not None:
+            if "final_answer" in state and state["final_answer"] is not None:
                 self._print_step(step_name="Final Answer")
                 self._print_step(step_output=state["final_answer"])
                 return END

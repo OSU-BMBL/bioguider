@@ -151,6 +151,7 @@ class DockerGenerationExecuteStep(PEOCommonStep):
         )
         if "output" in response:
             output = response["output"]
+            self._print_step(state, step_output=f"**Execute Output:** \n{output}")
             if "**Final Answer**" in output:
                 final_answer = output.split("**Final Answer:**")[-1].strip().strip(":")
                 step_output = final_answer
