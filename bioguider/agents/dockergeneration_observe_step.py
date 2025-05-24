@@ -48,6 +48,8 @@ class DockerGenerationObserveStep(PEOCommonStep):
         build_error: str,
         run_error: str,
     ):
+        build_error = build_error.replace("{", "{{").replace("}", "}}")
+        run_error = run_error.replace("{", "{{").replace("}", "}}")
         dockerfile=state["dockerfile"]
         dockerfile_path = os.path.join(self.repo_path, dockerfile)
         dockerfile_content = read_file(dockerfile_path)
@@ -59,6 +61,8 @@ class DockerGenerationObserveStep(PEOCommonStep):
     
     @staticmethod
     def _extract_error_message(output: str):
+        if isinstance(output, bytes):
+            output = output.decode('utf-8')
         extracted_msg = ""
         output_lower = output.lower()
         if "error:" in output_lower:

@@ -61,6 +61,9 @@ Here are the results from previous steps:
 
 ---
 
+### **Important Instructions**
+{important_instructions}
+
 ### **Output Format**  
 Your plan should be returned as a sequence of steps in the following format:
 
@@ -102,6 +105,8 @@ class CollectionPlanStep(PEOCommonStep):
         step_analysis, step_thoughts = self._build_intermediate_analysis_and_thoughts(state)
         goal = ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=collection_item["goal_item"])
         related_file_description = collection_item["related_file_description"]
+        important_instructions="N/A" if "important_instructions" not in collection_item or len(collection_item["important_instructions"]) == 0 \
+            else collection_item["important_instructions"]
         tool_names, tools_desc = get_tool_names_and_descriptions(self.custom_tools)
         system_prompt = COLLECTION_PLAN_SYSTEM_PROMPT.format(
             goal=goal,
@@ -112,6 +117,7 @@ class CollectionPlanStep(PEOCommonStep):
             intermediate_analysis=step_analysis,
             intermediate_thoughts=step_thoughts,
             tool_names=tool_names,
+            important_instructions=important_instructions,
         )
         self._print_step(
             state,

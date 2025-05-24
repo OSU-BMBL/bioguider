@@ -107,6 +107,7 @@ class DockerGenerationPlanStep(PEOCommonStep):
         _, intermediate_thoughts = super()._build_intermediate_analysis_and_thoughts(state)
         intermediate_dockerfile_content = state["step_dockerfile_content"] if "step_dockerfile_content" in state else "N/A"
         intermediate_error = state["step_output"] if "step_output" in state else "N/A"
+        intermediate_error = intermediate_error.replace("{", "(").replace("}", ")")
 
         return intermediate_dockerfile_content, intermediate_error, intermediate_thoughts
 

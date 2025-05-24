@@ -73,9 +73,10 @@ class CommonAgentTwoSteps(CommonAgent):
             instruction_prompt=instruction_prompt
         )
 
-        msgs = cot_prompt.invoke(input={}).to_messages()
-        # First, use llm to do CoT
         try:
+            # First, use llm to do CoT
+            msgs = cot_prompt.invoke(input={}).to_messages()
+            
             cot_res = self.llm.generate(messages=[msgs])
             reasoning_process = cot_res.generations[0][0].text
             token_usage = cot_res.llm_output.get("token_usage")

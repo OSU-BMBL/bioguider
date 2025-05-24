@@ -66,6 +66,7 @@ Here is the error occurred in building or running the above generated Dockerfile
                                                                   
 ### **Requirements:**
 1. **Environment Setup**
+   * When generating the Dockerfile, prioritize using the base image provided in the repository. If no base image is specified, select an appropriate one based on the project's context.
    * Use the relevant installation and configuration details from the input files (e.g., `requirements.txt`, `environment.yml`, `setup.py`, etc.).
    * Choose an appropriate base image (e.g., `python:3.10`, `r-base`, etc.) based on the language and setup instructions.
 2. **Dependency Installation**
@@ -112,7 +113,8 @@ Returns:
         self.step_dockerfile_content: str = None
 
     def set_intermediate_output(self, plan_thoughts: str, step_error: str, step_dockerfile_content: str):
-        plan_thoughts = plan_thoughts.replace("{", "{{").replace("}", "}}")
+        plan_thoughts = plan_thoughts.replace("{", "(").replace("}", ")")
+        step_error = step_error.replace("{", "(").replace("}", ")")
         self.plan_thoughts = plan_thoughts
         self.step_error = step_error
         self.step_dockerfile_content = step_dockerfile_content
@@ -207,9 +209,11 @@ def prepare_provided_files_string(repo_path: str, provided_files: list[str]):
     str_provided_files = ""
     for fn in provided_files:
         file_path = os.path.join(repo_path, fn)
-        content = read_file(file_path)
         if fn.endswith(".ipynb"): # python notebook
             content = extract_code_from_notebook(file_path)
+        else:
+            content = read_file(file_path)
+        content = content.replace("{", "{{").replace("}", "}}")
         str_provided_files += f"""**{fn}**:\n{content}\n"""
 
     return str_provided_files
