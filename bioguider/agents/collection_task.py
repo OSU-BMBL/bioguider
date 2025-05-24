@@ -44,7 +44,6 @@ from bioguider.agents.collection_observe_step import CollectionObserveStep
 class CollectionTask(AgentTask):
     def __init__(
         self, 
-        goal_item: str,
         llm: BaseChatOpenAI, 
         step_callback: Callable | None = None
     ):
@@ -52,8 +51,10 @@ class CollectionTask(AgentTask):
         self.repo_path: str | None = None
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
-        self.goal_item = goal_item
+        self.goal_item: str | None = None
         self.steps: list[PEOCommonStep] = []
+        self.tools: list[any] | None = None
+        self.custom_tools: list[Tool] | None = None
 
     def _initialize(self):
         # initialize the 2-level file structure of the repo
@@ -114,9 +115,10 @@ class CollectionTask(AgentTask):
             ),
         ]
 
-    def _compile(self, repo_path: str, gitignore_path: str):
+    def _compile(self, repo_path: str, gitignore_path: str, **kwargs):
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path
+        self.goal_item = kwargs.get("goal_item")
         self._initialize()
 
         def check_observe_step(state):

@@ -120,6 +120,7 @@ class IdentificationTask(AgentTask):
         self, 
         repo_path: str,
         gitignore_path: str,
+        **kwargs,
     ):
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path

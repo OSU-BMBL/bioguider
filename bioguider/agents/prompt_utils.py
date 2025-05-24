@@ -76,13 +76,13 @@ COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your 
 class CollectionGoalItemEnum(Enum):
     UserGuide = "User Guide"
     Tutorial = "Tutorials & Vignettes"
+    DockerGeneration = "Docker Generation"
 
 
 
 COLLECTION_GOAL = """Your goal is to collect the names of all files that are relevant to **{goal_item}**.  
 **Note:**
- - You only need to collect the **file names**, not their contents.
- - You can include directory names if all files in the directory are relevant to the goal item."""
+ - You only need to collect the **file names**, not their contents."""
 
 COLLECTION_PROMPTS = {
     "UserGuide": {
@@ -100,18 +100,45 @@ If **any one** of these is present, the document should be classified as a User 
  - Sample Datasets: Example data used to illustrate functionality.
  - Narrative Explanations: Story-like descriptions guiding the user through examples.
  - Code Walkthroughs: Detailed explanations of code snippets in a tutorial format.
-**Do not** classify the document as a User Guide if it is souce code or a script (*.py, *.R) that is not intended for end-user interaction.​""",
+**Do not** classify the document as a User Guide if it is souce code or a script (*.py, *.R) that is not intended for end-user interaction.
+ - You can include directory names if all files in the directory are relevant to the goal item.""",
     },
     "Tutorial": {
         "goal_item": "Tutorials & Vignettes",
         "related_file_description": """
 **Tutorials and Vignettes** are instructional documents or interactive notebooks that provide step-by-step guidance on using a software package or library. They typically include:
- - Code Examples: Practical code snippets demonstrating how to use the software's features and functions.​
+ - Code Examples: Practical code snippets demonstrating how to use the software's features and functions.
  - Explanatory Text: Clear explanations accompanying the code examples to help users understand the concepts and techniques being presented.​
- - Visualizations: Graphical representations of data or results to enhance understanding.​
+ - Visualizations: Graphical representations of data or results to enhance understanding.
  - Interactive Elements: Features that allow users to experiment with the code in real-time, such as Jupyter notebooks or R Markdown files.​
- - Use Cases: Real-world applications or scenarios where the software can be applied effectively.​
+ - Use Cases: Real-world applications or scenarios where the software can be applied effectively.
+ - You can include directory names if all files in the directory are relevant to the goal item.
 """,
     },
+    "DockerGeneration": {
+        "goal_item": "Generating a Dockerfile for reproducibility testing",
+        
+        "related_file_description": """A document qualifies **Dockerfile Generation** related if it includes **at least one** of the following elements.
+If **any one** of these is present, the document should be classified as a Dockerfile — full coverage is **not required**:
+ - Existing Docker Configuration
+   * Files like `Dockerfile`, `docker-compose.yml`, or any Docker-related build scripts.
+ - Installation & Environment Setup
+   * Files used to define or install dependencies.
+     * Examples: `README.md` `requirements.txt`, `environment.yml`, `setup.py`, `install.R`, `DESCRIPTION`, `pyproject.toml`, etc.
+ - Build/Runtime Scripts
+   * Shell or batch scripts used for setup, building, or launching the application.
+     * Examples: `install.sh`, `build.sh`, `run.sh`, etc.
+ - Minimal Code Examples or Get-Started Files
+   * Files that demonstrate a minimal working example of the software (e.g., for testing or reproducing results).
+     * Examples: `example.py`, `main.py`, `demo.R`, `notebooks/get_started.ipynb`, etc.
+     * These should be runnable with minimal configuration.""",
+        
+        "important_instructions": """- Only include minimal code examples that demonstrate basic functionality.
+If multiple example files are found, select only the simplest and most lightweight one that is sufficient to verify the repository works.
+ - Give priority to analyzing files whose names include **"install"** or **"Dockerfile"**, as these are most likely to be useful for generating our Dockerfile
+ - The total number of collected files should **not exceed 5**.
+ - Make sure to include **only one code example**, selecting the most minimal and representative one.
+"""
+    }
 }
 

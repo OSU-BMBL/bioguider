@@ -37,6 +37,8 @@ langchain-experimental = "^0.3.4"
 grandalf = "^0.8"
 pytest = "^8.3.5"
 tenacity = "^9.1.2"
+nanoid = "^2.0.0"
+langchain-google-genai = "^2.1.4"
 
 
 [tool.poetry.group.dev.dependencies]

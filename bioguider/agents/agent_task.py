@@ -43,18 +43,20 @@ class AgentTask(ABC):
             token_usage=token_usage,
         )
 
-    def compile(self, repo_path: str, gitignore_path: str):
+    def compile(self, repo_path: str, gitignore_path: str, **kwargs):
         """
         Compile the agent step with the given repository and gitignore paths.
 
         Args:
             repo_path (str): The path to the repository.
             gitignore_path (str): The path to the .gitignore file.
+            **kwargs: derived class may pass more arguments to implmented _compile(), that is,
+                what **kwargs is depends on derived class
         """
-        self._compile(repo_path, gitignore_path)
+        self._compile(repo_path, gitignore_path, **kwargs)
     
     @abstractmethod
-    def _compile(self, repo_path: str, gitignore_path: str):
+    def _compile(self, repo_path: str, gitignore_path: str, **kwargs):
         """
         Abstract method to compile the agent step.
 

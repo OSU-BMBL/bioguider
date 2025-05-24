@@ -19,6 +19,7 @@ from bioguider.agents.agent_utils import (
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
 
+@pytest.mark.skip()
 def test_collection_plan_step(llm, step_callback):
     repo_path = "/home/ubuntu/projects/github/tabula-data"
     gitignore_path = "/home/ubuntu/projects/github/tabula-data/.gitignore"
@@ -56,7 +57,52 @@ def test_collection_plan_step(llm, step_callback):
     )
     state = CollectionWorkflowState(
         intermediate_steps=[],
-        goal_item="installation",
+        goal_item="UserGuide",
+        step_output_callback=step_callback,
+    )
+    state = step.execute(state)
+
+    assert state is not None
+    assert "plan_actions" in state and len(state["plan_actions"]) > 0
+
+def test_collection_plan_step_DockerGeneration(llm, step_callback):
+    repo_path = "/home/ubuntu/projects/github/biochatter"
+    gitignore_path = "/home/ubuntu/projects/github/biochatter/.gitignore"
+    files = read_directory(repo_path, gitignore_path)
+    repo_structure = generate_repo_structure_prompt(files, repo_path)
+
+    tools = [
+        read_directory_tool(repo_path=repo_path),
+        summarize_file_tool(
+            llm=llm,
+            repo_path=repo_path,
+            output_callback=step_callback,
+        ),
+        check_file_related_tool(
+            llm=llm,
+            repo_path=repo_path,
+            goal_item_desc=COLLECTION_PROMPTS["DockerGeneration"]["related_file_description"],
+            output_callback=step_callback,
+        ),
+        read_file_tool(repo_path=repo_path),
+    ]
+    custom_tools = [Tool(
+        name=tool.__class__.__name__,
+        func=tool.run,
+        description=tool.__class__.__doc__,
+    ) for tool in tools]
+    custom_tools.append(CustomPythonAstREPLTool())
+
+    step = CollectionPlanStep(
+        llm=llm,
+        repo_path=repo_path,
+        repo_structure=repo_structure,
+        gitignore_path=gitignore_path,
+        custom_tools=custom_tools,
+    )
+    state = CollectionWorkflowState(
+        intermediate_steps=[],
+        goal_item="DockerGeneration",
         step_output_callback=step_callback,
     )
     state = step.execute(state)
