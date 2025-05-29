@@ -276,6 +276,15 @@ class CustomOutputParser(AgentOutputParser):
             action_dict = json.loads(action_input_replaced)
         except json.JSONDecodeError:
             pass
+        if action_dict is None:
+            # try using ast to parse input string
+            import ast
+            try:
+                action_dict = ast.literal_eval(action_input)
+                if not isinstance(action_dict, dict):
+                    action_dict = None
+            except Exception as e:
+                pass
         return AgentAction(
             tool=action, 
             tool_input=action_dict if action_dict is not None else action_input, 

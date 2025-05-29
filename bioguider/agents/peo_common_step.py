@@ -42,9 +42,11 @@ class PEOCommonStep(CommonStep):
         intermediate_analysis = "N/A" if "step_analysis" not in state or \
             state["step_analysis"] is None \
             else state["step_analysis"]
+        intermediate_analysis = intermediate_analysis.replace("{", "(").replace("}", ")")
         intermediate_thoughts = "N/A" if "step_thoughts" not in state or \
             state["step_thoughts"] is None \
             else state["step_thoughts"]
+        intermediate_thoughts = intermediate_thoughts.replace("{", "(").replace("}", ")")
         return intermediate_analysis, intermediate_thoughts
 
     @staticmethod

@@ -59,6 +59,8 @@ class DockerGenerationObserveStep(PEOCommonStep):
     
     @staticmethod
     def _extract_error_message(output: str):
+        if isinstance(output, bytes):
+            output = output.decode('utf-8')
         extracted_msg = ""
         output_lower = output.lower()
         if "error:" in output_lower:

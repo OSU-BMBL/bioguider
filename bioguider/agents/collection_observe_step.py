@@ -30,6 +30,7 @@ Here is the 2-level file structure of the repository (`f` = file, `d` = director
 - If you believe all files relevant to the goal item have been collected, proceed as follows:
   - Provide your reasoning under **Analysis**
   - Then provide all relevant files under **FinalAnswer**
+  - Be sure to include the **full relative paths of the files** with respect to the repository root.
   ```
   **Analysis**: your analysis here
   **FinalAnswer**: your final answer here
@@ -63,15 +64,15 @@ class CollectionObserveStep(PEOCommonStep):
         self.step_name = "Collection Observation Step"
 
     def _build_prompt(self, state):
-        goal_item = state["goal_item"]
-        collection_item = COLLECTION_PROMPTS[goal_item]
+        str_goal_item = state["goal_item"]
+        collection_item = COLLECTION_PROMPTS[str_goal_item]
         goal_item_desc = \
             ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=collection_item["goal_item"])
         repo_structure = self.repo_structure
         intermediate_steps = self._build_intermediate_steps(state)
         prompt = ChatPromptTemplate.from_template(COLLECTION_OBSERVE_SYSTEM_PROMPT)
-        important_instructions = "N/A" if "important_instructions" not in goal_item or len(goal_item["important_instructions"]) == 0 \
-            else goal_item["important_instructions"]
+        important_instructions = "N/A" if "important_instructions" not in collection_item or len(collection_item["important_instructions"]) == 0 \
+            else collection_item["important_instructions"]
         return prompt.format(
             goal_item_desc=goal_item_desc,
             related_file_description=collection_item["related_file_description"],
