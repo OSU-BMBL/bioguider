@@ -48,8 +48,6 @@ class DockerGenerationObserveStep(PEOCommonStep):
         build_error: str,
         run_error: str,
     ):
-        build_error = build_error.replace("{", "{{").replace("}", "}}")
-        run_error = run_error.replace("{", "{{").replace("}", "}}")
         dockerfile=state["dockerfile"]
         dockerfile_path = os.path.join(self.repo_path, dockerfile)
         dockerfile_content = read_file(dockerfile_path)
