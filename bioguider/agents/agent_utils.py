@@ -47,11 +47,11 @@ PlanAgentResultJsonSchema = {
 
 def get_openai():
     return get_llm(
-        api_key=os.environ.get("OPENAI_4O_API_KEY"),
-        model_name=os.environ.get("OPENAI_4O_MODEL"),
-        azure_endpoint=os.environ.get("AZURE_OPENAI_4O_ENDPOINT"),
-        api_version=os.environ.get("OPENAI_4O_API_VERSION"),
-        azure_deployment=os.environ.get("OPENAI_4O_DEPLOYMENT_NAME"),
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        model_name=os.environ.get("OPENAI_MODEL"),
+        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+        api_version=os.environ.get("OPENAI_API_VERSION"),
+        azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
         max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKEN"),
     )
 

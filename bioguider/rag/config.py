@@ -1,7 +1,8 @@
-
+import os
 from typing import List
 from adalflow import GoogleGenAIClient
 from adalflow.components.model_client.openai_client import OpenAIClient
+from adalflow.components.model_client.azureai_client import AzureAIClient
 
 
 DEFAULT_EXCLUDED_DIRS: List[str] = [
@@ -89,3 +90,28 @@ configs = {
 
 def get_embedder_config():
     return configs["embedder"]
+
+def create_model_client():
+    openai_type = os.environ.get("OPENAI_API_TYPE")
+    is_azure = openai_type == "azure" if openai_type is not None else False
+    if not is_azure:
+        return OpenAIClient()
+    return AzureAIClient(
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        api_version=os.environ.get("OPENAI_API_VERSION"),
+        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+    )
+def create_model_kwargs():
+    openai_type = os.environ.get("OPENAI_API_TYPE")
+    is_azure = openai_type == "azure" if openai_type is not None else False
+    if not is_azure:
+        return {
+            "model": "text-embedding-3-small",
+            "dimensions": 256,
+            "encoding_format": "float",
+        }
+    return {
+        "model": os.environ.get("OPENAI_TEXT_EMBEDDING_DEPLOYMENT_NAME"), 
+        "dimensions": 256, 
+        "encoding_format": "float", 
+    }

@@ -1,3 +1,4 @@
+import os
 from typing import Any, List, Tuple, Optional, Dict
 from uuid import uuid4
 import logging
@@ -10,7 +11,9 @@ from adalflow.core.types import (
     AssistantResponse,
 )
 from adalflow.components.retriever.faiss_retriever import FAISSRetriever
-from .config import configs
+from adalflow.components.model_client.openai_client import OpenAIClient
+from adalflow.components.model_client.azureai_client import AzureAIClient
+from .config import configs, create_model_client, create_model_kwargs
 from .data_pipeline import DatabaseManager
 
 logger = logging.getLogger(__name__)
@@ -31,10 +34,9 @@ class RAG(adal.Component):
         """
         super().__init__()
 
-
         self.embedder = adal.Embedder(
-            model_client=configs["embedder"]["model_client"](),
-            model_kwargs=configs["embedder"]["model_kwargs"],
+            model_client=create_model_client(),
+            model_kwargs=create_model_kwargs(),
         )
 
         self.initialize_db_manager()
@@ -71,12 +73,14 @@ class RAG(adal.Component):
             embedder=self.embedder,
             documents=self.transformed_doc_documents,
             document_map_func=lambda doc: doc.vector,
+            dimensions=256,
         )
         self.code_retriever = FAISSRetriever(
             **configs["retriever"],
             embedder=self.embedder,
             documents=self.transformed_code_documents,
             document_map_func=lambda doc: doc.vector,
+            dimensions=256,
         )
 
     def query_doc(self, query: str) -> List:
@@ -107,12 +111,16 @@ class RAG(adal.Component):
         Returns:
             retrieved_documents: List of code documents retrieved based on the query
         """
-        retrieved_documents = self.code_retriever(query)
-        # Fill in the documents
-        retrieved_documents[0].documents = [
-            self.transformed_code_documents[doc_index]
-            for doc_index in retrieved_documents[0].doc_indices
-        ]
+        try:
+            retrieved_documents = self.code_retriever(query)
+            # Fill in the documents
+            retrieved_documents[0].documents = [
+                self.transformed_code_documents[doc_index]
+                for doc_index in retrieved_documents[0].doc_indices
+            ]
+        except Exception as e:
+            logger.error(e)
+            raise e
         return retrieved_documents
         
     @property

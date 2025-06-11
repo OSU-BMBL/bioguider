@@ -144,4 +144,4 @@ Returns:
         for f, f_type in file_pairs:
             dir_structure += f"{os.path.join(dir_path, f)} - {f_type}\n"
         return f"The 2-level content of directory {dir_path}: \n" + \
-            f"{dir_structure if len(dir_structure) > 0 else "No files and sub-directories in it"}"
+            f"{dir_structure if len(dir_structure) > 0 else 'No files and sub-directories in it'}"

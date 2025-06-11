@@ -16,7 +16,7 @@ from binaryornot.check import is_binary
 
 from ..utils.gitignore_checker import GitignoreChecker
 from ..utils.file_utils import retrieve_data_root_path
-from .config import configs
+from .config import configs, create_model_client, create_model_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +264,8 @@ def prepare_data_pipeline():
     """Creates and returns the data transformation pipeline."""
     splitter = TextSplitter(**configs["text_splitter"])
     embedder = adal.Embedder(
-        model_client=configs["embedder"]["model_client"](),
-        model_kwargs=configs["embedder"]["model_kwargs"],
+        model_client=create_model_client(),
+        model_kwargs=create_model_kwargs(),
     )
     embedder_transformer = ToEmbeddings(
         embedder=embedder, batch_size=configs["embedder"]["batch_size"]

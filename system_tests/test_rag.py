@@ -23,8 +23,8 @@ def extract_source_from_documents(docs: List[Document], doc_scores: List[float])
 
 def test_RAG():
     rag = RAG()
-    rag.prepare_retriever("https://github.com/biocypher/biochatter.git")
-    documents = rag.query_doc("How can I install BioChatter?")
+    rag.prepare_retriever("https://github.com/snap-stanford/POPPER")
+    documents = rag.query_doc("How can I install POPPER?")
     assert documents is not None, "Documents should be retrieved successfully."
     assert len(documents) > 0, "At least one document should be retrieved."
 
