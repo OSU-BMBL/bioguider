@@ -5,8 +5,8 @@ from langchain_core.prompts import ChatPromptTemplate, StringPromptTemplate
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.agents.agent_utils import (
-    DEFAULT_TOKEN_USAGE,
     CustomPromptTemplate, 
     CustomOutputParser,
 )

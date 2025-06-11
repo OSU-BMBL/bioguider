@@ -12,6 +12,7 @@ class IdentificationWorkflowState(TypedDict):
     plan_reasoning: Optional[str]
     intermediate_steps: Optional[list[str]]
     final_answer: Optional[str]
+    final_answer_example: Optional[str]
     step_output: Optional[str]
     step_analysis: Optional[str]
     step_thoughts: Optional[str]

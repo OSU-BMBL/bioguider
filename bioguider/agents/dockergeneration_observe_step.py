@@ -3,7 +3,8 @@ import os
 from langchain.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, run_command, read_file
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.agents.agent_utils import run_command, read_file
 from bioguider.agents.dockergeneration_task_utils import DockerGenerationWorkflowState
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep

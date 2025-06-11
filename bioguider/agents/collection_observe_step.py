@@ -4,6 +4,7 @@ from langchain.tools import BaseTool
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from bioguider.agents.agent_utils import ObservationResult
+from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
@@ -80,7 +81,7 @@ class CollectionObserveStep(PEOCommonStep):
             intermediate_output=intermediate_steps,
             important_instructions=important_instructions,
         )
-    def _execute_directly(self, state):
+    def _execute_directly(self, state: CollectionWorkflowState):
         system_prompt = self._build_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(

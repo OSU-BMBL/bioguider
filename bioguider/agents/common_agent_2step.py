@@ -33,6 +33,8 @@ class CommonAgentTwoSteps(CommonAgent):
         system_prompt: str,
         instruction_prompt: str,
     ):
+        system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+        instruction_prompt = instruction_prompt.replace("{", "{{").replace("}", "}}")
         msgs = [("system", system_prompt)]
         msgs + msgs + [("human", instruction_prompt)]
         exception_msgs = self._get_retryexception_message()

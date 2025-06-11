@@ -19,7 +19,7 @@ from bioguider.agents.agent_utils import (
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 def test_collection_plan_step(llm, step_callback):
     repo_path = "/home/ubuntu/projects/github/tabula-data"
     gitignore_path = "/home/ubuntu/projects/github/tabula-data/.gitignore"

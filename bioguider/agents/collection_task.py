@@ -20,6 +20,7 @@ from langchain.schema import (
 )
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_utils import read_directory
 from bioguider.agents.collection_task_utils import (
@@ -77,6 +78,7 @@ class CollectionTask(AgentTask):
                 llm=self.llm,
                 repo_path=self.repo_path,
                 output_callback=self.step_callback,
+                db=self.summary_file_db,
             ),
             read_file_tool(repo_path=self.repo_path),
             check_file_related_tool(

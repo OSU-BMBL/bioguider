@@ -3,7 +3,13 @@ import os
 from pathlib import Path
 
 class GitignoreChecker:
-    def __init__(self, directory: str, gitignore_path: str):
+    def __init__(
+        self, 
+        directory: str, 
+        gitignore_path: str,
+        exclude_dir_patterns: list[str] | None = None,
+        exclude_file_patterns: list[str] | None = None
+    ):
         """
         Initialize the GitignoreChecker with a specific directory and the path to a .gitignore file.
 
@@ -14,6 +20,8 @@ class GitignoreChecker:
         self.directory = directory
         self.gitignore_path = gitignore_path
         self.folder_patterns, self.file_patterns = self._load_gitignore_patterns()
+        self.exclude_dir_patterns = exclude_dir_patterns
+        self.exclude_file_patterns = exclude_file_patterns
 
     def _load_gitignore_patterns(self) -> tuple:
         """
@@ -30,7 +38,7 @@ class GitignoreChecker:
         except FileNotFoundError:
             # Fallback to the default .gitignore path if the specified file is not found
             default_path = os.path.join(
-                os.path.dirname(__file__), "..", "..", ".gitignore"
+                os.path.dirname(__file__), "default.gitignore"
             )
             with open(default_path, "r", encoding="utf-8") as file:
                 gitignore_content = file.read()
@@ -100,6 +108,13 @@ class GitignoreChecker:
     def _is_ignored_by_default(path: str, is_dir: bool=False) -> bool:
         return is_dir and path.startswith(".") # path == ".git" 
 
+
+    def _is_ignored_by_exclude_file_patterns(self, f: str):
+        if self.exclude_file_patterns is None:
+            return False
+        return True if self._is_ignored(f, self.exclude_file_patterns) else False
+
+
     def check_files_and_folders(self, level=-1) -> list:
         """
         Check all files and folders in the given directory against the split gitignore patterns.
@@ -122,13 +137,19 @@ class GitignoreChecker:
                 if not self._is_ignored(d, self.folder_patterns, is_dir=True) \
                 and not self._is_ignored_by_default(d, True)
             ]
+            if self.exclude_dir_patterns:
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if not self._is_ignored(d, self.exclude_dir_patterns, is_dir=True)
+                ]
 
             for file in files:
                 file_path = os.path.join(root, file)
                 relative_path = os.path.relpath(file_path, self.directory)
                 if not self._is_ignored(
                     file, self.file_patterns
-                ): # and file_path.endswith(".py"):
+                ) and not self._is_ignored_by_exclude_file_patterns(file):
                     not_ignored_files.append(relative_path)
             
             if level >= 0 and current_levels == level:

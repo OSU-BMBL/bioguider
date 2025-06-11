@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Optional, TypedDict
 import logging
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 
 logger = logging.getLogger(__name__)
 

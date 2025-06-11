@@ -71,12 +71,25 @@ IDENTIFICATION_GOAL_PRIMARY_LANGUAGE = """Identify the following key attribute o
   **Notes**:
     The project can be identified as one of the above primary language."""
 
+## goal: identify meta data: repo name, owner, description, license
+IDENTIFICATION_GOAL_META_DATA = """Identify the following meta data of the repository:
+  **name**: The repository name.
+  **owner**: The repository user or orgnization.
+  **description**: The description of the repository.
+  **license**: The license of the repository, like 'MIT', 'Apache 2.0' or 'unknown'.
+
+**Notes**: If the above meta data can't be identified, please return 'unknown' or 'N/A'.
+"""
+
 COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your reasoning process step by step, then provide the answer."
 
 class CollectionGoalItemEnum(Enum):
     UserGuide = "User Guide"
     Tutorial = "Tutorials & Vignettes"
     DockerGeneration = "Docker Generation"
+    Installation = "Installation"
+    License = "License"
+    Contributing = "Contributing"
 
 
 
@@ -139,6 +152,39 @@ If multiple example files are found, select only the simplest and most lightweig
  - The total number of collected files should **not exceed 5**.
  - Make sure to include **only one code example**, selecting the most minimal and representative one.
 """
-    }
+    },
+    "Installation": {
+        "goal_item": "Installation Instructions",
+        "related_file_description": """A document qualifies as **Installation Instructions** if it includes **at least one** of the following elements.
+If **any one** of these is present, the document should be classified as Installation Instructions — full coverage is **not required**:
+ - Step-by-step setup procedures for the software.
+ - Prerequisites or dependencies that need to be installed before using the software.
+ - Configuration steps required to get the software running.
+ - Troubleshooting tips related to installation issues.
+ - You can include directory names if all files in the directory are relevant to the goal item.""",
+        "important_instructions": """- Give priority to analyzing README file that contain installation instructions and the files whose names include **"install"** or **"setup"**.
+- If multiple files are found, select the most comprehensive one that covers the installation process.
+- The total number of collected files should **not exceed 3**.
+- Make sure to include **only one installation instruction file**, selecting the most comprehensive and representative one.
+"""
+    },
+    "License": {
+        "goal_item": "License Information",
+        "related_file_description": """A document qualifies as **License Information** if it includes **at least one** of the following elements.
+If **any one** of these is present, the document should be classified as License Information — full coverage is **not required**:
+ - A file named `LICENSE`, `LICENSE.txt`, or similar that explicitly states the software's license.
+ - A section in the README or documentation that describes the licensing terms.
+ - Any file that contains legal information regarding the use, distribution, or modification of the software.
+ - You can include directory names if all files in the directory are relevant to the goal item.""",
+    },
+    "Contributing": {
+        "goal_item": "Contributing Guidelines",
+        "related_file_description": """A document qualifies as **Contributing Guidelines** if it includes **at least one** of the following elements.
+If **any one** of these is present, the document should be classified as Contributing Guidelines — full coverage is **not required**:
+ - A file named `CONTRIBUTING.md`, `CONTRIBUTING.rst`, or similar that provides guidelines for contributing to the project.
+ - A section in the README or documentation that outlines how to contribute, report issues, or submit pull requests.
+ - Any file that contains instructions for developers on how to contribute to the project, including coding standards, testing procedures, and submission processes.
+ - You can include directory names if all files in the directory are relevant to the goal item.""",
+    },
 }
 

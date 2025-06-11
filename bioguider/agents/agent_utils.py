@@ -19,8 +19,10 @@ import logging
 
 from pydantic import BaseModel, Field
 
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.utils.file_utils import get_file_type
-from .gitignore_checker import GitignoreChecker
+from ..utils.gitignore_checker import GitignoreChecker
+from ..database.summarized_file_db import SummarizedFilesDb
 
 logger = logging.getLogger(__name__)
 
@@ -155,17 +157,20 @@ You are provided with the content of the file **{file_name}**:
 ```
 {file_content}
 ```
-
+### **Summary Instructions**
+{summary_instructions}
 The content is lengthy. Please generate a concise summary ({sentence_num1}-{sentence_num2} sentences).
 """)
 
 MAX_FILE_LENGTH=20 *1024 # 20K
-MAX_SENTENCE_NUM=10
+MAX_SENTENCE_NUM=20
 def summarize_file(
     llm: BaseChatOpenAI, 
     name: str, 
     content: str | None = None, 
     level: int = 3,
+    summary_instructions: str | None = None,
+    db: SummarizedFilesDb | None = None,
 ) -> Tuple[str, dict]:
     if content is None:
         try:
@@ -174,6 +179,12 @@ def summarize_file(
         except Exception as e:
             logger.error(e)
             return ""
+    # First, query from database
+    if db is not None:
+        res = db.select_summarized_text(name, summary_instructions, level)
+        if res is not None:
+            return res, {**DEFAULT_TOKEN_USAGE}
+
     file_content = content
     level = level if level > 0 else 1
     level = level if level < MAX_SENTENCE_NUM+1 else MAX_SENTENCE_NUM
@@ -184,6 +195,9 @@ def summarize_file(
         file_content=file_content, 
         sentence_num1=level,
         sentence_num2=level+1,
+        summary_instructions=summary_instructions \
+            if summary_instructions is not None and len(summary_instructions) > 0 \
+            else "N/A",
     )
     
     config = {"recursion_limit": 500}
@@ -194,17 +208,12 @@ def summarize_file(
         "completion_tokens": res.usage_metadata["output_tokens"],
         "total_tokens": res.usage_metadata["total_tokens"],
     }
-
-    # for s in app.stream(inputs, stream_mode="values", config=config):
-    #     out = s['messages'][-1].content
+    if db is not None:
+        db.upsert_summarized_file(
+            name, summary_instructions, level, token_usage
+        )
     
     return out, token_usage
-
-DEFAULT_TOKEN_USAGE = {
-    "total_tokens": 0,
-    "completion_tokens": 0,
-    "prompt_tokens": 0,
-}
 
 def increase_token_usage(
     token_usage: Optional[dict] = None,

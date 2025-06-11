@@ -22,7 +22,7 @@ from bioguider.agents.collection_execute_step import (
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.prompt_utils import COLLECTION_PROMPTS, CollectionGoalItemEnum
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 def test_collection_execute_step(
     llm, 
     step_callback,

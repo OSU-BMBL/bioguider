@@ -6,7 +6,8 @@ import pytest
 from dotenv import load_dotenv
 import logging
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, increase_token_usage
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.agents.agent_utils import increase_token_usage
 
 load_dotenv()
 
