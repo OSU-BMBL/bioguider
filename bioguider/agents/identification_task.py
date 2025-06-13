@@ -9,6 +9,7 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain.tools import Tool
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_tools import (
     read_file_tool, 
@@ -56,17 +57,6 @@ IdentificationPlanResultJsonSchema = {
     },
     "required": ["actions"],
 }
-
-class ProjectTypeEnum(Enum):
-    application="application"
-    package="package"
-    pipeline="pipeline"
-    unknown="unknown type"
-
-class PrimaryLanguageEnum(Enum):
-    python="python"
-    R="R"
-    unknown="unknown type"
 
 class IdentificationTask(AgentTask):
     def __init__(

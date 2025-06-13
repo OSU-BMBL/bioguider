@@ -1,6 +1,7 @@
 import fnmatch
 import os
 from pathlib import Path
+from typing import Callable
 
 class GitignoreChecker:
     def __init__(
@@ -115,7 +116,11 @@ class GitignoreChecker:
         return True if self._is_ignored(f, self.exclude_file_patterns) else False
 
 
-    def check_files_and_folders(self, level=-1) -> list:
+    def check_files_and_folders(
+        self, 
+        level=-1, 
+        check_file_cb: Callable[[str, str], bool] | None = None
+    ) -> list:
         """
         Check all files and folders in the given directory against the split gitignore patterns.
         Return a list of files that are not ignored.
@@ -150,7 +155,11 @@ class GitignoreChecker:
                 if not self._is_ignored(
                     file, self.file_patterns
                 ) and not self._is_ignored_by_exclude_file_patterns(file):
-                    not_ignored_files.append(relative_path)
+                    if check_file_cb is None:
+                        not_ignored_files.append(relative_path)
+                    else:
+                        if check_file_cb(self.directory, relative_path):
+                            not_ignored_files.append(relative_path)
             
             if level >= 0 and current_levels == level:
                 not_ignored_files = \

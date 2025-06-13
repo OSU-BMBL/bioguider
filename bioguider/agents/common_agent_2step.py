@@ -48,6 +48,7 @@ class CommonAgentTwoSteps(CommonAgent):
         system_prompt: str,
         cot_msg: str,
     ):
+        system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
         msgs = [("system", system_prompt)]
         cot_msg = cot_msg.replace("{", "{{").replace("}", "}}")
         msgs = msgs + [(

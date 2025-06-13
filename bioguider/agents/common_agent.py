@@ -2,6 +2,7 @@ from typing import Any, Callable, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
+from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_incrementing
 import logging
@@ -136,3 +137,21 @@ class CommonAgent:
                 raise e
         return res, processed_res, self.token_usage
     
+class CommonConversation:
+    def __init__(self, llm: BaseChatOpenAI):
+        self.llm = llm
+
+    def generate(self, system_prompt: str, instruction_prompt: str):
+        msgs = [
+            SystemMessage(system_prompt),
+            HumanMessage(instruction_prompt),
+        ]
+        msgs_template = ChatPromptTemplate.from_messages(messages=msgs)
+        callback_handler = OpenAICallbackHandler()
+        result = self.llm.generate(
+            messages=[msgs],
+            callbacks=[callback_handler]
+        )
+        response = result.generations[0][0].text
+        token_usage = result.llm_output.get("token_usage")
+        return response, token_usage

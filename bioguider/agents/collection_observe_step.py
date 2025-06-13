@@ -26,21 +26,29 @@ Here is the 2-level file structure of the repository (`f` = file, `d` = director
 ---
 
 ### **Instructions**
-1. Your goal is to identify files that are relevant to the goal item.
+1. Your goal is to identify files that are relevant to the **goal item**.
 2. Carefully review the **Goal**, **Repository Structure**, and **Intermediate Output**.
-- If you believe all files relevant to the goal item have been collected, proceed as follows:
-  - Provide your reasoning under **Analysis**
-  - Then provide all relevant files under **FinalAnswer**
-  - Be sure to include the **full relative paths of the files** with respect to the repository root.
+3. If you believe **all relevant files** have been collected:
+
+* Proceed with the following format:
+
+  * Provide your reasoning under **Analysis**
+  * Then list all relevant files and folders under **FinalAnswer**
+  * Be sure to include the **full relative paths** with respect to the repository root.
+  * Your answer **must follow this exact format** (note: no JSON code block, no additional comments):
+
   ```
-  **Analysis**: your analysis here
-  **FinalAnswer**: your final answer here
+  **Analysis**: your analysis here  
+  **FinalAnswer**: {{"final_answer": ["path/to/file1", "path/to/file2", ...]}}
   ```
-- If you believe there are still files that need to be collected, simply explain why under **Thoughts**:
+4. If you believe **more files still need to be collected**:
+* Provide your reasoning under **Thoughts**:
+
   ```
-  **Thoughts**: your thoughts here
+  **Thoughts**: your explanation here
   ```
-3. Important instructions:
+  
+5. Important instructions:
   {important_instructions}
 Be precise and support your reasoning with evidence from the input.
 ---
