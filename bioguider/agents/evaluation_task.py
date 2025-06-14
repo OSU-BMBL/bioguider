@@ -1,6 +1,7 @@
 
 import os
 from pathlib import Path
+import logging
 from typing import Callable
 from abc import ABC, abstractmethod
 from langchain.prompts import ChatPromptTemplate
@@ -12,6 +13,8 @@ from .common_agent_2step import CommonAgentTwoSteps
 from .common_agent import CommonConversation
 from ..utils.pyphen_utils import PyphenReadability
 from ..utils.gitignore_checker import GitignoreChecker
+
+logger = logging.getLogger(__name__)
 
 EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. Your task is to analyze the README file found in the repository and provide a detailed evaluation based on the following criteria:
@@ -64,6 +67,7 @@ class EvaluationTask(ABC):
         self._enter_evaluation()
         evaluation, token_usage = self._evaluate(files)
         self._leave_evaluation(token_usage)
+        return evaluation
     
     def _enter_evaluation(self):
         self.print_step(step_name=self.evaluation_name)
@@ -96,6 +100,9 @@ class EvaluationREADMETask(EvaluationTask):
         for readme_file in readme_files:
             readme_path = Path(self.repo_path, readme_file)
             readme_content = read_file(readme_path)
+            if readme_content is None:
+                logger.error(f"Error in reading file {readme_file}")
+                continue
 
             readability = PyphenReadability()
             flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
@@ -187,6 +194,7 @@ class EvaluationTutorialTask(EvaluationTask):
         step_callback: Callable | None = None
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
+        self.evaluation_name = "Tutorial Evaluation"
 
     def _evaluate(self, files: list[str]):
         if len(files) == 0:
@@ -196,6 +204,9 @@ class EvaluationTutorialTask(EvaluationTask):
         for file in files:
             tutorial_path = Path(self.repo_path, file)
             tutorial_content = read_file(tutorial_path)
+            if tutorial_content is None:
+                logging.error(f"Error in reading file {file}")
+                continue
 
             readability = PyphenReadability()
             flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
