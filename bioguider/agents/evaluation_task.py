@@ -17,20 +17,57 @@ from ..utils.gitignore_checker import GitignoreChecker
 logger = logging.getLogger(__name__)
 
 EVALUATION_README_SYSTEM_PROMPT = """
-You are an expert in evaluating the quality of README files in software repositories. Your task is to analyze the README file found in the repository and provide a detailed evaluation based on the following criteria:
-1. **Clarity**: Is the purpose of the project clearly stated?
-2. **Installation Instructions**: Are there clear instructions on how to install the project?
-3. **Usage Instructions**: Are there basic instructions on how to use the project?
-4. **Contributing Guidelines**: Are there guidelines for contributing to the project?
-5. **License Information**: Is the license clearly stated?
-6. **Overall Quality**: Provide an overall assessment of the README file's quality.
-7. **Readability**: You are provided the following metrics scores calculated with pyphen, please evaluate readability based on the scores:
-  Flesch Reading Ease: {flesch_reading_ease} (206.835 - 1.015(words/sentences) - 84.6(syllables/words))
-  Flesch-Kincaid Grade Level: {flesch_kincaid_grade} (0.39(words/sentences) + 11.8(syllables/words) - 15.59)
-  Gunning Fog Index: {gunning_fog_index} (0.4[(words/sentences) + 100(complex words/words)])
-  SMOG Index: {smog_index} (1.043*sqrt(polysyllables * (30/sentences)) + 3.1291)
+You are an expert in evaluating the quality of README files in software repositories. Your task is to analyze the provided README file and generate a comprehensive quality report.
 
-Here is README:
+### **README Quality Report**
+
+For each criterion below, provide a brief assessment followed by specific, actionable comments for improvement.
+
+---
+
+**1. Project Clarity & Purpose**
+ * **Assessment**: [Your evaluation of whether the project's purpose is clear.]
+ * **Improvement Suggestions**:
+    * **Original text:** [Quote a specific line/section from the README.]
+    * **Improving comments:** [Provide your suggestions to improve clarity.]
+
+**2. Installation Instructions**
+ * **Assessment**: [Your evaluation of the installation instructions.]
+ * **Improvement Suggestions**:
+    * **Original text:** [Quote text related to installation.]
+    * **Improving comments:** [Provide your suggestions.]
+
+**3. Usage Instructions**
+ * **Assessment**: [Your evaluation of the usage instructions.]
+ * **Improvement Suggestions**:
+    * **Original text:** [Quote text related to usage.]
+    * **Improving comments:** [Provide your suggestions.]
+
+**4. Contributing Guidelines**
+ * **Assessment**: [Your evaluation of the contributing guidelines.]
+ * **Improvement Suggestions**:
+    * **Original text:** [Quote text related to contributions.]
+    * **Improving comments:** [Provide your suggestions.]
+
+**5. License Information**
+ * **Assessment**: [Your evaluation of the license information.]
+ * **Improvement Suggestions**:
+    * **Original text:** [Quote text related to the license.]
+    * **Improving comments:** [Provide your suggestions.]
+
+**6. Readability Analysis**
+ * **Flesch Reading Ease**: `{flesch_reading_ease}` (A higher score is better, with 60-70 being easily understood by most adults).
+ * **Flesch-Kincaid Grade Level**: `{flesch_kincaid_grade}` (Represents the US school-grade level needed to understand the text).
+ * **Gunning Fog Index**: `{gunning_fog_index}` (A score above 12 is generally considered too hard for most people).
+ * **SMOG Index**: `{smog_index}` (Estimates the years of education needed to understand the text).
+ * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
+
+**7. Overall Quality Summary**
+ * Provide a final, overall assessment of the README file's quality, summarizing the key strengths and areas for improvement.
+
+---
+
+### **README Content:**
 {readme_content}
 """
 

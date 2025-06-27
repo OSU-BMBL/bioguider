@@ -348,3 +348,10 @@ def run_command(command: list, cwd: str = None, timeout: int = None):
         return result.stdout, result.stderr, result.returncode
     except subprocess.TimeoutExpired as e:
         return e.stdout or "", e.stderr or f"Command timed out after {timeout} seconds", -1
+
+def escape_braces(text: str) -> str:
+    # First replace single } not part of }} with }}
+    text = re.sub(r'(?<!})}(?!})', '}}', text)
+    # Then replace single { not part of {{
+    text = re.sub(r'(?<!{){(?!{)', '{{', text)
+    return text

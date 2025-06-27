@@ -6,9 +6,8 @@ import pytest
 from bioguider.agents.identification_task import (
     IdentificationTask, 
     IdentificationPlanResult,
-    ProjectTypeEnum,
-    PrimaryLanguageEnum
 )
+from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 
 # @pytest.mark.skip()
 def test_IdentificationAgent_biochatter(llm, step_callback):

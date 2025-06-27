@@ -82,7 +82,7 @@ def test_count_syllables_RepoAgent(llm):
     logger.info(res)
 
 def test_textstat_RepoAgent(llm):
-    readme_content = read_file("./data/repos/RepoAgent/README.md")
+    readme_content = read_file("./system_tests/test_data/RepoAgent_README.txt")
     text = readme_content
     syllable_count = textstat.syllable_count(text)
     sentence_count = textstat.sentence_count(text)
@@ -102,7 +102,7 @@ def test_textstat_RepoAgent(llm):
     logger.info(f"smog index: {smog_index}")
 
 def test_textstat_biochatter(llm):
-    readme_content = read_file("./data/repos/biochatter/README.md")
+    readme_content = read_file("./system_tests/test_data/biochatter_README.txt")
     text = readme_content
     syllable_count = textstat.syllable_count(text)
     sentence_count = textstat.sentence_count(text)

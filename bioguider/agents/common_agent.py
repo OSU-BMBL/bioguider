@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_incrementing
 import logging
 
 from bioguider.agents.agent_utils import (
+    escape_braces,
     increase_token_usage,
 )
 
@@ -103,7 +104,8 @@ class CommonAgent:
         schema: any,
         post_process: Optional[Callable] = None,
         **kwargs: Optional[Any],
-    ):
+    ) -> tuple[Any, Any, dict | None, Any | None]:
+        system_prompt = escape_braces(system_prompt)
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", instruction_prompt),
@@ -135,7 +137,7 @@ class CommonAgent:
             except Exception as e:
                 logger.error(str(e))
                 raise e
-        return res, processed_res, self.token_usage
+        return res, processed_res, self.token_usage, None
     
 class CommonConversation:
     def __init__(self, llm: BaseChatOpenAI):

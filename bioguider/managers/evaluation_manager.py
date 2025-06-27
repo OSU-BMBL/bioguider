@@ -55,6 +55,7 @@ class EvaluationManager:
             owner=meta_data["owner"] if "owner" in meta_data else "",
             license=meta_data["license"] if "license" in meta_data else "",
         )
+        return self.project_metadata
     
     def evaluate_readme(self):
         task = EvaluationREADMETask(

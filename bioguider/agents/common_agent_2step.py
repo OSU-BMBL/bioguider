@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_incrementing
 import logging
 
+from bioguider.agents.agent_utils import escape_braces
 from bioguider.agents.common_agent import (
     CommonAgent,
     RetryException,
@@ -33,7 +34,8 @@ class CommonAgentTwoSteps(CommonAgent):
         system_prompt: str,
         instruction_prompt: str,
     ):
-        system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+        # system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
+        system_prompt = escape_braces(system_prompt)
         instruction_prompt = instruction_prompt.replace("{", "{{").replace("}", "}}")
         msgs = [("system", system_prompt)]
         msgs + msgs + [("human", instruction_prompt)]

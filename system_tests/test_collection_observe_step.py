@@ -11,8 +11,8 @@ from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 
 
 def test_collection_observe_step(llm, step_callback):
-    repo_path = "/home/ubuntu/projects/github/scanpy"
-    gitignore_path = "/home/ubuntu/projects/github/scanpy/.gitignore"
+    repo_path = "./data/repos/POPPER"
+    gitignore_path = "./data/repos/POPPER/.gitignore"
     files = read_directory(repo_path, gitignore_path)
     repo_structure = generate_repo_structure_prompt(files, repo_path)
 
@@ -26,7 +26,7 @@ def test_collection_observe_step(llm, step_callback):
         intermediate_steps=[],
         goal_item=CollectionGoalItemEnum.UserGuide.name,
         step_output_callback=step_callback,
-        step_output="\npyproject.toml: No, the file **is not** related to the goal item.\nREADME.md: No, the file **is not** related to the goal item.\n"
+        step_output="README.md: Yes, the file **is** related to the goal item.\n"
     )
     state = step.execute(state)
     assert state is not None
