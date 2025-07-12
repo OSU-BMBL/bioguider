@@ -5,7 +5,8 @@ from abc import ABC, abstractmethod
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langgraph.graph.graph import CompiledGraph
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.database.summarized_file_db import SummarizedFilesDb
 
 class AgentTask(ABC):
     """
@@ -22,6 +23,7 @@ class AgentTask(ABC):
         """
         self.llm = llm
         self.step_callback = step_callback
+        self.summary_file_db = None
         self.graph: CompiledGraph | None = None
 
     def _print_step(
@@ -43,7 +45,7 @@ class AgentTask(ABC):
             token_usage=token_usage,
         )
 
-    def compile(self, repo_path: str, gitignore_path: str, **kwargs):
+    def compile(self, repo_path: str, gitignore_path: str, db: SummarizedFilesDb | None = None, **kwargs):
         """
         Compile the agent step with the given repository and gitignore paths.
 
@@ -53,6 +55,7 @@ class AgentTask(ABC):
             **kwargs: derived class may pass more arguments to implmented _compile(), that is,
                 what **kwargs is depends on derived class
         """
+        self.summary_file_db = db
         self._compile(repo_path, gitignore_path, **kwargs)
     
     @abstractmethod

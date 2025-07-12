@@ -25,7 +25,7 @@ Carefully review the **Goal**, **Repository File Structure**, and **Intermediate
   - Then provide your result under **FinalAnswer**  
   ```
   **Analysis**: your analysis here  
-  **FinalAnswer**: your final answer here
+  **FinalAnswer**: your final answer here, in json format **without** json fence (```json ... ```), like {final_answer_example}
   ```
 - If the information is **not sufficient** to achieve the goal, simply explain why under **Thoughts**:  
   ```
@@ -57,6 +57,7 @@ class IdentificationObserveStep(PEOCommonStep):
 
     def _prepare_system_prompt(self, state: IdentificationWorkflowState): 
         goal = state["goal"]
+        final_answer_example = state["final_answer_example"]
         intermediate_output = self._build_intermediate_steps(state)
         prompt = ChatPromptTemplate.from_template(IDENTIFICATION_OBSERVATION_SYSTEM_PROMPT)
 
@@ -64,6 +65,7 @@ class IdentificationObserveStep(PEOCommonStep):
             goal=goal,
             repo_structure=self.repo_structure,
             intermediate_output=intermediate_output,
+            final_answer_example=final_answer_example,
         )
 
     def _execute_directly(self, state: IdentificationWorkflowState):

@@ -1,0 +1,140 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# R session data
+.RData
+.RDataTmp
+
+# User-specific files
+.Rproj.user/
+.Ruserdata/
+
+# RStudio files
+.rsituational.user
+.Renviron
+*proj.user
+
+# Example and temporary files
+*.Rhistory
+*.RData
+*.RData~
+*.Rproj.user
+*~
+.DS_Store # macOS specific
+Thumbs.db # Windows specific
+
+# Knitr and R Markdown cache and intermediate files
+*_cache/
+/cache/
+*.utf8.md
+*.knit.md
+*.log
+*.ind
+*.aux
+*.synctex.gz
+*.toc
+*.out
+*.nav
+*.snm
+
+# Package and dependency management
+# renv, packrat, etc.
+renv/
+packrat/
+.renv/
+.Rprofile
+
+# Compiled code from packages like Rcpp
+/src/*.so
+/src/*.o
+/src/*.dll
+
+# Shiny app logs
+*.log
+*.log.*
+
+
+# Byte-compiled / optimized / C files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+# Usually these files are in 'dist' folder, but they may appear in the root directory
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE and editor configuration files
+# VSCode
+.vscode/
+# PyCharm
+.idea/
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+# Atom
+.atom/
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.tox/
+
+# Scrapy stuff
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

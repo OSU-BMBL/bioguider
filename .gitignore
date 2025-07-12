@@ -172,3 +172,5 @@ cython_debug/
 
 # vs code
 .vscode/
+
+data/*

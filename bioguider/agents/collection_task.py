@@ -1,6 +1,8 @@
 
 import os
+import logging
 import re
+import json
 from pydantic import BaseModel, Field
 from typing import Callable, List, Optional, TypedDict, Union
 from langchain_core.prompts import ChatPromptTemplate, StringPromptTemplate
@@ -20,6 +22,7 @@ from langchain.schema import (
 )
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_utils import read_directory
 from bioguider.agents.collection_task_utils import (
@@ -40,6 +43,8 @@ from bioguider.agents.agent_task import AgentTask
 from bioguider.agents.collection_plan_step import CollectionPlanStep
 from bioguider.agents.collection_execute_step import CollectionExecuteStep
 from bioguider.agents.collection_observe_step import CollectionObserveStep
+
+logger = logging.getLogger(__name__)
 
 class CollectionTask(AgentTask):
     def __init__(
@@ -77,6 +82,7 @@ class CollectionTask(AgentTask):
                 llm=self.llm,
                 repo_path=self.repo_path,
                 output_callback=self.step_callback,
+                db=self.summary_file_db,
             ),
             read_file_tool(repo_path=self.repo_path),
             check_file_related_tool(
@@ -139,8 +145,29 @@ class CollectionTask(AgentTask):
 
         self.graph = graph.compile()
 
-    def collect(self):
+    def collect(self) -> list[str] | None:
         s = self._go_graph({"goal_item": self.goal_item})
+        if s is None or 'final_answer' not in s:
+            return None
+        if s["final_answer"] is None:
+            return None
+        result = s["final_answer"].strip()
+        try:
+            json_obj = json.loads(result)
+            result = json_obj["final_answer"]
+            if isinstance(result, str):
+                result = result.strip()
+                return [result]
+            elif isinstance(result, list):
+                return result
+            else:
+                logger.error(f"Final answer is not a valid JSON list or string: {result}")
+                return None
+        except json.JSONDecodeError:
+            logger.error(f"Final answer is not a valid JSON: {result}")
+            return None
+        except Exception as e:
+            logger.error(str(e))
         return s
 
         

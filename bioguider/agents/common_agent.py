@@ -2,15 +2,17 @@ from typing import Any, Callable, Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
+from langchain_core.messages import SystemMessage, HumanMessage
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_incrementing
 import logging
 
 from bioguider.agents.agent_utils import (
+    escape_braces,
     increase_token_usage,
 )
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 class RetryException(Exception):
     """Exception need to retry"""
@@ -102,7 +104,8 @@ class CommonAgent:
         schema: any,
         post_process: Optional[Callable] = None,
         **kwargs: Optional[Any],
-    ):
+    ) -> tuple[Any, Any, dict | None, Any | None]:
+        system_prompt = escape_braces(system_prompt)
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", instruction_prompt),
@@ -134,5 +137,23 @@ class CommonAgent:
             except Exception as e:
                 logger.error(str(e))
                 raise e
-        return res, processed_res, self.token_usage
+        return res, processed_res, self.token_usage, None
     
+class CommonConversation:
+    def __init__(self, llm: BaseChatOpenAI):
+        self.llm = llm
+
+    def generate(self, system_prompt: str, instruction_prompt: str):
+        msgs = [
+            SystemMessage(system_prompt),
+            HumanMessage(instruction_prompt),
+        ]
+        msgs_template = ChatPromptTemplate.from_messages(messages=msgs)
+        callback_handler = OpenAICallbackHandler()
+        result = self.llm.generate(
+            messages=[msgs],
+            callbacks=[callback_handler]
+        )
+        response = result.generations[0][0].text
+        token_usage = result.llm_output.get("token_usage")
+        return response, token_usage

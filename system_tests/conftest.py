@@ -6,7 +6,8 @@ import pytest
 from dotenv import load_dotenv
 import logging
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, increase_token_usage
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.agents.agent_utils import increase_token_usage
 
 load_dotenv()
 
@@ -19,11 +20,11 @@ def get_openai():
 
 def get_azure_openai():
     return AzureChatOpenAI(
-        api_key=os.environ.get("OPENAI_4O_API_KEY", None),
-        azure_endpoint=os.environ.get("AZURE_OPENAI_4O_ENDPOINT", None),
-        api_version=os.environ.get("OPENAI_4O_API_VERSION", None),
-        azure_deployment=os.environ.get("OPENAI_4O_DEPLOYMENT_NAME", None),
-        model=os.environ.get("OPENAI_4O_MODEL", None),
+        api_key=os.environ.get("OPENAI_API_KEY", None),
+        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", None),
+        api_version=os.environ.get("OPENAI_API_VERSION", None),
+        azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME", None),
+        model=os.environ.get("OPENAI_MODEL", None),
         max_retries=5,
         # temperature=0.0,
         max_completion_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 4096)),

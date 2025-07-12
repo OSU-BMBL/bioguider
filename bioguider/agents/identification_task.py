@@ -1,6 +1,6 @@
 
 import os
-import re
+import json
 import logging
 from enum import Enum
 from typing import Callable
@@ -9,8 +9,13 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain.tools import Tool
 from langgraph.graph import StateGraph, START, END
 
+from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 from bioguider.utils.file_utils import get_file_type
-from bioguider.agents.agent_tools import read_directory_tool, summarize_file_tool
+from bioguider.agents.agent_tools import (
+    read_file_tool, 
+    read_directory_tool, 
+    summarize_file_tool,
+)
 from bioguider.agents.agent_utils import (
     read_directory,
 )
@@ -22,11 +27,17 @@ from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import (
     IDENTIFICATION_GOAL_PROJECT_TYPE, 
     IDENTIFICATION_GOAL_PRIMARY_LANGUAGE,
+    IDENTIFICATION_GOAL_META_DATA,
 )
 from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.agent_task import AgentTask
+from bioguider.database.summarized_file_db import SummarizedFilesDb
 
 logger = logging.getLogger(__name__)
+
+META_DATA_FINAL_ANSWER_EXAMPLE = '{{"name": "repo name", ...}}'
+PROJECT_TYPE_FINAL_ANSWER_EXAMPLE = '{{"project_type": "project type"}}'
+PRIMARY_LANGUAGE_FINAL_ANSWER_EXAMPLE = '{{"primary_language": "primary language"}}'
 
 class IdentificationPlanResult(BaseModel):
     """ Identification Plan Result """
@@ -46,17 +57,6 @@ IdentificationPlanResultJsonSchema = {
     },
     "required": ["actions"],
 }
-
-class ProjectTypeEnum(Enum):
-    application="application"
-    package="package"
-    pipeline="pipeline"
-    unknown="unknown type"
-
-class PrimaryLanguageEnum(Enum):
-    python="python"
-    R="R"
-    unknown="unknown type"
 
 class IdentificationTask(AgentTask):
     def __init__(
@@ -82,8 +82,14 @@ class IdentificationTask(AgentTask):
             self.repo_structure += f"{f} - {f_type}\n"
 
         self.tools = [
-            summarize_file_tool(llm=self.llm, repo_path=self.repo_path, output_callback=self._print_step),
+            summarize_file_tool(
+                llm=self.llm, 
+                repo_path=self.repo_path, 
+                output_callback=self._print_step,
+                db=self.summary_file_db,
+            ),
             read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path),
+            read_file_tool(repo_path=self.repo_path),
         ]
         self.custom_tools = [Tool(
             name=tool.__class__.__name__,
@@ -143,16 +149,37 @@ class IdentificationTask(AgentTask):
         self.graph = graph.compile()
         
     def identify_project_type(self):
-        s = self._go_graph({"goal": IDENTIFICATION_GOAL_PROJECT_TYPE})
+        s = self._go_graph({
+            "goal": IDENTIFICATION_GOAL_PROJECT_TYPE,
+            "final_answer_example": PROJECT_TYPE_FINAL_ANSWER_EXAMPLE,
+        })
         proj_type = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_project_type(proj_type)
     
     def identify_primary_language(self):
-        s = self._go_graph({"goal": IDENTIFICATION_GOAL_PRIMARY_LANGUAGE})
+        s = self._go_graph({
+            "goal": IDENTIFICATION_GOAL_PRIMARY_LANGUAGE,
+            "final_answer_example": PRIMARY_LANGUAGE_FINAL_ANSWER_EXAMPLE,
+        })
         language = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_primary_language(language)
     
-    def _parse_project_type(self, proj_type: str) -> ProjectTypeEnum:
+    def identify_meta_data(self):
+        s = self._go_graph({
+            "goal": IDENTIFICATION_GOAL_META_DATA,
+            "final_answer_example": META_DATA_FINAL_ANSWER_EXAMPLE,
+        })
+        meta_data = s["final_answer"] if "final_answer" in s else "unknown type"
+        return self._parse_meta_data(meta_data)
+        
+    
+    def _parse_project_type(self, proj_type_obj: str) -> ProjectTypeEnum:
+        try:
+            json_obj = json.loads(proj_type_obj)
+            proj_type = json_obj["project_type"]
+        except Exception as e:
+            logger.error(e)
+            return ProjectTypeEnum.unknown
         proj_type = proj_type.strip()
         if proj_type == "application":
             return ProjectTypeEnum.application
@@ -163,7 +190,13 @@ class IdentificationTask(AgentTask):
         else:
             return ProjectTypeEnum.unknown
         
-    def _parse_primary_language(self, language: str) -> PrimaryLanguageEnum:
+    def _parse_primary_language(self, language_obj: str) -> PrimaryLanguageEnum:
+        try:
+            json_obj = json.loads(language_obj)
+            language = json_obj["primary_language"]
+        except Exception as e:
+            logger.error(e)
+            return PrimaryLanguageEnum.unknown
         language = language.strip()
         if language == "python":
             return PrimaryLanguageEnum.python
@@ -171,3 +204,17 @@ class IdentificationTask(AgentTask):
             return PrimaryLanguageEnum.R
         else:
             return PrimaryLanguageEnum.unknown
+        
+    def _parse_meta_data(self, meta_data_obj: str) -> dict:
+        try:
+            json_obj = json.loads(meta_data_obj)
+            meta_data = json_obj
+            return meta_data
+        except Exception as e:
+            logger.error(e)
+            return {
+                "name": "unknown",
+                "description": "unknown",
+                "license": "unknown",
+                "owner": "unknown",
+            }

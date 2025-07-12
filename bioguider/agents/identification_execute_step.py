@@ -6,7 +6,8 @@ from langchain.tools import BaseTool
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 
-from bioguider.agents.agent_utils import DEFAULT_TOKEN_USAGE, CustomOutputParser, CustomPromptTemplate
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.agents.agent_utils import CustomOutputParser, CustomPromptTemplate
 from bioguider.agents.peo_common_step import ( 
     PEOCommonStep,
 )

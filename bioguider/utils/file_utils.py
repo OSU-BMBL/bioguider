@@ -1,6 +1,8 @@
 import os
 from enum import Enum
 import json
+# from adalflow.utils import get_adalflow_default_root_path
+from pathlib import Path
 
 class FileType(Enum):
     unknown = "u"
@@ -82,4 +84,43 @@ def extract_code_from_notebook(notebook_path: str) -> str:
 
     # Combine all code cells into a single string
     return '\n\n'.join(code_cells)
+
+def parse_repo_url(url: str) -> tuple[str | None, str | None]:
+    """
+    Parses a git repository URL to extract the author/organization and repository name.
+
+    Args:
+        url: The repository URL (e.g., HTTPS or SSH).
+
+    Returns:
+        A tuple containing (author_or_org, repo_name), or (None, None) if parsing fails.
+    """
+    try:
+        # Handle SSH format first (e.g., git@github.com:user/repo.git)
+        if '@' in url and ':' in url:
+            path_part = url.split(':')[-1]
+        # Handle HTTPS format (e.g., https://github.com/user/repo.git)
+        else:
+            path_part = url.split('://')[-1].split('/', 1)[-1]
+
+        # Clean up the path
+        if path_part.endswith('.git'):
+            path_part = path_part[:-4]
+
+        parts = path_part.split('/')
+        if len(parts) >= 2:
+            author = parts[-2]
+            repo_name = parts[-1]
+            return author, repo_name
+        else:
+            return None, None
+    except Exception:
+        return None, None
+
+def retrieve_data_root_path():
+    data_folder = os.environ.get("DATA_FOLDER", "./data")
+    return data_folder
+
+
+
 
