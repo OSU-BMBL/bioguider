@@ -38,7 +38,7 @@ class CommonAgentTwoSteps(CommonAgent):
         system_prompt = escape_braces(system_prompt)
         instruction_prompt = instruction_prompt.replace("{", "{{").replace("}", "}}")
         msgs = [("system", system_prompt)]
-        msgs + msgs + [("human", instruction_prompt)]
+        msgs = msgs + [("human", instruction_prompt)]
         exception_msgs = self._get_retryexception_message()
         if exception_msgs is not None:
             msgs = msgs + exception_msgs

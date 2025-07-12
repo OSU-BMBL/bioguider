@@ -12,7 +12,7 @@ from bioguider.agents.agent_utils import (
     increase_token_usage,
 )
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 class RetryException(Exception):
     """Exception need to retry"""

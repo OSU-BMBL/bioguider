@@ -83,6 +83,7 @@ def test_collection_task_for_tutorial(llm, step_callback):
         goal_item=CollectionGoalItemEnum.Installation.name,
         db=db,
     )
-    s = task.collect()
-    assert s is not None
+    results = task.collect()
+    assert results is not None
+    assert isinstance(results, list)
     
