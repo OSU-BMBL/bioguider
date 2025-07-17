@@ -71,8 +71,22 @@ For each criterion below, provide a brief assessment followed by specific, actio
  * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
 
 **Final Answer**
- * Project-Level README: Yes / No
- * Provide a final, overall assessment of the README file's quality, summarizing the key strengths and areas for improvement.
+ The final answer **must exactly match** the following format:
+```
+  * Project-Level README: Yes / No
+  * **Score:** <number from 0 to 100>  
+  * **Key Strengths**: <brief summary of the README's strongest points in 2-3 sentences> 
+  * **Improvement Suggestions:**
+    - "Original text snippet 1" - Improving comment 1  
+    - "Original text snippet 2" - Improving comment 2  
+    - ...
+```
+
+  * **Project-Level README**: Indicate “Yes” if the README is project-level, otherwise “No.”
+  * **Score**: Provide an overall quality score (100 = perfect).
+  * **Key Strengths**: Provide the README's strongest points in 2-3 sentences
+  * **Overall Improvement Suggestions**:
+    * List each original text snippet that needs improvement, followed by your suggestion.
 
 ---
 
@@ -108,8 +122,9 @@ For each criterion below, provide a brief assessment followed by specific, actio
  * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
 
 **Final Answer**
+  The final answer **must exactly match** the following format:
  * Project-Level README: Yes / No
- * Provide a final, overall assessment of the README file's quality, summarizing the key strengths and areas for improvement.
+ * Overall Assessment: provide a final, overall assessment of the README file's quality, summarizing the key strengths and areas for improvement.
 ---
 
 ### **README path:**
@@ -167,8 +182,38 @@ class EvaluationTask(ABC):
         pass
 
 class EvaluationREADMEResult(BaseModel):
-    project_level: Optional[bool]=Field(description="a boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
-    overall_assessment: Optional[str]=Field(description="an overall assessment")
+    project_level: Optional[bool]=Field(description="A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
+    score: Optional[float]=Field(description="An overall score")
+    key_strengths: Optional[str]=Field(description="A string specifying the key strengths of README file.")
+    overall_improvement_suggestions: Optional[list[str]]=Field(description="A list of overall improvement suggestions")
+
+EvaluationREADMEResultSchema = {
+    "title": "EvaluationREADMEResult",
+    "type": "object",
+    "properties": {
+        "project_level": {
+            "anyOf": [{"type": "boolean"}, {"type": "null"}],
+            "description": "A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE: folder-level.",
+            "title": "Project Level"
+        },
+        "score": {
+            "anyOf": [{"type": "number"}, {"type": "null"}],
+            "description": "An overall score",
+            "title": "Score"
+        },
+        "key_strengths": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "A string specifying the key strengths of README file.",
+            "title": "Key Strengths",
+        },
+        "overall_improvement_suggestions": {
+            "anyOf": [{"items": {"type": "string"}, "type": "array"}, {"type": "null"}],
+            "description": "A list of improvement suggestions",
+            "title": "Overall Improvement Suggestions"
+        }
+    },
+    "required": ["project_level", "score", "key_strengths", "overall_improvement_suggestions"]
+}
 
 class EvaluationREADMETask(EvaluationTask):
     def __init__(
@@ -195,7 +240,14 @@ class EvaluationREADMETask(EvaluationTask):
                 logger.error(f"Error in reading file {readme_file}")
                 continue
             if len(readme_content.strip()) == 0:
-                readme_content = "empty file"
+                readme_evaluations[readme_file] = {
+                    "evaluation": {
+                        "project_level": "/" in readme_file,
+                        "overall_assessment": f"{readme_file} is an empty file."
+                    },
+                    "reasoning_process": f"{readme_file} is an empty file.",
+                }
+                continue
 
             readability = PyphenReadability()
             flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
@@ -215,14 +267,17 @@ class EvaluationREADMETask(EvaluationTask):
             response, _, token_usage, reasoning_process = agent.go(
                 system_prompt=system_prompt,
                 instruction_prompt="Before arriving at the conclusion, clearly explain your reasoning step by step. Now, let's begin the evaluation.",
-                schema=EvaluationREADMEResult,
+                schema=EvaluationREADMEResultSchema,
             )
+            response = EvaluationREADMEResult(**response)
             self.print_step(step_output=f"README: {readme_file}")
             self.print_step(step_output=reasoning_process)
             readme_evaluations[readme_file] = {
                 "evaluation": {
                     "project_level": response.project_level,
-                    "overall_assessment": response.overall_assessment,
+                    "score": response.score,
+                    "key_strengths": response.key_strengths,
+                    "overall_assessment": response.overall_improvement_suggestions,
                 }, 
                 "reasoning_process": reasoning_process
             }
