@@ -76,7 +76,7 @@ For each criterion below, provide a brief assessment followed by specific, actio
   * Project-Level README: Yes / No
   * **Score:** <number from 0 to 100>  
   * **Key Strengths**: <brief summary of the README's strongest points in 2-3 sentences> 
-  * **Improvement Suggestions:**
+  * **Overall Improvement Suggestions:**
     - "Original text snippet 1" - Improving comment 1  
     - "Original text snippet 2" - Improving comment 2  
     - ...
@@ -124,7 +124,12 @@ For each criterion below, provide a brief assessment followed by specific, actio
 **Final Answer**
   The final answer **must exactly match** the following format:
  * Project-Level README: Yes / No
- * Overall Assessment: provide a final, overall assessment of the README file's quality, summarizing the key strengths and areas for improvement.
+ * **Score:** <number from 0 to 100>  
+  * **Key Strengths**: <brief summary of the README's strongest points in 2-3 sentences> 
+  * **Overall Improvement Suggestions:**
+    - "Original text snippet 1" - Improving comment 1  
+    - "Original text snippet 2" - Improving comment 2  
+    - ...
 ---
 
 ### **README path:**
@@ -243,7 +248,9 @@ class EvaluationREADMETask(EvaluationTask):
                 readme_evaluations[readme_file] = {
                     "evaluation": {
                         "project_level": "/" in readme_file,
-                        "overall_assessment": f"{readme_file} is an empty file."
+                        "score": 0,
+                        "key_strengths": f"{readme_file} is an empty file.",
+                        "overall_improvement_suggestions": f"{readme_file} is an empty file.",
                     },
                     "reasoning_process": f"{readme_file} is an empty file.",
                 }
@@ -277,7 +284,7 @@ class EvaluationREADMETask(EvaluationTask):
                     "project_level": response.project_level,
                     "score": response.score,
                     "key_strengths": response.key_strengths,
-                    "overall_assessment": response.overall_improvement_suggestions,
+                    "overall_improvement_suggestions": response.overall_improvement_suggestions,
                 }, 
                 "reasoning_process": reasoning_process
             }

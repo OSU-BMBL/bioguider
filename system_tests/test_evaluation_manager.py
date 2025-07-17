@@ -31,7 +31,7 @@ def test_EvaluationManager_on_tutorial(llm, step_callback):
 def test_EvaluationManager_on_readme(llm, step_callback):
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)
-    mgr.prepare_repo("https://github.com/OSU-BMBL/marsgt")
+    mgr.prepare_repo("https://github.com/OSU-BMBL/scGNN2.0")
 
     evaluations, readme_file = mgr.evaluate_readme()
     assert len(readme_file) > 0
