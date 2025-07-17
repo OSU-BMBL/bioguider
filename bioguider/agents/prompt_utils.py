@@ -165,7 +165,7 @@ If **any one** of these is present, the document should be classified as Install
         "important_instructions": """- Give priority to analyzing README file that contain installation instructions and the files whose names include **"install"** or **"setup"**.
 - If multiple files are found, select the most comprehensive one that covers the installation process.
 - The total number of collected files should **not exceed 3**.
-- Make sure to include **only one installation instruction file**, selecting the most comprehensive and representative one.
+- Identify and select **no more than three** installation instruction files — choose the most comprehensive and representative ones.
 """
     },
     "License": {
