@@ -10,6 +10,7 @@ from ..rag.rag import RAG
 from ..utils.file_utils import parse_repo_url
 from ..database.summarized_file_db import SummarizedFilesDb
 from ..agents.evaluation_task import EvaluationREADMETask
+from ..agents.evaluation_installation_task import EvaluationInstallationTask
 from ..agents.collection_task import CollectionTask
 
 class EvaluationManager:
@@ -83,6 +84,30 @@ class EvaluationManager:
         s = task.collect()
         if s is None or 'final_answer' not in s:
             return None
+        
+    def evaluate_installation(self):
+        task = CollectionTask(
+            llm=self.llm,
+            step_callback=self.step_callback,
+        )
+        task.compile(
+            repo_path=self.rag.repo_dir,
+            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
+            db=self.summary_file_db,
+            goal_item=CollectionGoalItemEnum.Installation.name,
+        )
+        files = task.collect()
+        if files is None or len(files) == 0:
+            return None
+        evaluation_task = EvaluationInstallationTask(
+            llm=self.llm,
+            repo_path=self.rag.repo_dir,
+            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
+            meta_data=self.project_metadata,
+            step_callback=self.step_callback,
+        )
+        evaluation = evaluation_task.evaluate(files)
+        return evaluation, files
         
     def _find_readme_files(self) -> list[str]:
         """
