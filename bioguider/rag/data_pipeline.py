@@ -518,6 +518,21 @@ class DatabaseManager:
         self.reset_database()
         self._create_repo(repo_url_or_path, access_token)
         return self.prepare_db_index()
+    
+    def _extract_repo_name_from_url(self, repo_url_or_path: str, repo_type: str) -> str:
+        # Extract owner and repo name to create unique identifier
+        url_parts = repo_url_or_path.rstrip('/').split('/')
+
+        if repo_type in ["github", "gitlab", "bitbucket"] and len(url_parts) >= 5:
+            # GitHub URL format: https://github.com/owner/repo
+            # GitLab URL format: https://gitlab.com/owner/repo or https://gitlab.com/group/subgroup/repo
+            # Bitbucket URL format: https://bitbucket.org/owner/repo
+            owner = url_parts[-2]
+            repo = url_parts[-1].replace(".git", "")
+            repo_name = f"{owner}_{repo}"
+        else:
+            repo_name = url_parts[-1].replace(".git", "")
+        return repo_name
 
     def reset_database(self):
         """
@@ -545,19 +560,18 @@ class DatabaseManager:
             root_path = retrieve_data_root_path()
 
             os.makedirs(root_path, exist_ok=True)
+            repo_type = "unknown"
             # url
             if repo_url_or_path.startswith("https://") or repo_url_or_path.startswith("http://"):
                 # Extract repo name based on the URL format
                 if "github.com" in repo_url_or_path:
                     # GitHub URL format: https://github.com/owner/repo
-                    repo_name = repo_url_or_path.split("/")[-1].replace(".git", "")
+                    repo_type = "github"
                 elif "gitlab.com" in repo_url_or_path:
                     # GitLab URL format: https://gitlab.com/owner/repo or https://gitlab.com/group/subgroup/repo
                     # Use the last part of the URL as the repo name
-                    repo_name = repo_url_or_path.split("/")[-1].replace(".git", "")
-                else:
-                    # Generic handling for other Git URLs
-                    repo_name = repo_url_or_path.split("/")[-1].replace(".git", "")
+                    repo_type = "gitlab"
+                repo_name = self._extract_repo_name_from_url(repo_url_or_path, repo_type)
 
                 save_repo_dir = os.path.join(root_path, "repos", repo_name)
 

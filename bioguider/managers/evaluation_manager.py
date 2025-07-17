@@ -57,7 +57,7 @@ class EvaluationManager:
         )
         return self.project_metadata
     
-    def evaluate_readme(self):
+    def evaluate_readme(self) -> tuple[any, list[str]]:
         task = EvaluationREADMETask(
             llm=self.llm,
             repo_path=self.rag.repo_dir,
@@ -67,7 +67,7 @@ class EvaluationManager:
         )
         readme_files = self._find_readme_files()
         results = task.evaluate(readme_files)
-        return results
+        return results, readme_files
     
     def evaluate_tutorial(self):
         task = CollectionTask(
@@ -97,7 +97,7 @@ class EvaluationManager:
         repo_path = self.rag.repo_dir
         gitignore_path = Path(repo_path, ".gitignore")
         gitignore_checker = GitignoreChecker(
-            directory=self.repo_path, gitignore_path=gitignore_path
+            directory=repo_path, gitignore_path=gitignore_path
         )
         found_readme_files = gitignore_checker.check_files_and_folders(
             check_file_cb=lambda root_dir, relative_path: Path(relative_path).name.lower() in possible_readme_files,

@@ -117,9 +117,11 @@ def parse_repo_url(url: str) -> tuple[str | None, str | None]:
     except Exception:
         return None, None
 
-def retrieve_data_root_path():
+def retrieve_data_root_path() -> Path:
     data_folder = os.environ.get("DATA_FOLDER", "./data")
-    return data_folder
+    root_folder = Path(data_folder, ".adalflow")
+    return root_folder.absolute()
+    
 
 
 

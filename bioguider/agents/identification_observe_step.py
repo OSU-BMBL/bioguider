@@ -2,7 +2,7 @@
 from langchain.prompts import ChatPromptTemplate
 
 from bioguider.agents.agent_utils import ObservationResult
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 from bioguider.agents.identification_task_utils import IdentificationWorkflowState
 from bioguider.agents.peo_common_step import PEOWorkflowState, PEOCommonStep
 
@@ -70,7 +70,7 @@ class IdentificationObserveStep(PEOCommonStep):
 
     def _execute_directly(self, state: IdentificationWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
-        agent = CommonAgentTwoSteps(llm=self.llm)
+        agent = CommonAgentTwoChainSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin.",

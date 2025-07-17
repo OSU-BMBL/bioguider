@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.agents.agent_utils import run_command, read_file
 from bioguider.agents.dockergeneration_task_utils import DockerGenerationWorkflowState
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 
 DOCKERGENERATION_OBSERVE_SYSTEM_PROMPT = """You are an expert in software containerization and reproducibility engineering.
@@ -93,7 +93,7 @@ class DockerGenerationObserveStep(PEOCommonStep):
             if code != 0:
                 error_msg = DockerGenerationObserveStep._extract_error_message(error)
                 system_prompt = self._build_system_prompt(state, error_msg, "N/A")
-                agent = CommonAgentTwoSteps(llm=self.llm)
+                agent = CommonAgentTwoChainSteps(llm=self.llm)
                 res, _, token_usage, reasoning = agent.go(
                     system_prompt=system_prompt,
                     instruction_prompt="Now, let's begin observing.",
@@ -125,7 +125,7 @@ class DockerGenerationObserveStep(PEOCommonStep):
                     "docker build successfully.",
                     error,
                 )
-                agent = CommonAgentTwoSteps(llm=self.llm)
+                agent = CommonAgentTwoChainSteps(llm=self.llm)
                 res, _, token_usage, reasoning = agent.go(
                     system_prompt=system_prompt,
                     instruction_prompt="Now, let's begin observing.",

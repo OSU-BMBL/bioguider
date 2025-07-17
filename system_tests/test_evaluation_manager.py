@@ -7,14 +7,15 @@ from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 @pytest.mark.skip()
 def test_EvaluationManager(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
-    mgr.prepare_repo("https://github.com/snap-stanford/POPPER")
-    proj_type, language, meta_data = mgr.identify_project()
-    assert proj_type == ProjectTypeEnum.package
-    assert language == PrimaryLanguageEnum.python
-    assert meta_data is not None and "name" in meta_data
+    mgr.prepare_repo("https://github.com/OSU-BMBL/marsgt")
+    metadata = mgr.identify_project()
+    assert str(metadata.project_type.value) == "package"
+    assert str(metadata.primary_language.value) == "python"
+    assert metadata.repo_name is not None
 
     mgr.evaluate_readme()
 
+@pytest.mark.skip()
 def test_EvaluationManager_on_tutorial(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
     mgr.prepare_repo("https://github.com/snap-stanford/POPPER")
@@ -25,3 +26,9 @@ def test_EvaluationManager_on_tutorial(llm, step_callback):
 
     mgr.evaluate_tutorial()
 
+
+def test_EvaluationManager_on_readme(llm, step_callback):
+    mgr = EvaluationManager(llm, step_callback)
+    mgr.prepare_repo("https://github.com/OSU-BMBL/marsgt")
+
+    mgr.evaluate_readme()

@@ -5,7 +5,7 @@ from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from bioguider.agents.agent_utils import get_tool_names_and_descriptions
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.identification_task_utils import IdentificationWorkflowState
 from bioguider.agents.peo_common_step import PEOCommonStep
 
@@ -113,7 +113,7 @@ class IdentificationPlanStep(PEOCommonStep):
 
     def _execute_directly(self, state: IdentificationWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
-        agent = CommonAgentTwoSteps(llm=self.llm)
+        agent = CommonAgentTwoChainSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin.",
