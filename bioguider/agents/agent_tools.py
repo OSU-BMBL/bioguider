@@ -1,9 +1,11 @@
 import os
 from typing import Callable
+from markdownify import markdownify as md
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_utils import read_directory, read_file, summarize_file
+from bioguider.rag.data_pipeline import count_tokens
 
 class agent_tool:
     def __init__(
@@ -39,7 +41,14 @@ Returns:
             file_path = os.path.join(self.repo_path, file_path)
         if not os.path.isfile(file_path):
             return None
-        return read_file(file_path)
+        content = read_file(file_path)
+        if file_path.endswith(".html") or file_path.endswith(".htm"):
+            content = md(content, escape_underscores=False)
+        tokens = count_tokens(content)
+        MAX_TOKENS = os.environ.get('OPENAI_MAX_INPUT_TOKENS', 102400)
+        if tokens > int(MAX_TOKENS):
+            content = content[:100000]
+        return content
 
 class summarize_file_tool(agent_tool):
     """ read and summarize the file

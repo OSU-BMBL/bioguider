@@ -45,6 +45,7 @@ faiss-cpu = "^1.11.0"
 binaryornot = "^0.4.4"
 textstat = "^0.7.6"
 pyphen = "^0.17.2"
+markdownify = "^1.1.0"
 
 
 [tool.poetry.group.dev.dependencies]

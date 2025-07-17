@@ -6,9 +6,11 @@ from abc import ABC, abstractmethod
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
+from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
+from bioguider.rag.data_pipeline import count_tokens
 from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 from .common_agent import CommonConversation
 from ..utils.pyphen_utils import PyphenReadability
@@ -122,8 +124,15 @@ class EvaluationInstallationTask(EvaluationTask):
             return None
         
         files_content = ""
+        MAX_TOKENS = os.environ.get("OPENAI_MAX_INPUT_TOKENS", 102400)
         for f in files:
-            content = read_file(os.path.join(self.repo_path, f))
+            if f.endswith(".html") or f.endswith(".htm"):
+                html = read_file(os.path.join(self.repo_path, f))
+                content = md(html, escape_underscores=False)
+            else:
+                content = read_file(os.path.join(self.repo_path, f))
+            if count_tokens(content) > int(MAX_TOKENS):
+                content = content[:100000]
             files_content += f"""
 {f} content:
 {content}
