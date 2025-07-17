@@ -40,7 +40,7 @@ def test_EvaluationManager_on_readme(llm, step_callback):
 def test_EvaluationManager_on_installation(llm, step_callback):
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)
-    mgr.prepare_repo("https://github.com/OSU-BMBL/scGNN2.0")
+    mgr.prepare_repo("https://github.com/OSU-BMBL/deepmaps")
 
     evaluation, files = mgr.evaluate_installation()
     assert len(files) > 0
