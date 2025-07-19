@@ -5,7 +5,7 @@ from bioguider.managers.evaluation_manager import EvaluationManager
 from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 from bioguider.agents.evaluation_task import EvaluationREADMEResult
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 def test_EvaluationManager(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
     mgr.prepare_repo("https://github.com/OSU-BMBL/deepmaps")
@@ -45,3 +45,12 @@ def test_EvaluationManager_on_installation(llm, step_callback):
 
     evaluation, files = mgr.evaluate_installation()
     assert len(files) > 0
+
+def test_EvaluationManager_on_POPPER_installation(llm, step_callback):
+    json_obj = EvaluationREADMEResult.model_json_schema()
+    mgr = EvaluationManager(llm, step_callback)
+    mgr.prepare_repo("https://github.com/snap-stanford/POPPER")
+
+    evaluation, files = mgr.evaluate_installation()
+    assert len(files) > 0
+

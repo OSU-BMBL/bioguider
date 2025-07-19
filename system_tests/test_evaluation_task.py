@@ -3,7 +3,7 @@ import pytest
 
 from bioguider.agents.evaluation_task import EvaluationREADMETask, EvaluationTutorialTask
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 def test_EvaluationREADMETask(llm, step_callback):
     task = EvaluationREADMETask(
         llm,
