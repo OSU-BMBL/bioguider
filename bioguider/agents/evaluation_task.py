@@ -18,7 +18,8 @@ from ..utils.gitignore_checker import GitignoreChecker
 logger = logging.getLogger(__name__)
 
 EVALUATION_README_SYSTEM_PROMPT = """
-You are an expert in evaluating the quality of README files in software repositories. Your task is to analyze the provided README file and generate a comprehensive quality report.
+You are an expert in evaluating the quality of README files in software repositories. 
+Your task is to analyze the provided README file and generate a comprehensive quality report.
 
 ---
 
@@ -28,9 +29,10 @@ First, determine whether the provided README is a **project-level README** (typi
 
 ---
 
-### **Project-level README Evaluation**
+### **Evaluation Criteria**
 
-If the README is a **project-level** file, evaluate it using the following criteria.
+#### If the README is a **project-level** file, evaluate it using the following criteria.
+
 For each criterion below, provide a brief assessment followed by specific, actionable comments for improvement.
 
 **1. Project Clarity & Purpose**
@@ -38,30 +40,45 @@ For each criterion below, provide a brief assessment followed by specific, actio
  * **Improvement Suggestions**:
     * **Original text:** [Quote a specific line/section from the README.]
     * **Improving comments:** [Provide your suggestions to improve clarity.]
+    * **Original text:** [Quote a specific line/section from the README.]
+    * **Improving comments:** [Provide your suggestions to improve clarity.]
+    ...
 
 **2. Installation Instructions**
  * **Assessment**: [Your evaluation of the installation instructions.]
  * **Improvement Suggestions**:
     * **Original text:** [Quote text related to installation.]
     * **Improving comments:** [Provide your suggestions.]
+    * **Original text:** [Quote text related to installation.]
+    * **Improving comments:** [Provide your suggestions.]
+    ...
 
 **3. Usage Instructions**
  * **Assessment**: [Your evaluation of the usage instructions.]
  * **Improvement Suggestions**:
     * **Original text:** [Quote text related to usage.]
     * **Improving comments:** [Provide your suggestions.]
+    * **Original text:** [Quote text related to usage.]
+    * **Improving comments:** [Provide your suggestions.]
+    ...
 
 **4. Contributing Guidelines**
  * **Assessment**: [Your evaluation of the contributing guidelines.]
  * **Improvement Suggestions**:
     * **Original text:** [Quote text related to contributions.]
     * **Improving comments:** [Provide your suggestions.]
+    * **Original text:** [Quote text related to contributions.]
+    * **Improving comments:** [Provide your suggestions.]
+    ...
 
 **5. License Information**
  * **Assessment**: [Your evaluation of the license information.]
  * **Improvement Suggestions**:
     * **Original text:** [Quote text related to the license.]
     * **Improving comments:** [Provide your suggestions.]
+    * **Original text:** [Quote text related to the license.]
+    * **Improving comments:** [Provide your suggestions.]
+    ...
 
 **6. Readability Analysis**
  * **Flesch Reading Ease**: `{flesch_reading_ease}` (A higher score is better, with 60-70 being easily understood by most adults).
@@ -70,29 +87,9 @@ For each criterion below, provide a brief assessment followed by specific, actio
  * **SMOG Index**: `{smog_index}` (Estimates the years of education needed to understand the text).
  * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
 
-**Final Answer**
- The final answer **must exactly match** the following format:
-```
-  * Project-Level README: Yes / No
-  * **Score:** <number from 0 to 100>  
-  * **Key Strengths**: <brief summary of the README's strongest points in 2-3 sentences> 
-  * **Overall Improvement Suggestions:**
-    - "Original text snippet 1" - Improving comment 1  
-    - "Original text snippet 2" - Improving comment 2  
-    - ...
-```
-
-  * **Project-Level README**: Indicate “Yes” if the README is project-level, otherwise “No.”
-  * **Score**: Provide an overall quality score (100 = perfect).
-  * **Key Strengths**: Provide the README's strongest points in 2-3 sentences
-  * **Overall Improvement Suggestions**:
-    * List each original text snippet that needs improvement, followed by your suggestion.
-
 ---
 
-### **Folder-Level README Evaluation**
-
-If the README is a **folder-level** file, use the following criteria instead.
+#### If if is a **folder-level** file, use the following criteria instead.
 
 For each criterion below, provide a brief assessment followed by specific, actionable comments for improvement.
 
@@ -121,15 +118,30 @@ For each criterion below, provide a brief assessment followed by specific, actio
  * **SMOG Index**: `{smog_index}` (Estimates the years of education needed to understand the text).
  * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
 
-**Final Answer**
-  The final answer **must exactly match** the following format:
+---
+
+### Final Report Format
+
+#### Your output **must exactly match**  the following template:
+
+**FinalAnswer**
+
  * Project-Level README: Yes / No
- * **Score:** <number from 0 to 100>  
+ * **Score:** [Poor / Fair / Good / Excellent]
   * **Key Strengths**: <brief summary of the README's strongest points in 2-3 sentences> 
   * **Overall Improvement Suggestions:**
     - "Original text snippet 1" - Improving comment 1  
     - "Original text snippet 2" - Improving comment 2  
     - ...
+
+#### Notes
+
+* **Project-Level README**: "Yes" if root-level; "No" if folder-level.
+* **Score**: Overall quality rating, could be Poor / Fair / Good / Excellent.
+* **Key Strengths**: Briefly highlight the README's strongest aspects.
+* **Improvement Suggestions**: Provide concrete snippets and suggested improvements.
+
+
 ---
 
 ### **README path:**

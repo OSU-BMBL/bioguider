@@ -51,13 +51,22 @@ Returns:
         return content
 
 class summarize_file_tool(agent_tool):
-    """ read and summarize the file
-Args:
-    file_path str [required]: the file path
-    summarize_prompt str [required]: a prompt to guide how to summarize the file, if no prompt needed, please set "N/A"
-Returns:
-    A string of summarized file content, if the file does not exist, return None.         
-        """
+    """ Read a file and generate a summary according to a specified prompt.
+
+Arguments
+----------
+    file_path : str, required
+        Path to the file to read.
+    summarize_prompt : str, optional
+        Instruction guiding the summarization focus (default is "N/A").
+        Use this to emphasize specific aspects of the content.
+
+Returns
+-------
+    str or None
+        A summarized version of the file content.
+        Returns None if the file does not exist or cannot be read.     
+    """
     def __init__(
         self, 
         llm: BaseChatOpenAI,
@@ -96,7 +105,7 @@ Returns:
             summarized_text=summarized_text,
             token_usage=token_usage,
         )
-    def run(self, file_path: str, summarize_prompt: str) -> str | None:
+    def run(self, file_path: str, summarize_prompt: str = "N/A") -> str | None:
         if file_path is None:
             return None
         if summarize_prompt is None or len(summarize_prompt) == 0:

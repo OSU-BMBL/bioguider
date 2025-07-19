@@ -52,14 +52,12 @@ Please assess the installation information using the following criteria. For eac
 
 Your response **must exactly follow** the structure below:
 
-```
 **FinalAnswer**
 **Overall Score:** [Poor / Fair / Good / Excellent]  
 **Ease of Access:** <your comments>  
 **Clarity of Dependency Specification:** <your comments>  
 **Hardware Requirements:** <your comments>  
 **Installation Guide:** <your comments>  
-```
 
 ---
 
@@ -149,6 +147,7 @@ class EvaluationInstallationTask(EvaluationTask):
             schema=EvaluationInstallationResultSchema,
         )
         res = EvaluationInstallationResult(**res)
+        self.print_step(step_output=reasoning_process)
         evaluation = {
             "score": res.score,
             "ease_of_access": res.ease_of_access,
