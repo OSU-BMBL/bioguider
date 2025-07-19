@@ -1,5 +1,5 @@
 import pytest
-from langchain.agents import Tool
+from langchain.tools import Tool, StructuredTool
 from langchain.prompts import ChatPromptTemplate
 
 from bioguider.agents.agent_tools import (
@@ -54,10 +54,22 @@ def test_collection_execute_step(
         read_file_tool(repo_path=repo_path),
     ]
     custom_tools = [Tool(
-        name=tool.__class__.__name__,
-        func=tool.run,
-        description=tool.__class__.__doc__,
-    ) for tool in tools]
+        name=tools[0].__class__.__name__,
+        func=tools[0].run,
+        description=tools[0].__class__.__doc__,
+    ), StructuredTool.from_function(
+        tools[1].run,
+        description=tools[1].__class__.__doc__,
+        name=tools[1].__class__.__name__,
+    ), Tool(
+        name=tools[2].__class__.__name__,
+        func=tools[2].run,
+        description=tools[2].__class__.__doc__,
+    ), Tool(
+        name=tools[3].__class__.__name__,
+        func=tools[3].run,
+        description=tools[3].__class__.__doc__,
+    ),]
     custom_tools.append(CustomPythonAstREPLTool())
 
     step = CollectionExecuteStep(
@@ -114,10 +126,22 @@ Step Input: milvus-docker-compose.yml
         read_file_tool(repo_path=repo_path),
     ]
     custom_tools = [Tool(
-        name=tool.__class__.__name__,
-        func=tool.run,
-        description=tool.__class__.__doc__,
-    ) for tool in tools]
+        name=tools[0].__class__.__name__,
+        func=tools[0].run,
+        description=tools[0].__class__.__doc__,
+    ), StructuredTool.from_function(
+        tools[1].run,
+        description=tools[1].__class__.__doc__,
+        name=tools[1].__class__.__name__,
+    ), Tool(
+        name=tools[2].__class__.__name__,
+        func=tools[2].run,
+        description=tools[2].__class__.__doc__,
+    ), Tool(
+        name=tools[3].__class__.__name__,
+        func=tools[3].run,
+        description=tools[3].__class__.__doc__,
+    ),]
     custom_tools.append(CustomPythonAstREPLTool())
 
     step = CollectionExecuteStep(

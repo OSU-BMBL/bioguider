@@ -18,22 +18,23 @@ summarized_files_create_table_query = f"""
 CREATE TABLE IF NOT EXISTS {SUMMARIZED_FILES_TABLE_NAME} (
     file_path VARCHAR(512),
     instruction TEXT,
+    summarize_prompt TEXT,
     summarize_level INTEGER,
     summarized_text TEXT,
     token_usage  VARCHAR(512),
     datetime TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
-    UNIQUE (file_path, instruction, summarize_level)
+    UNIQUE (file_path, instruction, summarize_level, summarize_prompt)
 );
 """
 summarized_files_upsert_query = f"""
-INSERT INTO {SUMMARIZED_FILES_TABLE_NAME}(file_path, instruction, summarize_level, summarized_text, token_usage, datetime)
-VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
-ON CONFLICT(file_path, instruction, summarize_level) DO UPDATE SET summarized_text=excluded.summarized_text,
+INSERT INTO {SUMMARIZED_FILES_TABLE_NAME}(file_path, instruction, summarize_level, summarize_prompt, summarized_text, token_usage, datetime)
+VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+ON CONFLICT(file_path, instruction, summarize_level, summarize_prompt) DO UPDATE SET summarized_text=excluded.summarized_text,
 datetime=strftime('%Y-%m-%d %H:%M:%f', 'now');
 """
 summarized_files_select_query = f"""
 SELECT summarized_text, datetime FROM {SUMMARIZED_FILES_TABLE_NAME} 
-where file_path = ? and instruction = ? and summarize_level = ?;
+where file_path = ? and instruction = ? and summarize_level = ? and summarize_prompt=?;
 """
 
 class SummarizedFilesDb:
@@ -83,6 +84,7 @@ class SummarizedFilesDb:
         file_path: str,
         instruction: str,
         summarize_level: int,
+        summarize_prompt: str,
         summarized_text: str,
         token_usage: dict | None = None
     ):
@@ -96,7 +98,7 @@ class SummarizedFilesDb:
             cursor = self.connection.cursor()
             cursor.execute(
                 summarized_files_upsert_query, 
-                (file_path, instruction, summarize_level, summarized_text, token_usage, )
+                (file_path, instruction, summarize_level, summarize_prompt, summarized_text, token_usage, )
             )
             self.connection.commit()
             return True
@@ -112,6 +114,7 @@ class SummarizedFilesDb:
         file_path: str,
         instruction: str,
         summarize_level: int,
+        summarize_prompt: str,
     ) -> str | None:
         self._connect_to_db()
         self._ensure_tables()
@@ -119,7 +122,7 @@ class SummarizedFilesDb:
             cursor = self.connection.cursor()
             cursor.execute(
                 summarized_files_select_query, 
-                (file_path, instruction, summarize_level,)
+                (file_path, instruction, summarize_level, summarize_prompt,)
             )
             row = cursor.fetchone()
             if row is None:

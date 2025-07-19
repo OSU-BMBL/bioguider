@@ -64,9 +64,9 @@ def test_collection_task_for_installation_instructions(llm, step_callback):
     s = task.collect()
     assert s is not None
 
-def test_collection_task_for_tutorial(llm, step_callback):
-    repo_path = "./data/repos/POPPER"
-    gitignore_path = "./data/repos/POPPER/.gitignore"
+def test_collection_task_for_installation(llm, step_callback, root_path):
+    repo_path = f"{root_path}/POPPER"
+    gitignore_path = f"{root_path}/POPPER/.gitignore"
     
     task = CollectionTask(
         llm=llm,

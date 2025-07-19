@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Callable
 from pydantic import BaseModel, Field
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain.tools import Tool
+from langchain.tools import Tool, StructuredTool
 from langgraph.graph import StateGraph, START, END
 
 from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
@@ -72,6 +72,36 @@ class IdentificationTask(AgentTask):
         self.custom_tools = []
         self.steps: list[PEOCommonStep] = []
 
+    def _prepare_tools(self):
+        tool_rd = read_directory_tool(repo_path=self.repo_path)
+        tool_sum = summarize_file_tool(
+            llm=self.llm,
+            repo_path=self.repo_path,
+            output_callback=self.step_callback,
+            db=self.summary_file_db,
+        )
+        tool_rf = read_file_tool(repo_path=self.repo_path)
+        
+        self.tools = [tool_rd, tool_sum, tool_rf,]
+        self.custom_tools = [
+            Tool(
+                name = tool_rd.__class__.__name__,
+                func = tool_rd.run,
+                description=tool_rd.__class__.__doc__,
+            ),
+            StructuredTool.from_function(
+                tool_sum.run,
+                description=tool_sum.__class__.__doc__,
+                name=tool_sum.__class__.__name__,
+            ),
+            Tool(
+                name = tool_rf.__class__.__name__,
+                func = tool_rf.run,
+                description=tool_rf.__class__.__doc__,
+            ),
+        ]
+        self.custom_tools.append(CustomPythonAstREPLTool())
+
     def _initialize(self):        
         if not os.path.exists(self.repo_path):
             raise ValueError(f"Repository path {self.repo_path} does not exist.")
@@ -81,22 +111,7 @@ class IdentificationTask(AgentTask):
         for f, f_type in file_pairs:
             self.repo_structure += f"{f} - {f_type}\n"
 
-        self.tools = [
-            summarize_file_tool(
-                llm=self.llm, 
-                repo_path=self.repo_path, 
-                output_callback=self._print_step,
-                db=self.summary_file_db,
-            ),
-            read_directory_tool(repo_path=self.repo_path, gitignore_path=self.gitignore_path),
-            read_file_tool(repo_path=self.repo_path),
-        ]
-        self.custom_tools = [Tool(
-            name=tool.__class__.__name__,
-            func=tool.run,
-            description=tool.__class__.__doc__,
-        ) for tool in self.tools]
-        self.custom_tools.append(CustomPythonAstREPLTool())
+        self._prepare_tools()
         self.steps = [
             IdentificationPlanStep(
                 llm=self.llm,

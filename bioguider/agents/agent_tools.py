@@ -53,7 +53,8 @@ Returns:
 class summarize_file_tool(agent_tool):
     """ read and summarize the file
 Args:
-    file_path str: file path
+    file_path str [required]: the file path
+    summarize_prompt str [required]: a prompt to guide how to summarize the file, if no prompt needed, please set "N/A"
 Returns:
     A string of summarized file content, if the file does not exist, return None.         
         """
@@ -75,27 +76,31 @@ Returns:
         self.summary_file_db = db
         self.summarize_instruction = summaize_instruction
 
-    def _retrive_from_summary_file_db(self, file_path: str) -> str | None:
+    def _retrive_from_summary_file_db(self, file_path: str, prompt: str = "N/A") -> str | None:
         if self.summary_file_db is None:
             return None
         return self.summary_file_db.select_summarized_text(
             file_path=file_path,
             instruction=self.summarize_instruction,
             summarize_level=self.detailed_level,
+            summarize_prompt=prompt,
         )
-    def _save_to_summary_file_db(self, file_path: str, summarized_text: str, token_usage: dict):
+    def _save_to_summary_file_db(self, file_path: str, prompt: str, summarized_text: str, token_usage: dict):
         if self.summary_file_db is None:
             return
         self.summary_file_db.upsert_summarized_file(
             file_path=file_path,
             instruction=self.summarize_instruction,
             summarize_level=self.detailed_level,
+            summarize_prompt=prompt,
             summarized_text=summarized_text,
             token_usage=token_usage,
         )
-    def run(self, file_path: str) -> str | None:
+    def run(self, file_path: str, summarize_prompt: str) -> str | None:
         if file_path is None:
             return None
+        if summarize_prompt is None or len(summarize_prompt) == 0:
+            summarize_prompt = "N/A"
             
         file_path = file_path.strip()
         abs_file_path = file_path
@@ -104,7 +109,8 @@ Returns:
         if not os.path.isfile(abs_file_path):
             return f"{file_path} is not a file."
         summarized_content = self._retrive_from_summary_file_db(
-            file_path=file_path
+            file_path=file_path,
+            prompt=summarize_prompt,
         )
         if summarized_content is not None:
             return f"summarized content of file {file_path}: " + summarized_content
@@ -114,9 +120,11 @@ Returns:
         summarized_content, token_usage = summarize_file(
             self.llm, abs_file_path, file_content, self.detailed_level,
             summary_instructions=self.summarize_instruction,
+            summarize_prompt=summarize_prompt,
         )
         self._save_to_summary_file_db(
             file_path=file_path,
+            prompt=summarize_prompt,
             summarized_text=summarized_content,
             token_usage=token_usage,
         )

@@ -61,6 +61,46 @@ class CollectionTask(AgentTask):
         self.tools: list[any] | None = None
         self.custom_tools: list[Tool] | None = None
 
+    def _prepare_tools(self, related_file_goal_item_desc):
+        tool_rd = read_directory_tool(repo_path=self.repo_path)
+        tool_sum = summarize_file_tool(
+            llm=self.llm,
+            repo_path=self.repo_path,
+            output_callback=self.step_callback,
+            db=self.summary_file_db,
+        )
+        tool_rf = read_file_tool(repo_path=self.repo_path)
+        tool_cf = check_file_related_tool(
+            llm=self.llm,
+            repo_path=self.repo_path,
+            goal_item_desc=related_file_goal_item_desc,
+            output_callback=self.step_callback,
+        )
+        self.tools = [tool_rd, tool_sum, tool_rf, tool_cf]
+        self.custom_tools = [
+            Tool(
+                name = tool_rd.__class__.__name__,
+                func = tool_rd.run,
+                description=tool_rd.__class__.__doc__,
+            ),
+            StructuredTool.from_function(
+                tool_sum.run,
+                description=tool_sum.__class__.__doc__,
+                name=tool_sum.__class__.__name__,
+            ),
+            Tool(
+                name = tool_rf.__class__.__name__,
+                func = tool_rf.run,
+                description=tool_rf.__class__.__doc__,
+            ),
+            Tool(
+                name = tool_cf.__class__.__name__,
+                func = tool_cf.run,
+                description=tool_cf.__class__.__doc__,
+            ),
+        ]
+        self.custom_tools.append(CustomPythonAstREPLTool())
+
     def _initialize(self):
         # initialize the 2-level file structure of the repo
         if not os.path.exists(self.repo_path):
@@ -76,28 +116,8 @@ class CollectionTask(AgentTask):
             goal_item=collection_item["goal_item"],
             related_file_description=collection_item["related_file_description"],
         )
-        self.tools = [
-            read_directory_tool(repo_path=self.repo_path),
-            summarize_file_tool(
-                llm=self.llm,
-                repo_path=self.repo_path,
-                output_callback=self.step_callback,
-                db=self.summary_file_db,
-            ),
-            read_file_tool(repo_path=self.repo_path),
-            check_file_related_tool(
-                llm=self.llm,
-                repo_path=self.repo_path,
-                goal_item_desc=related_file_goal_item_desc,
-                output_callback=self.step_callback,
-            ),
-        ]
-        self.custom_tools = [Tool(
-            name=tool.__class__.__name__,
-            func=tool.run,
-            description=tool.__class__.__doc__,
-        ) for tool in self.tools]
-        self.custom_tools.append(CustomPythonAstREPLTool())
+        
+        self._prepare_tools(related_file_goal_item_desc)
         self.steps = [
             CollectionPlanStep(
                 llm=self.llm,
