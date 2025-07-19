@@ -226,4 +226,7 @@ def step_callback():
 def plan_actions():
     return 'Step: check_file_related_tool\nStep Input: pyproject.toml\nStep: check_file_related_tool\nStep Input: README.md\n'
 
+@pytest.fixture(scope="module")
+def root_path():
+    return "/bmbl_data/shaohong/projects/github"
 

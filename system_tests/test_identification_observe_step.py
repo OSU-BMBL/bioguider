@@ -1,6 +1,6 @@
 import pytest
 
-from langchain.tools import Tool
+from langchain.tools import Tool, StructuredTool
 
 from bioguider.agents.agent_utils import generate_repo_structure_prompt, read_directory
 from bioguider.agents.identification_observe_step import IdentificationObserveStep
@@ -26,10 +26,18 @@ def test_identification_observe_step(llm, step_callback):
         read_file_tool(repo_path=repo_path),
     ]
     custom_tools = [Tool(
-        name=tool.__class__.__name__,
-        func=tool.run,
-        description=tool.__class__.__doc__,
-    ) for tool in tools]
+        name=tools[0].__class__.__name__,
+        func=tools[0].run,
+        description=tools[0].__class__.__doc__,
+    ), StructuredTool.from_function(
+        tools[1].run,
+        description=tools[1].__class__.__doc__,
+        name=tools[1].__class__.__name__,
+    ), Tool(
+        name=tools[2].__class__.__name__,
+        func=tools[2].run,
+        description=tools[2].__class__.__doc__,
+    ),]
     custom_tools.append(CustomPythonAstREPLTool())
 
     step = IdentificationObserveStep(

@@ -153,13 +153,28 @@ def read_directory(
 
 
 EVALUATION_SUMMARIZE_FILE_PROMPT = ChatPromptTemplate.from_template("""
-You are provided with the content of the file **{file_name}**:  
-```
-{file_content}
-```
+You will be provided with the content of the file **{file_name}**:  
+
+---
+
 ### **Summary Instructions**
 {summary_instructions}
 The content is lengthy. Please generate a concise summary ({sentence_num1}-{sentence_num2} sentences).
+
+---
+
+### **Important Instructions**
+{summarize_prompt}
+
+---
+
+### **File Content**
+Here is the file content:
+{file_content}
+
+---
+
+Now, let's start to summarize.
 """)
 
 MAX_FILE_LENGTH=20 *1024 # 20K
@@ -170,6 +185,7 @@ def summarize_file(
     content: str | None = None, 
     level: int = 3,
     summary_instructions: str | None = None,
+    summarize_prompt: str = "N/A",
     db: SummarizedFilesDb | None = None,
 ) -> Tuple[str, dict]:
     if content is None:
@@ -198,6 +214,7 @@ def summarize_file(
         summary_instructions=summary_instructions \
             if summary_instructions is not None and len(summary_instructions) > 0 \
             else "N/A",
+        summarize_prompt=summarize_prompt,
     )
     
     config = {"recursion_limit": 500}
@@ -210,7 +227,12 @@ def summarize_file(
     }
     if db is not None:
         db.upsert_summarized_file(
-            name, summary_instructions, level, token_usage
+            file_path=name,
+            instruction=summary_instructions,
+            summarize_level=level,
+            summarize_prompt=summarize_prompt,
+            summarized_text=out,
+            token_usage=token_usage,
         )
     
     return out, token_usage

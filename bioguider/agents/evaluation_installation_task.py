@@ -118,6 +118,7 @@ class EvaluationInstallationTask(EvaluationTask):
         step_callback = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
+        self.evaluation_name = "Installation Evaluation"
 
     def _evaluate(self, files: list[str] | None = None):
         if files is None or len(files) == 0:

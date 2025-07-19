@@ -62,11 +62,13 @@ Action Observation: {{Observation2}}
 ```
 Action: summarize_file_tool  
 Action Input: README.md  
+Action Input: "Please extract license information in summarized file content."
 Observation: # BioGuider\nBioGuider is a Python package for bioinformatics.\n...
 ...
 Final Answer:
 Action: summarize_file_tool
 Action Input: README.md
+Action Input: "N/A"
 Action Observation: # BioGuider\nBioGuider is a Python package for bioinformatics.\n...
 ---
 Action: check_file_related_tool
