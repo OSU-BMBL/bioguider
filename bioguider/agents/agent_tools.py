@@ -105,7 +105,7 @@ Returns
             summarized_text=summarized_text,
             token_usage=token_usage,
         )
-    def run(self, file_path: str, summarize_prompt: str) -> str | None:
+    def run(self, file_path: str, summarize_prompt: str = "N/A") -> str | None:
         if file_path is None:
             return None
         if summarize_prompt is None or len(summarize_prompt) == 0:
