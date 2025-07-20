@@ -9,7 +9,7 @@ from bioguider.agents.identification_task import (
 )
 from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 def test_IdentificationAgent_scanpy(llm, step_callback, root_path):
     json_schema = IdentificationPlanResult.model_json_schema()
 
@@ -52,8 +52,8 @@ def test_IdentificationAgent_biochatter_server(llm, step_callback):
     assert res == PrimaryLanguageEnum.python
     print(res)
 
-# @pytest.mark.skip()
-def test_IdentificationAgent_metadata_biochatter(llm, step_callback, root_path):
+@pytest.mark.skip()
+def test_IdentificationAgent_metadata_POPPER(llm, step_callback, root_path):
     json_schema = IdentificationPlanResult.model_json_schema()
 
     step = IdentificationTask(llm=llm, step_callback=step_callback)
@@ -61,6 +61,19 @@ def test_IdentificationAgent_metadata_biochatter(llm, step_callback, root_path):
     step.compile(
         repo_path=f"{root_path}/POPPER/",
         gitignore_path=f"{root_path}/POPPER/.gitignore",
+    )
+    res = step.identify_meta_data()
+    assert res is not None and "name" in res
+    print(res)
+
+def test_IdentificationAgent_metadata_RepoAgent(llm, step_callback, root_path):
+    json_schema = IdentificationPlanResult.model_json_schema()
+
+    step = IdentificationTask(llm=llm, step_callback=step_callback)
+    
+    step.compile(
+        repo_path=f"{root_path}/RepoAgent/",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
     )
     res = step.identify_meta_data()
     assert res is not None and "name" in res

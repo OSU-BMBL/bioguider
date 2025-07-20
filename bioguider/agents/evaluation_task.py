@@ -200,7 +200,7 @@ class EvaluationTask(ABC):
 
 class EvaluationREADMEResult(BaseModel):
     project_level: Optional[bool]=Field(description="A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
-    score: Optional[float]=Field(description="An overall score")
+    score: Optional[str]=Field(description="An overall score")
     key_strengths: Optional[str]=Field(description="A string specifying the key strengths of README file.")
     overall_improvement_suggestions: Optional[list[str]]=Field(description="A list of overall improvement suggestions")
 
@@ -214,7 +214,7 @@ EvaluationREADMEResultSchema = {
             "title": "Project Level"
         },
         "score": {
-            "anyOf": [{"type": "number"}, {"type": "null"}],
+            "anyOf": [{"type": "string"}, {"type": "null"}],
             "description": "An overall score",
             "title": "Score"
         },
@@ -260,7 +260,7 @@ class EvaluationREADMETask(EvaluationTask):
                 readme_evaluations[readme_file] = {
                     "evaluation": {
                         "project_level": "/" in readme_file,
-                        "score": 0,
+                        "score": "Poor",
                         "key_strengths": f"{readme_file} is an empty file.",
                         "overall_improvement_suggestions": f"{readme_file} is an empty file.",
                     },

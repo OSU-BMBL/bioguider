@@ -8,7 +8,8 @@ def test_rag_collection_task_item(llm, step_callback):
     json_schema = RAGCollectResult.model_json_schema()
     query = "What is license of BioChatter?"
     rag = RAG()
-    rag.prepare_retriever("https://github.com/biocypher/biochatter.git")
+    rag.initialize_db_manager()
+    rag.initialize_repo("https://github.com/biocypher/biochatter.git")
     rag_documents = rag.query_doc(query)[0].documents
     assert rag_documents is not None, "RAG documents should be retrieved successfully."
 
@@ -19,9 +20,10 @@ def test_rag_collection_task_item(llm, step_callback):
 
 def test_rag_collection_task_item_1(llm, step_callback):
     json_schema = RAGCollectResult.model_json_schema()
-    query = "Hardware and software spec and compatibility description for BioChatter"
+    query = "Hardware and software spec and compatibility description for POPPER"
     rag = RAG()
-    rag.prepare_retriever("https://github.com/biocypher/biochatter.git")
+    rag.initialize_db_manager()
+    rag.initialize_repo("https://github.com/snap-stanford/POPPER")
     rag_documents = rag.query_doc(query)[0].documents
     assert rag_documents is not None, "RAG documents should be retrieved successfully."
 

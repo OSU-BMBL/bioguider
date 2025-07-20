@@ -50,22 +50,25 @@ class RAG(adal.Component):
     def initialize_db_manager(self):
         """Initialize the database manager with local storage"""
         self.db_manager = DatabaseManager()
-        self.transformed_doc_documents = []
-        self.transformed_code_documents = []
+        self.transformed_doc_documents: list | None = None
+        self.transformed_code_documents: list | None = None
+        self.access_token: str | None = None
 
-    def prepare_retriever(self, repo_url_or_path: str, access_token: str = None):
+    def initialize_repo(self, repo_url_or_path: str, access_token: str = None):
+        self.repo_url_or_path = repo_url_or_path
+        self.access_token = access_token
+        self.db_manager.reset_database_and_create_repo(repo_url_or_path, access_token)
+
+    def _prepare_retriever(self):
         """
         Prepare the retriever for a repository.
         Will load database from local storage if available.
-
-        Args:
-            repo_url_or_path: URL or local path to the repository
-            access_token: Optional access token for private repositories
         """
-        self.initialize_db_manager()
-        self.repo_url_or_path = repo_url_or_path
+        if self.transformed_code_documents is not None and self.transformed_doc_documents is not None:
+            # retrievers have been prepared
+            return
         self.transformed_doc_documents, self.transformed_code_documents \
-            = self.db_manager.prepare_database(repo_url_or_path, access_token)
+            = self.db_manager.prepare_database()
         logger.info(f"Loaded {len(self.transformed_doc_documents)} doc documents for retrieval")
         logger.info(f"Loaded {len(self.transformed_code_documents)} code documents for retrieval")
         self.doc_retriever = FAISSRetriever(
@@ -93,6 +96,7 @@ class RAG(adal.Component):
         Returns:
             retrieved_documents: List of documents retrieved based on the query
         """
+        self._prepare_retriever()
         retrieved_documents = self.doc_retriever(query)
         # Fill in the documents
         retrieved_documents[0].documents = [
