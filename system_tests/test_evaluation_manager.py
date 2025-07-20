@@ -36,6 +36,8 @@ def test_EvaluationManager_on_readme(llm, step_callback):
 
     evaluations, readme_file = mgr.evaluate_readme()
     assert len(readme_file) > 0
+    assert len(evaluations) > 0
+    # assert evaluations[0]
 
 @pytest.mark.skip()
 def test_EvaluationManager_on_installation(llm, step_callback):
@@ -46,6 +48,7 @@ def test_EvaluationManager_on_installation(llm, step_callback):
     evaluation, files = mgr.evaluate_installation()
     assert len(files) > 0
 
+# @pytest.mark.skip()
 def test_EvaluationManager_on_POPPER_installation(llm, step_callback):
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)

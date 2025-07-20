@@ -504,7 +504,11 @@ class DatabaseManager:
         self.repo_url_or_path = None
         self.repo_paths = None
 
-    def prepare_database(self, repo_url_or_path: str, access_token: str = None) -> Tuple[List[Document], List[Document]]:
+    def reset_database_and_create_repo(self, repo_url_or_path: str, access_token: str = None):
+        self._reset_database()
+        self._create_repo(repo_url_or_path, access_token)
+
+    def prepare_database(self) -> Tuple[List[Document], List[Document]]:
         """
         Create a new database from the repository.
 
@@ -515,9 +519,7 @@ class DatabaseManager:
         Returns:
             Tuple[List[Document], List[Document]]: Tuple of two Lists of Document objects
         """
-        self.reset_database()
-        self._create_repo(repo_url_or_path, access_token)
-        return self.prepare_db_index()
+        return self._prepare_db_index()
     
     def _extract_repo_name_from_url(self, repo_url_or_path: str, repo_type: str) -> str:
         # Extract owner and repo name to create unique identifier
@@ -534,7 +536,7 @@ class DatabaseManager:
             repo_name = url_parts[-1].replace(".git", "")
         return repo_name
 
-    def reset_database(self):
+    def _reset_database(self):
         """
         Reset the database to its initial state.
         """
@@ -608,7 +610,7 @@ class DatabaseManager:
             return self.repo_paths["save_repo_dir"]
         return None
     
-    def prepare_db_index(self) -> Tuple[List[Document], List[Document]]:
+    def _prepare_db_index(self) -> Tuple[List[Document], List[Document]]:
         """
         Prepare the indexed database for the repository.
         :return: Tuple of two Lists of Document objects
@@ -647,16 +649,3 @@ class DatabaseManager:
         logger.info(f"Total transformed code documents: {len(transformed_code_documents)}")
         return transformed_doc_documents, transformed_code_documents
 
-    def prepare_retriever(self, repo_url_or_path: str, access_token: str = None):
-        """
-        Prepare the retriever for a repository.
-        This is a compatibility method for the isolated API.
-
-        Args:
-            repo_url_or_path (str): The URL or local path of the repository
-            access_token (str, optional): Access token for private repositories
-
-        Returns:
-            List[Document]: List of Document objects
-        """
-        return self.prepare_database(repo_url_or_path, access_token)

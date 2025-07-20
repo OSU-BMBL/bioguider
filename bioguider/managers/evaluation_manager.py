@@ -25,8 +25,8 @@ class EvaluationManager:
         self.repo_url = repo_url
         self.rag = RAG()
         self.rag.initialize_db_manager()
-        self.rag.prepare_retriever(repo_url_or_path=repo_url)
-
+        self.rag.initialize_repo(repo_url_or_path=repo_url)
+        
         author, repo_name = parse_repo_url(repo_url)
         self.summary_file_db = SummarizedFilesDb(author, repo_name)
 
