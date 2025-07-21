@@ -82,6 +82,7 @@ IDENTIFICATION_GOAL_META_DATA = """Identify the following meta data of the repos
 """
 
 COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your reasoning process step by step, then provide the answer."
+EVALUATION_INSTRUCTION="Before arriving at the conclusion, clearly explain your reasoning step by step. Now, let's begin the evaluation."
 
 class CollectionGoalItemEnum(Enum):
     UserGuide = "User Guide"
@@ -187,4 +188,6 @@ If **any one** of these is present, the document should be classified as Contrib
  - You can include directory names if all files in the directory are relevant to the goal item.""",
     },
 }
+
+
 

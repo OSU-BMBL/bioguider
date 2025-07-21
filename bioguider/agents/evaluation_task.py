@@ -2,18 +2,16 @@
 import os
 from pathlib import Path
 import logging
-from typing import Callable, Optional
+from typing import Callable
 from abc import ABC, abstractmethod
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from pydantic import BaseModel, Field
 
 from bioguider.agents.agent_utils import read_file
+from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
-from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 from .common_agent import CommonConversation
 from ..utils.pyphen_utils import PyphenReadability
-from ..utils.gitignore_checker import GitignoreChecker
 
 logger = logging.getLogger(__name__)
 
@@ -198,110 +196,7 @@ class EvaluationTask(ABC):
     def _evaluate(self, files: list[str]) -> tuple[dict, dict]:
         pass
 
-class EvaluationREADMEResult(BaseModel):
-    project_level: Optional[bool]=Field(description="A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
-    score: Optional[str]=Field(description="An overall score")
-    key_strengths: Optional[str]=Field(description="A string specifying the key strengths of README file.")
-    overall_improvement_suggestions: Optional[list[str]]=Field(description="A list of overall improvement suggestions")
-
-EvaluationREADMEResultSchema = {
-    "title": "EvaluationREADMEResult",
-    "type": "object",
-    "properties": {
-        "project_level": {
-            "anyOf": [{"type": "boolean"}, {"type": "null"}],
-            "description": "A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE: folder-level.",
-            "title": "Project Level"
-        },
-        "score": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "An overall score",
-            "title": "Score"
-        },
-        "key_strengths": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "A string specifying the key strengths of README file.",
-            "title": "Key Strengths",
-        },
-        "overall_improvement_suggestions": {
-            "anyOf": [{"items": {"type": "string"}, "type": "array"}, {"type": "null"}],
-            "description": "A list of improvement suggestions",
-            "title": "Overall Improvement Suggestions"
-        }
-    },
-    "required": ["project_level", "score", "key_strengths", "overall_improvement_suggestions"]
-}
-
-class EvaluationREADMETask(EvaluationTask):
-    def __init__(
-        self, 
-        llm: BaseChatOpenAI, 
-        repo_path: str, 
-        gitignore_path: str,
-        meta_data: ProjectMetadata | None = None,
-        step_callback: Callable | None = None
-    ):
-        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
-        self.evaluation_name = "README Evaluation"
-            
-    def _evaluate(self, files: list[str]) -> tuple[dict, dict]:
-        readme_files = files
-        if readme_files is None or len(readme_files) == 0:
-            return None
-        
-        readme_evaluations = {}
-        for readme_file in readme_files:
-            readme_path = Path(self.repo_path, readme_file)
-            readme_content = read_file(readme_path)
-            if readme_content is None:
-                logger.error(f"Error in reading file {readme_file}")
-                continue
-            if len(readme_content.strip()) == 0:
-                readme_evaluations[readme_file] = {
-                    "evaluation": {
-                        "project_level": "/" in readme_file,
-                        "score": "Poor",
-                        "key_strengths": f"{readme_file} is an empty file.",
-                        "overall_improvement_suggestions": f"{readme_file} is an empty file.",
-                    },
-                    "reasoning_process": f"{readme_file} is an empty file.",
-                }
-                continue
-
-            readability = PyphenReadability()
-            flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(readme_content)
-            system_prompt = ChatPromptTemplate.from_template(
-                EVALUATION_README_SYSTEM_PROMPT
-            ).format(
-                readme_content=readme_content,
-                readme_path=readme_file,
-                flesch_reading_ease=flesch_reading_ease,
-                flesch_kincaid_grade=flesch_kincaid_grade,
-                gunning_fog_index=gunning_fog_index,
-                smog_index=smog_index,
-            )
-            # conversation = CommonConversation(llm=self.llm)
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
-            response, _, token_usage, reasoning_process = agent.go(
-                system_prompt=system_prompt,
-                instruction_prompt="Before arriving at the conclusion, clearly explain your reasoning step by step. Now, let's begin the evaluation.",
-                schema=EvaluationREADMEResultSchema,
-            )
-            response = EvaluationREADMEResult(**response)
-            self.print_step(step_output=f"README: {readme_file}")
-            self.print_step(step_output=reasoning_process)
-            readme_evaluations[readme_file] = {
-                "evaluation": {
-                    "project_level": response.project_level,
-                    "score": response.score,
-                    "key_strengths": response.key_strengths,
-                    "overall_improvement_suggestions": response.overall_improvement_suggestions,
-                }, 
-                "reasoning_process": reasoning_process
-            }
-        return readme_evaluations, token_usage
-        
+       
 EVALUATION_TUTORIAL_SYSTEM_PROMPT="""
 You are an expert in software documentation and developer education.
 You are given the content of a tutorial file from a GitHub repository. Your task is to **critically evaluate** the quality of this tutorial based on best practices in technical writing and developer onboarding.
@@ -399,7 +294,7 @@ class EvaluationTutorialTask(EvaluationTask):
             conversation = CommonConversation(llm=self.llm)
             response, token_usage = conversation.generate(
                 system_prompt=system_prompt,
-                instruction_prompt="Before arriving at the conclusion, clearly explain your reasoning step by step. Now, let's begin the evaluation."
+                instruction_prompt=EVALUATION_INSTRUCTION,
             )
             self.print_step(step_output=f"Tutorial: {file}")
             self.print_step(step_output=response)

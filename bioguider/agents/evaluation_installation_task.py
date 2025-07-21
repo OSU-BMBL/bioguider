@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
+from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
 from bioguider.rag.data_pipeline import count_tokens
 from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
@@ -16,10 +17,51 @@ from .common_agent import CommonConversation
 from ..utils.pyphen_utils import PyphenReadability
 from ..utils.gitignore_checker import GitignoreChecker
 from .evaluation_task import EvaluationTask
-from .agent_utils import read_file
+from .agent_utils import increase_token_usage, read_file
 
 
 logger = logging.getLogger(__name__)
+
+STRUCTURED_EVALUATION_INSTALLATION_SYSTEM_PROMPT = """
+You are an expert in evaluating the quality of installation information in software repositories. 
+Your task is to analyze the provided files related to installation and generate a structured quality assessment based on the following criteria.
+---
+
+### **Evaluation Criteria**
+
+1. **Installation Available**: Is the installation documents accessible and present?
+   * Output: `Yes` or `No`
+
+2. **Installation Tutorial**: Is the installation tutorial provided?
+   * Ouput: `Yes` or `No`
+
+3. **Number of required Dependencies Installation**: The number of dependencies that are required to install
+   * Output: Number
+   * Suggest specific improvements if necessary, such as missing dependencies
+
+4. **Overall Score**: Give an overall quality rating of the Installation information.
+   * Output: `Poor`, `Fair`, `Good`, or `Excellent`
+
+---
+
+### **Final Report Ouput**
+Your final report must **exactly match** the following format. Do not add or omit any sections.
+
+**FinalAnswer**
+**Install Available:** [Yes / No]
+**Install Tutorial:** [Yes / No]
+**Dependency:**
+  * number: [Number]
+  * suggestions: <suggestion to improve **dependency information** like missing dependencies
+**Overall Score:** [Poor / Fair / Good / Excellent]
+
+---
+
+### Installation Files Provided:
+{installation_files_content}
+
+"""
+
 
 EVALUATION_INSTALLATION_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of **installation instructions** in software repositories.
@@ -62,9 +104,16 @@ Your response **must exactly follow** the structure below:
 ---
 
 ### Installation Files Provided:
-{installation_file_contents}
+{installation_files_content}
 
 """
+
+class StructuredEvaluationInstallationResult(BaseModel):
+    install_available: Optional[bool]=Field(description="A boolean value. Is the installation documents accessible and present?")
+    install_tutorial: Optional[bool]=Field(description="A boolean value. Is the installation tutorial provided?")
+    dependency_number: Optional[int]=Field(description="A number. It is the number of dependencies that are required to install.")
+    dependency_suggestions: Optional[str]=Field(description="A string value. It is the specific improvements if necessary, such as missing dependencies")
+    overall_score: Optional[str]=Field(description="A overall scroll for the installation quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
 
 class EvaluationInstallationResult(BaseModel):
     ease_of_access: Optional[str]=Field(description="Is the installation information easy to access")
@@ -118,10 +167,10 @@ class EvaluationInstallationTask(EvaluationTask):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
         self.evaluation_name = "Installation Evaluation"
 
-    def _evaluate(self, files: list[str] | None = None):
+
+    def _collect_install_files_content(self, files: list[str] | None=None) -> str:
         if files is None or len(files) == 0:
-            return None
-        
+            return "N/A"
         files_content = ""
         MAX_TOKENS = os.environ.get("OPENAI_MAX_INPUT_TOKENS", 102400)
         for f in files:
@@ -137,24 +186,64 @@ class EvaluationInstallationTask(EvaluationTask):
 {content}
 
 """
-        system_prompt = ChatPromptTemplate.from_template(EVALUATION_INSTALLATION_SYSTEM_PROMPT).format(
-            installation_file_contents=files_content
+        return files_content
+    
+    def _structured_evaluate(self, files: list[str] | None = None) -> tuple[dict|None, dict]:
+        if files is None or len(files) == 0:
+            return None, {**DEFAULT_TOKEN_USAGE}
+        
+        files_content = self._collect_install_files_content(files)
+        system_prompt = ChatPromptTemplate.from_template(
+            STRUCTURED_EVALUATION_INSTALLATION_SYSTEM_PROMPT,
+        ).format(
+            installation_files_content=files_content,
         )
         agent = CommonAgentTwoChainSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
-            instruction_prompt="Before arriving at the conclusion, clearly explain your reasoning step by step. Now, let's begin the evaluation.",
+            instruction_prompt=EVALUATION_INSTRUCTION,
+            schema=StructuredEvaluationInstallationResult,
+        )
+        self.print_step(step_output=reasoning_process)
+        self.print_step(token_usage=token_usage)
+
+        return {
+            "structured_evaluation": res,
+            "structured_reasoning_process": reasoning_process,
+        }, token_usage
+    
+    def _free_evaluate(self, files: list[str] | None=None) -> tuple[dict|None, dict]:
+        if files is None or len(files) == 0:
+            return None, {**DEFAULT_TOKEN_USAGE}
+        
+        files_content = self._collect_install_files_content(files)
+        system_prompt = ChatPromptTemplate.from_template(EVALUATION_INSTALLATION_SYSTEM_PROMPT).format(
+            installation_files_content=files_content
+        )
+        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        res, _, token_usage, reasoning_process = agent.go(
+            system_prompt=system_prompt,
+            instruction_prompt=EVALUATION_INSTRUCTION,
             schema=EvaluationInstallationResultSchema,
         )
         res = EvaluationInstallationResult(**res)
         self.print_step(step_output=reasoning_process)
+        self.print_step(token_usage=token_usage)
         evaluation = {
-            "score": res.score,
-            "ease_of_access": res.ease_of_access,
-            "hardware_requirements": res.hardware_requirements,
-            "clarity_of_dependency": res.clarity_of_dependency,
-            "installation_guide": res.installation_guide,
+            "evaluation": res,
             "reasoning_process": reasoning_process,
         }
         return evaluation, token_usage
+    
+    def _evaluate(self, files: list[str] | None = None) -> tuple[dict | None, dict]:
+        evaluation, token_usage = self._free_evaluate(files)
+        structured_evaluation, structured_token_usage = self._structured_evaluate(files)
+
+        combined_evaluation = {
+            **evaluation,
+            **structured_evaluation,
+        }
+        total_token_usage = increase_token_usage(token_usage, structured_token_usage)
+
+        return combined_evaluation, total_token_usage
         
