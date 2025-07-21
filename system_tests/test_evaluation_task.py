@@ -16,15 +16,17 @@ def test_EvaluationREADMETask(llm, step_callback):
     )
     assert res is not None
 
-@pytest.mark.skip()
-def test_EvaluationREADMETask_RepoAgent(llm, step_callback):
+# @pytest.mark.skip()
+def test_EvaluationREADMETask_RepoAgent(llm, step_callback, root_path):
     task = EvaluationREADMETask(
         llm,
-        repo_path="./data/repos/RepoAgent",
-        gitignore_path="./data/repos/RepoAgent/.gitignore",
+        repo_path=f"{root_path}/bioguider/data/repos/RepoAgent",
+        gitignore_path=f"{root_path}/bioguider/data/repos/RepoAgent/.gitignore",
         step_callback=step_callback,
     )
-    res = task.evaluate()
+    res = task.evaluate(
+        files=["README.md"]
+    )
     assert res is not None
 
 @pytest.mark.skip()

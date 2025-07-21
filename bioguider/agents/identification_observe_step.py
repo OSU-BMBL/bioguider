@@ -25,7 +25,8 @@ Carefully review the **Goal**, **Repository File Structure**, and **Intermediate
   - Then provide your result under **FinalAnswer**  
   ```
   **Analysis**: your analysis here  
-  **FinalAnswer**: your final answer here, in json format **without** json fence (```json ... ```), like {final_answer_example}
+  **FinalAnswer**: your final answer here, in **raw json format**, **including** the surrounding "{{}}" but **without** using code fence (```json ... ```), 
+  For example, output exactly: {final_answer_example}
   ```
 - If the information is **not sufficient** to achieve the goal, simply explain why under **Thoughts**:  
   ```

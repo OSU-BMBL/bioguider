@@ -154,7 +154,7 @@ class CommonAgentTwoChainSteps(CommonAgentTwoSteps):
     def _invoke_agent(self, system_prompt, instruction_prompt, schema, post_process = None, **kwargs):
         # Initialize the callback handler
         callback_handler = OpenAICallbackHandler()
-        processed_system_prompt = system_prompt.replace("{", "(").replace("}", ")")
+        processed_system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
         cot_prompt = self._build_prompt_for_cot_step(
             system_prompt=processed_system_prompt, 
             instruction_prompt=instruction_prompt

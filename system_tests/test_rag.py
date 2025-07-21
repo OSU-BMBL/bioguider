@@ -24,7 +24,18 @@ def extract_source_from_documents(docs: List[Document], doc_scores: List[float])
 @pytest.mark.skip()
 def test_RAG():
     rag = RAG()
-    rag.prepare_retriever("https://github.com/snap-stanford/POPPER")
+    rag.initialize_repo("https://github.com/snap-stanford/POPPER")
+    documents = rag.query_doc("How can I install POPPER?")
+    assert documents is not None, "Documents should be retrieved successfully."
+    assert len(documents) > 0, "At least one document should be retrieved."
+
+    extracted_sources = extract_source_from_documents(documents[0].documents, documents[0].doc_scores)
+    assert len(extracted_sources) > 0, "At least one source should be extracted from the documents."
+
+# @pytest.mark.skip()
+def test_RAG_RepoAgent():
+    rag = RAG()
+    rag.initialize_repo("https://github.com/OpenBMB/RepoAgent.git")
     documents = rag.query_doc("How can I install POPPER?")
     assert documents is not None, "Documents should be retrieved successfully."
     assert len(documents) > 0, "At least one document should be retrieved."
@@ -33,20 +44,9 @@ def test_RAG():
     assert len(extracted_sources) > 0, "At least one source should be extracted from the documents."
 
 @pytest.mark.skip()
-def test_RAG_RepoAgent():
-    rag = RAG()
-    rag.prepare_retriever("https://github.com/OpenBMB/RepoAgent.git")
-    documents = rag.query_doc("How can I install POPPER?")
-    assert documents is not None, "Documents should be retrieved successfully."
-    assert len(documents) > 0, "At least one document should be retrieved."
-
-    extracted_sources = extract_source_from_documents(documents[0].documents, documents[0].doc_scores)
-    assert len(extracted_sources) > 0, "At least one source should be extracted from the documents."
-
-
 def test_RAG_biochatter():
     rag = RAG()
-    rag.prepare_retriever("https://github.com/biocypher/biochatter")
+    rag.initialize_repo("https://github.com/biocypher/biochatter")
     documents = rag.query_doc("How can I install biochatter?")
     assert documents is not None, "Documents should be retrieved successfully."
     assert len(documents) > 0, "At least one document should be retrieved."
