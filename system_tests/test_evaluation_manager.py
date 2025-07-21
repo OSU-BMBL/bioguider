@@ -3,7 +3,7 @@ import pytest
 
 from bioguider.managers.evaluation_manager import EvaluationManager
 from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
-from bioguider.agents.evaluation_task import EvaluationREADMEResult
+from bioguider.agents.evaluation_readme_task import EvaluationREADMEResult
 
 @pytest.mark.skip()
 def test_EvaluationManager(llm, step_callback):
