@@ -18,6 +18,7 @@ from bioguider.agents.agent_tools import (
 )
 from bioguider.agents.agent_utils import (
     read_directory,
+    try_parse_json_object,
 )
 from bioguider.agents.identification_execute_step import IdentificationExecuteStep
 from bioguider.agents.identification_observe_step import IdentificationObserveStep
@@ -189,13 +190,18 @@ class IdentificationTask(AgentTask):
         
     
     def _parse_project_type(self, proj_type_obj: str) -> ProjectTypeEnum:
-        try:
-            json_obj = json.loads(proj_type_obj)
-            proj_type = json_obj["project_type"]
-        except Exception as e:
-            logger.error(e)
-            return ProjectTypeEnum.unknown
-        proj_type = proj_type.strip()
+        proj_type_obj = proj_type_obj.strip()
+        the_obj = try_parse_json_object(proj_type_obj)
+        if not the_obj is None and "project_type" in the_obj:
+            proj_type = the_obj["project_type"]
+        elif proj_type_obj in [
+            ProjectTypeEnum.application.value, 
+            ProjectTypeEnum.package.value, 
+            ProjectTypeEnum.pipeline.value
+        ]:
+            return ProjectTypeEnum(proj_type_obj)
+        else:
+            proj_type = "unknown"
         if proj_type == "application":
             return ProjectTypeEnum.application
         elif proj_type == "package":
@@ -206,12 +212,19 @@ class IdentificationTask(AgentTask):
             return ProjectTypeEnum.unknown
         
     def _parse_primary_language(self, language_obj: str) -> PrimaryLanguageEnum:
-        try:
-            json_obj = json.loads(language_obj)
-            language = json_obj["primary_language"]
-        except Exception as e:
-            logger.error(e)
-            return PrimaryLanguageEnum.unknown
+        # try to handle some common errors
+        language_obj  = language_obj.strip()
+        the_obj = try_parse_json_object(language_obj)
+        if not the_obj is None and "primary_language" in the_obj:
+            language = the_obj["primary_language"]
+        elif language_obj in [
+            PrimaryLanguageEnum.python.value, 
+            PrimaryLanguageEnum.R.value, 
+        ]:
+            return PrimaryLanguageEnum(language_obj)  
+        else:
+            language = "unknown"
+
         language = language.strip()
         if language == "python":
             return PrimaryLanguageEnum.python
@@ -221,15 +234,14 @@ class IdentificationTask(AgentTask):
             return PrimaryLanguageEnum.unknown
         
     def _parse_meta_data(self, meta_data_obj: str) -> dict:
-        try:
-            json_obj = json.loads(meta_data_obj)
-            meta_data = json_obj
-            return meta_data
-        except Exception as e:
-            logger.error(e)
-            return {
-                "name": "unknown",
-                "description": "unknown",
-                "license": "unknown",
-                "owner": "unknown",
-            }
+        meta_data_obj  = meta_data_obj.strip()
+        the_obj = try_parse_json_object(meta_data_obj)
+        
+        return the_obj if the_obj is not None else {
+            "name": "unknown",
+            "description": "unknown",
+            "license": "unknown",
+            "owner": "unknown",
+        }
+        
+

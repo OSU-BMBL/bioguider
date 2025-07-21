@@ -9,7 +9,7 @@ from ..agents.identification_task import IdentificationTask
 from ..rag.rag import RAG
 from ..utils.file_utils import parse_repo_url
 from ..database.summarized_file_db import SummarizedFilesDb
-from ..agents.evaluation_task import EvaluationREADMETask
+from ..agents.evaluation_readme_task import EvaluationREADMETask
 from ..agents.evaluation_installation_task import EvaluationInstallationTask
 from ..agents.collection_task import CollectionTask
 

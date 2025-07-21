@@ -1,7 +1,8 @@
 
 import pytest
 
-from bioguider.agents.evaluation_task import EvaluationREADMETask, EvaluationTutorialTask
+from bioguider.agents.evaluation_task import EvaluationTutorialTask
+from bioguider.agents.evaluation_readme_task import EvaluationREADMETask
 
 @pytest.mark.skip()
 def test_EvaluationREADMETask(llm, step_callback):
@@ -16,12 +17,12 @@ def test_EvaluationREADMETask(llm, step_callback):
     )
     assert res is not None
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 def test_EvaluationREADMETask_RepoAgent(llm, step_callback, root_path):
     task = EvaluationREADMETask(
         llm,
-        repo_path=f"{root_path}/bioguider/data/repos/RepoAgent",
-        gitignore_path=f"{root_path}/bioguider/data/repos/RepoAgent/.gitignore",
+        repo_path=f"{root_path}/RepoAgent",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
         step_callback=step_callback,
     )
     res = task.evaluate(
