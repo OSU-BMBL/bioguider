@@ -84,6 +84,8 @@ Your final report must **exactly match** the following format. Do not add or omi
 **License Information Included:** 
   * score: [Yes / No]
   * suggestions: <suggestions to improve **License Information**>
+** Code contributor / Author information included
+  * score: [Yes / No]
 **Overall Score:** [Poor / Fair / Good / Excellent]
 
 ---
@@ -257,6 +259,7 @@ class StructuredEvaluationREADMEResult(BaseModel):
     dependency_suggestions: Optional[str]=Field(description="Suggestions if dependencies are not clearly stated")
     license_score: Optional[bool]=Field(description="A boolean value, Are contributor or maintainer details provided?")
     license_suggestions: Optional[str]=Field(description="Suggestions to improve license information")
+    contributor_author_score: Optional[bool]=Field(description="A boolean value. are contributors or author included?")
     overall_score: str=Field(description="A overall scroll for the README quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
 
 class EvaluationREADMEResult(BaseModel):
@@ -354,6 +357,7 @@ class EvaluationREADMETask(EvaluationTask):
                         dependency_suggestions="No dependency provided",
                         license_score=False,
                         license_suggestions="No license information",
+                        contributor_author_score=False,
                         overall_score="Poor",
                     ),
                     "structured_reasoning_process": f"{readme_file} is an empty file.",

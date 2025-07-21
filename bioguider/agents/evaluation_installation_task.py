@@ -29,7 +29,7 @@ Your task is to analyze the provided files related to installation and generate 
 
 ### **Evaluation Criteria**
 
-1. **Installation Available**: Is the installation documents accessible and present?
+1. **Installation Available**: Is the installation section in document (like README.md or INSTALLATION)?
    * Output: `Yes` or `No`
 
 2. **Installation Tutorial**: Is the installation tutorial provided?
