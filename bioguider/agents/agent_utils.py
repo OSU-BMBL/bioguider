@@ -1,5 +1,6 @@
 
 import json
+from json import JSONDecodeError
 import os
 import re
 import subprocess
@@ -377,3 +378,32 @@ def escape_braces(text: str) -> str:
     # Then replace single { not part of {{
     text = re.sub(r'(?<!{){(?!{)', '{{', text)
     return text
+
+def try_parse_json_object(json_obj: str) -> dict | None:
+    json_obj = json_obj.strip()
+
+    # First, try to parse
+    try:
+        obj = json.loads(json_obj)
+        return obj
+    except JSONDecodeError as e:
+        logger.error(e)
+
+    # Second, let's handle some common errors
+    if not json_obj.startswith("{") and not json_obj.endswith("}") and ":" in json_obj:
+        json_obj = "{" + json_obj + "}"
+    if json_obj.startswith("{{"):
+        json_obj = json_obj[1:]
+    if json_obj.endswith("}}"):
+        json_obj = json_obj[:-1]
+
+    # Finally, let's try to parse again
+    try:
+        obj = json.loads(json_obj)
+        return obj
+    except JSONDecodeError as e:
+        logger.error(e)
+        return None
+    except Exception as e:
+        logger.error(e)
+        return None

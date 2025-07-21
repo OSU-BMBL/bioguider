@@ -24,7 +24,7 @@ from langgraph.graph import StateGraph, START, END
 
 from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import get_file_type
-from bioguider.agents.agent_utils import read_directory
+from bioguider.agents.agent_utils import read_directory, try_parse_json_object
 from bioguider.agents.collection_task_utils import (
     RELATED_FILE_GOAL_ITEM,
     CollectionWorkflowState, 
@@ -172,28 +172,16 @@ class CollectionTask(AgentTask):
         if s["final_answer"] is None:
             return None
         result = s["final_answer"].strip()
-        try:
-            json_obj = json.loads(result)
-            result = json_obj["final_answer"]
-            if isinstance(result, str):
-                result = result.strip()
-                return [result]
-            elif isinstance(result, list):
-                return result
-            else:
-                logger.error(f"Final answer is not a valid JSON list or string: {result}")
-                return None
-        except json.JSONDecodeError:
+        the_obj = try_parse_json_object(result)
+        if the_obj is None or "final_answer" not in the_obj:
             logger.error(f"Final answer is not a valid JSON: {result}")
             return None
-        except Exception as e:
-            logger.error(str(e))
-        return s
-
-        
-
-            
-
-
-
-
+        final_result = the_obj["final_answer"]
+        if isinstance(final_result, str):
+            final_result = final_result.strip()
+            return [final_result]
+        elif isinstance(final_result, list):
+            return final_result
+        else:
+            logger.error(f"Final answer is not a valid JSON list or string: {result}")
+            return None
