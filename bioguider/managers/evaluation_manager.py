@@ -11,6 +11,7 @@ from ..utils.file_utils import parse_repo_url
 from ..database.summarized_file_db import SummarizedFilesDb
 from ..agents.evaluation_readme_task import EvaluationREADMETask
 from ..agents.evaluation_installation_task import EvaluationInstallationTask
+from ..agents.evaluation_submission_requirements_task import EvaluationSubmissionRequirementsTask
 from ..agents.collection_task import CollectionTask
 
 class EvaluationManager:
@@ -65,40 +66,29 @@ class EvaluationManager:
             gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
             meta_data=self.project_metadata,
             step_callback=self.step_callback,
+            summarized_files_db=self.summary_file_db,
         )
-        readme_files = self._find_readme_files()
-        results = task.evaluate(readme_files)
+        # readme_files = self._find_readme_files()
+        results, readme_files = task.evaluate()
         return results, readme_files
     
     def evaluate_tutorial(self):
-        task = CollectionTask(
-            llm=self.llm,
-            step_callback=self.step_callback,
-        )
-        task.compile(
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            db=self.summary_file_db,
-            goal_item=CollectionGoalItemEnum.Tutorial.name,
-        )
-        s = task.collect()
-        if s is None or 'final_answer' not in s:
-            return None
+        pass
+        # task = CollectionTask(
+        #     llm=self.llm,
+        #     step_callback=self.step_callback,
+        # )
+        # task.compile(
+        #     repo_path=self.rag.repo_dir,
+        #     gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
+        #     db=self.summary_file_db,
+        #     goal_item=CollectionGoalItemEnum.Tutorial.name,
+        # )
+        # s = task.collect()
+        # if s is None or 'final_answer' not in s:
+        #     return None
         
     def evaluate_installation(self):
-        task = CollectionTask(
-            llm=self.llm,
-            step_callback=self.step_callback,
-        )
-        task.compile(
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            db=self.summary_file_db,
-            goal_item=CollectionGoalItemEnum.Installation.name,
-        )
-        files = task.collect()
-        if files is None or len(files) == 0:
-            return None
         evaluation_task = EvaluationInstallationTask(
             llm=self.llm,
             repo_path=self.rag.repo_dir,
@@ -106,28 +96,30 @@ class EvaluationManager:
             meta_data=self.project_metadata,
             step_callback=self.step_callback,
         )
-        evaluation = evaluation_task.evaluate(files)
+        evaluation, files = evaluation_task.evaluate()
+        return evaluation, files
+    
+    def evaluate_submission_requirements(
+        self,
+        readme_files_evaluation: dict | None = None,
+        installation_files: list[str] | None = None,
+        installation_evaluation: dict[str] | None = None,
+    ):
+        evaluation_task = EvaluationSubmissionRequirementsTask(
+            llm=self.llm,
+            repo_path=self.rag.repo_dir,
+            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
+            meta_data=self.project_metadata,
+            step_callback=self.step_callback,
+            summarized_files_db=self.summary_file_db,
+            readme_files_evaluation=readme_files_evaluation,
+            installation_files=installation_files,
+            installation_evaluation=installation_evaluation,
+        )
+        evaluation, files = evaluation_task.evaluate()
+
         return evaluation, files
         
-    def _find_readme_files(self) -> list[str]:
-        """
-        Search for a README file in the repository directory.
-        """
-        possible_readme_files = [
-            "readme.md",
-            "readme.rst",
-            "readme.txt",
-            "readme",
-        ]
-        repo_path = self.rag.repo_dir
-        gitignore_path = Path(repo_path, ".gitignore")
-        gitignore_checker = GitignoreChecker(
-            directory=repo_path, gitignore_path=gitignore_path
-        )
-        found_readme_files = gitignore_checker.check_files_and_folders(
-            check_file_cb=lambda root_dir, relative_path: Path(relative_path).name.lower() in possible_readme_files,
-        )
-                
-        return found_readme_files
+        
     
 

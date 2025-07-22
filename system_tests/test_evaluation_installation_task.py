@@ -4,7 +4,7 @@ from bioguider.agents.evaluation_installation_task import EvaluationInstallation
 from bioguider.managers.evaluation_manager import EvaluationManager
 
 def test_EvaluationInstallationTask_RepoAgent(llm, step_callback, root_path):
-    files = ["README.md", "README_CN.md", "requirements.txt"]
+    files = ["README_CN.md", "requirements.txt", "display/README_DISPLAY.md"]
 
     task = EvaluationInstallationTask(
         llm=llm,

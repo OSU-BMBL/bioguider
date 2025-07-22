@@ -38,3 +38,5 @@ class ProjectMetadata:
         self.description = description
         self.license = license
 
+MAX_FILE_LENGTH=10 *1024 # 10K
+MAX_SENTENCE_NUM=20

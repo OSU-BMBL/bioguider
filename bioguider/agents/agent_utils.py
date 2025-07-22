@@ -16,11 +16,12 @@ from langchain.tools import BaseTool
 from langchain.schema import AgentAction, AgentFinish
 from langchain.agents import AgentOutputParser
 from langgraph.prebuilt import create_react_agent
+from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 import logging
 
 from pydantic import BaseModel, Field
 
-from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, MAX_FILE_LENGTH, MAX_SENTENCE_NUM
 from bioguider.utils.file_utils import get_file_type
 from ..utils.gitignore_checker import GitignoreChecker
 from ..database.summarized_file_db import SummarizedFilesDb
@@ -178,8 +179,7 @@ Here is the file content:
 Now, let's start to summarize.
 """)
 
-MAX_FILE_LENGTH=20 *1024 # 20K
-MAX_SENTENCE_NUM=20
+
 def summarize_file(
     llm: BaseChatOpenAI, 
     name: str, 
@@ -379,6 +379,20 @@ def escape_braces(text: str) -> str:
     text = re.sub(r'(?<!{){(?!{)', '{{', text)
     return text
 
+STRING_TO_OBJECT_SYSTEM_PROMPT = """
+You are an expert to understand data. You will be provided a text, and your task is to extracted structured data from the provided text.
+
+---
+
+### **Instructions**
+1. If no structured data can be extracted, return None
+
+---
+
+### **Input Text**
+{input_text}
+"""
+
 def try_parse_json_object(json_obj: str) -> dict | None:
     json_obj = json_obj.strip()
 
@@ -404,6 +418,28 @@ def try_parse_json_object(json_obj: str) -> dict | None:
     except JSONDecodeError as e:
         logger.error(e)
         return None
+    except Exception as e:
+        logger.error(e)
+        return None
+    
+def try_parse_with_llm(llm: BaseChatOpenAI, input_text: str, schema: any):
+    system_prompt = ChatPromptTemplate.from_template(
+        STRING_TO_OBJECT_SYSTEM_PROMPT
+    ).format(input_text=input_text)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt)
+    ])
+    agent = prompt | llm.with_structured_output(schema)
+    callback_handler = OpenAICallbackHandler()
+
+    try:
+        res = agent.invoke(
+            input={},
+            config={
+                "callbacks": [callback_handler],
+            },
+        )
+        return res, vars(callback_handler)
     except Exception as e:
         logger.error(e)
         return None

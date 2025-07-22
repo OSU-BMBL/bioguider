@@ -9,6 +9,7 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
+from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
 from .common_agent import CommonConversation
 from ..utils.pyphen_utils import PyphenReadability
@@ -158,7 +159,8 @@ class EvaluationTask(ABC):
         repo_path: str, 
         gitignore_path: str,
         meta_data: ProjectMetadata | None = None,
-        step_callback: Callable | None = None
+        step_callback: Callable | None = None,
+        summarized_files_db: SummarizedFilesDb | None=None,
     ):
         self.evaluation_name = ""
         self.llm = llm
@@ -166,6 +168,8 @@ class EvaluationTask(ABC):
         self.gitignore_path = gitignore_path
         self.step_callback = step_callback
         self.metadata = meta_data
+        self.summarized_files_db = summarized_files_db
+
     def print_step(
         self,
         step_name: str | None = None,
@@ -180,11 +184,12 @@ class EvaluationTask(ABC):
             token_usage=token_usage,
         )
 
-    def evaluate(self, files: list[str] | None = None) -> dict:
+    def evaluate(self) -> dict:
         self._enter_evaluation()
-        evaluations, token_usage = self._evaluate(files)
+        files = self._collect_files()
+        evaluations, token_usage, files = self._evaluate(files)
         self._leave_evaluation(token_usage)
-        return evaluations
+        return evaluations, files
     
     def _enter_evaluation(self):
         self.print_step(step_name=self.evaluation_name)
@@ -194,6 +199,10 @@ class EvaluationTask(ABC):
 
     @abstractmethod
     def _evaluate(self, files: list[str]) -> tuple[dict, dict]:
+        pass
+
+    @abstractmethod
+    def _collect_files(self) -> list[str]:
         pass
 
        
@@ -262,9 +271,10 @@ class EvaluationTutorialTask(EvaluationTask):
         repo_path: str, 
         gitignore_path: str,
         meta_data: ProjectMetadata | None = None,
-        step_callback: Callable | None = None
+        step_callback: Callable | None = None,
+        summarized_files_db = None,
     ):
-        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
+        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "Tutorial Evaluation"
 
     def _evaluate(self, files: list[str]) -> tuple[dict, dict]:
@@ -300,4 +310,7 @@ class EvaluationTutorialTask(EvaluationTask):
             self.print_step(step_output=response)
             evaluations[file] = response
         return evaluations, token_usage
+    
+    def _collect_files(self):
+        return []
 

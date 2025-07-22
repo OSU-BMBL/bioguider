@@ -34,6 +34,9 @@ Carefully review the **Goal**, **Repository File Structure**, and **Intermediate
   ```
 Be precise and support your reasoning with evidence from the input.
 
+### **Important Instructions**
+{important_instructions}
+
 ### Notes
 We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
 If you find the current information insufficient, share your reasoning or thoughts instead—we’ll continue with the next round accordingly.
@@ -58,6 +61,8 @@ class IdentificationObserveStep(PEOCommonStep):
 
     def _prepare_system_prompt(self, state: IdentificationWorkflowState): 
         goal = state["goal"]
+        important_instructions = "N/A" \
+            if not "observe_instructions" in state else state["observe_instructions"]
         final_answer_example = state["final_answer_example"]
         intermediate_output = self._build_intermediate_steps(state)
         prompt = ChatPromptTemplate.from_template(IDENTIFICATION_OBSERVATION_SYSTEM_PROMPT)
@@ -67,11 +72,12 @@ class IdentificationObserveStep(PEOCommonStep):
             repo_structure=self.repo_structure,
             intermediate_output=intermediate_output,
             final_answer_example=final_answer_example,
+            important_instructions=important_instructions,
         )
 
     def _execute_directly(self, state: IdentificationWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin.",

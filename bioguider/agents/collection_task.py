@@ -50,9 +50,12 @@ class CollectionTask(AgentTask):
     def __init__(
         self, 
         llm: BaseChatOpenAI, 
-        step_callback: Callable | None = None
+        step_callback: Callable | None = None,
+        summarize_instruction: str | None = "N/A",
+        summarized_files_db: SummarizedFilesDb | None = None,
+        provided_files: list[str] | None = None,
     ):
-        super().__init__(llm, step_callback)
+        super().__init__(llm, step_callback, summarized_files_db=summarized_files_db)
         self.repo_path: str | None = None
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
@@ -60,6 +63,8 @@ class CollectionTask(AgentTask):
         self.steps: list[PEOCommonStep] = []
         self.tools: list[any] | None = None
         self.custom_tools: list[Tool] | None = None
+        self.summarize_instruction = summarize_instruction
+        self.provided_files = provided_files
 
     def _prepare_tools(self, related_file_goal_item_desc):
         tool_rd = read_directory_tool(repo_path=self.repo_path)
@@ -67,7 +72,8 @@ class CollectionTask(AgentTask):
             llm=self.llm,
             repo_path=self.repo_path,
             output_callback=self.step_callback,
-            db=self.summary_file_db,
+            db=self.summarized_files_db,
+            summaize_instruction=self.summarize_instruction,
         )
         tool_rf = read_file_tool(repo_path=self.repo_path)
         tool_cf = check_file_related_tool(
@@ -75,6 +81,8 @@ class CollectionTask(AgentTask):
             repo_path=self.repo_path,
             goal_item_desc=related_file_goal_item_desc,
             output_callback=self.step_callback,
+            summarize_instruction=self.summarize_instruction,
+            summarized_files_db=self.summarized_files_db,
         )
         self.tools = [tool_rd, tool_sum, tool_rf, tool_cf]
         self.custom_tools = [
@@ -99,13 +107,15 @@ class CollectionTask(AgentTask):
                 description=tool_cf.__class__.__doc__,
             ),
         ]
-        self.custom_tools.append(CustomPythonAstREPLTool())
+        # self.custom_tools.append(CustomPythonAstREPLTool())
 
     def _initialize(self):
         # initialize the 2-level file structure of the repo
         if not os.path.exists(self.repo_path):
             raise ValueError(f"Repository path {self.repo_path} does not exist.")
-        files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
+        files = self.provided_files
+        if files is None:
+            files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
         file_pairs = [(f, get_file_type(os.path.join(self.repo_path, f)).value) for f in files]
         self.repo_structure = ""
         for f, f_type in file_pairs:

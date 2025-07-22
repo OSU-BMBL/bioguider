@@ -68,20 +68,19 @@ def test_collection_task_for_installation(llm, step_callback, root_path):
     repo_path = f"{root_path}/POPPER"
     gitignore_path = f"{root_path}/POPPER/.gitignore"
     
-    task = CollectionTask(
-        llm=llm,
-        step_callback=step_callback,
-    )
-    
     db = SummarizedFilesDb(
         author="snap-stanford",
         repo_name="POPPER",
+    )
+    task = CollectionTask(
+        llm=llm,
+        step_callback=step_callback,
+        summarized_files_db=db,
     )
     task.compile(
         repo_path=repo_path, 
         gitignore_path=gitignore_path, 
         goal_item=CollectionGoalItemEnum.Installation.name,
-        db=db,
     )
     results = task.collect()
     assert results is not None

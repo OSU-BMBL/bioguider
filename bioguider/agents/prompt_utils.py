@@ -91,6 +91,7 @@ class CollectionGoalItemEnum(Enum):
     Installation = "Installation"
     License = "License"
     Contributing = "Contributing"
+    SoftwarePackageContent = "SoftwarePackageContent"
 
 
 
@@ -147,12 +148,18 @@ If **any one** of these is present, the document should be classified as a Docke
      * Examples: `example.py`, `main.py`, `demo.R`, `notebooks/get_started.ipynb`, etc.
      * These should be runnable with minimal configuration.""",
         
-        "important_instructions": """- Only include minimal code examples that demonstrate basic functionality.
+        "plan_important_instructions": """- Only include minimal code examples that demonstrate basic functionality.
 If multiple example files are found, select only the simplest and most lightweight one that is sufficient to verify the repository works.
  - Give priority to analyzing files whose names include **"install"** or **"Dockerfile"**, as these are most likely to be useful for generating our Dockerfile
  - The total number of collected files should **not exceed 5**.
  - Make sure to include **only one code example**, selecting the most minimal and representative one.
-"""
+""",
+        "observe_important_instructions": """- Only include minimal code examples that demonstrate basic functionality.
+If multiple example files are found, select only the simplest and most lightweight one that is sufficient to verify the repository works.
+ - Give priority to analyzing files whose names include **"install"** or **"Dockerfile"**, as these are most likely to be useful for generating our Dockerfile
+ - The total number of collected files should **not exceed 5**.
+ - Make sure to include **only one code example**, selecting the most minimal and representative one.
+""",
     },
     "Installation": {
         "goal_item": "Installation Instructions",
@@ -163,11 +170,16 @@ If **any one** of these is present, the document should be classified as Install
  - Configuration steps required to get the software running.
  - Troubleshooting tips related to installation issues.
  - You can include directory names if all files in the directory are relevant to the goal item.""",
-        "important_instructions": """- Give priority to analyzing README file that contain installation instructions and the files whose names include **"install"** or **"setup"**.
+        "plan_important_instructions": """ - Give priority to analyzing README file that contain installation instructions and the files whose names include **"install"** or **"setup"**.
 - If multiple files are found, select the most comprehensive one that covers the installation process.
 - The total number of collected files should **not exceed 3**.
 - Identify and select **no more than three** installation instruction files — choose the most comprehensive and representative ones.
-"""
+""",
+        "observe_important_instructions": """ - Give priority to analyzing README file that contain installation instructions and the files whose names include **"install"** or **"setup"**.
+- If multiple files are found, select the most comprehensive one that covers the installation process.
+- The total number of collected files should **not exceed 3**.
+- Identify and select **no more than three** installation instruction files — choose the most comprehensive and representative ones.
+""",
     },
     "License": {
         "goal_item": "License Information",
@@ -186,6 +198,34 @@ If **any one** of these is present, the document should be classified as Contrib
  - A section in the README or documentation that outlines how to contribute, report issues, or submit pull requests.
  - Any file that contains instructions for developers on how to contribute to the project, including coding standards, testing procedures, and submission processes.
  - You can include directory names if all files in the directory are relevant to the goal item.""",
+    },
+    "SoftwarePackageContent": {
+        "goal_item": "Software Package Content",
+        "related_file_description": """A file qualifies as **Software Package Content** if it meets **at least one** of the following elements.
+ - A compiled binary file that may be qualified as a compiled standalone software, please carefully analyze a binary file and its file name to identify if it is a compiled standalone software
+ - A source code file, like a file whose extension is `.py`, `.R`, `.ipynb`, `.ts`, or `.js`.
+ - An example data which is used to demonstrate usage or for tutorial. Image file should not be considered as example data.
+""",
+        "plan_important_instructions": """ - A comiled standalone software file is non-textual and appears to be in an executable format (e.g., `.exe`, `.dll`, `.so`, `.bin`, `.elf`).
+ - A comiled standalone software file **is not a script or compiled library**, that is, It is not a wrapper script (e.g., shell, Python, Python notebook or Rmd) nor a dynamic/shared library meant for linking.
+ - When identifying source code file, prioritize analyzing the file's **extension** and **file name** and try to avoid reading file, using check_file_related_tool or summarizing file content.
+ - When identifying example data, prioritize analyzing the file's **extension** (like .dat, .csv, .fastq, and so on) and **file name** (like example_data.txt, example.dat, and so on). If extension/name is ambiguous, use summarizing file content to decide.
+ - **Note**: You **only need to detect** whether at least **one** compiled standalone software file, **one** source code file and **one** example data file exist — no need to list all such files.
+""",
+        "observe_important_instructions": """ - A comiled standalone software file is non-textual and appears to be in an executable format (e.g., `.exe`, `.dll`, `.so`, `.bin`, `.elf`).
+ - A comiled standalone software file **is not a script or compiled library**, that is, It is not a wrapper script (e.g., shell, Python, Python notebook or Rmd) nor a dynamic/shared library meant for linking.
+ - When identifying source code file, prioritize analyzing the file's **extension** and **file name** and try to avoid reading file, using check_file_related_tool or summarizing file content.
+ - When identifying example data, prioritize analyzing the file's **extension** (like .dat, .csv, .fastq, and so on) and **file name** (like example_data.txt, example.dat, and so on). If extension/name is ambiguous, use summarizing file content to decide.
+ - **Note**: You **only need to detect** whether at least **one** compiled standalone software file, **one** source code file and **one** example data file exist — no need to list all such files.
+ - **Final answer format**: If you believe **all relevant files** have been collected:
+   Your final answer **must exactly match** the following format: 
+   **FinalAnswer:** {{"final_answer": [<N/A or a compiled filename>, <N/A or a source file name>, <N/A or a example data file name>]}} 
+   For each category, return a single file name or `"N/A"` if none found. And the return array must exactly follow this order: [<A comiled standalone software file name>, <A source code file name>, <A example data file name>]
+   For example, **FinalAnswer:** {{"final_answer": ["N/A", "app.py", "example.csv"]}} indicates:
+   * No compiled standalone software found
+   * `app.py` found as source code
+   * `example.csv` found as example data
+""",
     },
 }
 
