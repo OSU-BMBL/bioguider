@@ -8,7 +8,7 @@ from bioguider.agents.agent_utils import (
     PlanAgentResultJsonSchema,
     PlanAgentResult,
 )
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
@@ -57,7 +57,9 @@ Here are the results from previous steps:
 
 3. You may use the `read_directory` tool to explore directory contents, but avoid using it in the first step unless necessary.
 
-4. You may use the `python_repl` tool to execute Python code, but this should **also be avoided in the first step**.
+4. Your plan can only use the above tools, **do not** make up any tools not in the above tools list.
+
+5. Your planned step input file or input directory must come from the above repository files structure, **do not** make up file name or directory name.
 
 ---
 
@@ -65,12 +67,12 @@ Here are the results from previous steps:
 {important_instructions}
 
 ### **Output Format**  
-Your plan should be returned as a sequence of steps in the following format:
+Your plan **must exactly match** a sequence of steps in the following format, **do not** make up anything:
 
-Step: <tool name>   # Tool name must be one of {tool_names}  
+Step: <tool name>   # Tool name **must be one** of {tool_names}  
 Step Input: <file or directory name>
 
-Step: <tool name>  
+Step: <tool name>  # Tool name **must be one** of {tool_names}  
 Step Input: <file or directory name>
 ...
 """)
@@ -105,8 +107,8 @@ class CollectionPlanStep(PEOCommonStep):
         step_analysis, step_thoughts = self._build_intermediate_analysis_and_thoughts(state)
         goal = ChatPromptTemplate.from_template(COLLECTION_GOAL).format(goal_item=collection_item["goal_item"])
         related_file_description = collection_item["related_file_description"]
-        important_instructions="N/A" if "important_instructions" not in collection_item or len(collection_item["important_instructions"]) == 0 \
-            else collection_item["important_instructions"]
+        important_instructions="N/A" if "plan_important_instructions" not in collection_item or len(collection_item["plan_important_instructions"]) == 0 \
+            else collection_item["plan_important_instructions"]
         tool_names, tools_desc = get_tool_names_and_descriptions(self.custom_tools)
         system_prompt = COLLECTION_PLAN_SYSTEM_PROMPT.format(
             goal=goal,

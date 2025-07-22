@@ -47,7 +47,7 @@ class DockerGenerationTask(AgentTask):
     def __init__(
         self, 
         llm, 
-        step_callback = None
+        step_callback = None,
     ):
         super().__init__(llm, step_callback)
         self.repo_path: str | None = None

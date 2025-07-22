@@ -13,7 +13,12 @@ class AgentTask(ABC):
     A class representing a step in an agent's process.
     """
 
-    def __init__(self, llm: BaseChatOpenAI, step_callback: Callable | None = None):
+    def __init__(
+        self, 
+        llm: BaseChatOpenAI, 
+        step_callback: Callable | None = None,
+        summarized_files_db: SummarizedFilesDb | None = None,
+    ):
         """
         Initialize the AgentStep with a language model and a callback function.
 
@@ -23,7 +28,7 @@ class AgentTask(ABC):
         """
         self.llm = llm
         self.step_callback = step_callback
-        self.summary_file_db = None
+        self.summarized_files_db = summarized_files_db
         self.graph: CompiledGraph | None = None
 
     def _print_step(
@@ -45,7 +50,7 @@ class AgentTask(ABC):
             token_usage=token_usage,
         )
 
-    def compile(self, repo_path: str, gitignore_path: str, db: SummarizedFilesDb | None = None, **kwargs):
+    def compile(self, repo_path: str, gitignore_path: str, **kwargs):
         """
         Compile the agent step with the given repository and gitignore paths.
 
@@ -55,7 +60,6 @@ class AgentTask(ABC):
             **kwargs: derived class may pass more arguments to implmented _compile(), that is,
                 what **kwargs is depends on derived class
         """
-        self.summary_file_db = db
         self._compile(repo_path, gitignore_path, **kwargs)
     
     @abstractmethod

@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Callable
 from markdownify import markdownify as md
 from langchain_openai.chat_models.base import BaseChatOpenAI
@@ -6,6 +7,8 @@ from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import get_file_type
 from bioguider.agents.agent_utils import read_directory, read_file, summarize_file
 from bioguider.rag.data_pipeline import count_tokens
+
+logger = logging.getLogger(__name__)
 
 class agent_tool:
     def __init__(
@@ -53,19 +56,12 @@ Returns:
 class summarize_file_tool(agent_tool):
     """ Read a file and generate a summary according to a specified prompt.
 
-Arguments
-----------
-    file_path : str, required
-        Path to the file to read.
-    summarize_prompt : str, optional
-        Instruction guiding the summarization focus (default is "N/A").
-        Use this to emphasize specific aspects of the content.
+Args:
+    file_path str: required. The file path to read.
+    summarize_prompt str: optional. A string instruction guiding the summarization focus (default is "N/A"). Use this to emphasize specific aspects of the content.
 
-Returns
--------
-    str or None
-        A summarized version of the file content.
-        Returns None if the file does not exist or cannot be read.     
+Returns:
+    str or None: A summarized version of the file content. Returns None if the file does not exist or cannot be read.     
     """
     def __init__(
         self, 
@@ -124,8 +120,15 @@ Returns
         if summarized_content is not None:
             return f"summarized content of file {file_path}: " + summarized_content
 
-        file_content = read_file(abs_file_path)
-        file_content = file_content.replace("{", "{{").replace("}", "}}")
+        try:
+            file_content = read_file(abs_file_path)
+            file_content = file_content.replace("{", "{{").replace("}", "}}")
+        except UnicodeDecodeError as e:
+            logger.error(str(e))
+            return f"{file_path} is a binary, can't be summarized."
+        except Exception as e:
+            logger.error(str(e))
+            return f"Failed to read {file_path}."
         summarized_content, token_usage = summarize_file(
             self.llm, abs_file_path, file_content, self.detailed_level,
             summary_instructions=self.summarize_instruction,

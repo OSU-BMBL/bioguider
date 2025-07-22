@@ -7,6 +7,7 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
 
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
+from bioguider.utils.gitignore_checker import GitignoreChecker
 
 from ..utils.pyphen_utils import PyphenReadability
 from bioguider.agents.agent_utils import increase_token_usage, read_file, summarize_file
@@ -303,9 +304,10 @@ class EvaluationREADMETask(EvaluationTask):
         repo_path: str, 
         gitignore_path: str,
         meta_data: ProjectMetadata | None = None,
-        step_callback: Callable | None = None
+        step_callback: Callable | None = None,
+        summarized_files_db = None,
     ):
-        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
+        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "README Evaluation"
 
     def _structured_evaluate(self, free_readme_evaluations: dict[str, dict]):
@@ -455,7 +457,7 @@ class EvaluationREADMETask(EvaluationTask):
             total_token_usage = increase_token_usage(total_token_usage, token_usage)
         return readme_evaluations, total_token_usage
             
-    def _evaluate(self, files: list[str]) -> tuple[dict, dict]:
+    def _evaluate(self, files: list[str]) -> tuple[dict, dict, list[str]]:
         free_readme_evaluations, free_token_usage = self._free_evaluate(files)
         structured_readme_evaluations, structured_token_usage = self._structured_evaluate(free_readme_evaluations)
 
@@ -472,6 +474,26 @@ class EvaluationREADMETask(EvaluationTask):
         
         total_token_usage = increase_token_usage(free_token_usage, structured_token_usage)
 
-        return combined_evaluations, total_token_usage
+        return combined_evaluations, total_token_usage, files
     
+    def _collect_files(self):
+        """
+        Search for a README file in the repository directory.
+        """
+        possible_readme_files = [
+            "readme.md",
+            "readme.rst",
+            "readme.txt",
+            "readme",
+        ]
+        repo_path = self.repo_path
+        gitignore_path = Path(repo_path, ".gitignore")
+        gitignore_checker = GitignoreChecker(
+            directory=repo_path, gitignore_path=gitignore_path
+        )
+        found_readme_files = gitignore_checker.check_files_and_folders(
+            check_file_cb=lambda root_dir, relative_path: Path(relative_path).name.lower() in possible_readme_files,
+        )
+                
+        return found_readme_files
 

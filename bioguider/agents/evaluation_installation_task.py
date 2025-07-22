@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
-from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
+from bioguider.agents.collection_task import CollectionTask
+from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, CollectionGoalItemEnum
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
 from bioguider.rag.data_pipeline import count_tokens
 from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
@@ -32,14 +33,17 @@ Your task is to analyze the provided files related to installation and generate 
 1. **Installation Available**: Is the installation section in document (like README.md or INSTALLATION)?
    * Output: `Yes` or `No`
 
-2. **Installation Tutorial**: Is the installation tutorial provided?
+2. **Installation Tutorial**: Is the step-by-step installation tutorial provided?
    * Ouput: `Yes` or `No`
 
 3. **Number of required Dependencies Installation**: The number of dependencies that are required to install
    * Output: Number
    * Suggest specific improvements if necessary, such as missing dependencies
 
-4. **Overall Score**: Give an overall quality rating of the Installation information.
+4. **Compatible Operating System**: Is the compatible operating system described?
+   * Output: `Yes` or `No`
+
+5. **Overall Score**: Give an overall quality rating of the Installation information.
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
 
 ---
@@ -53,6 +57,7 @@ Your final report must **exactly match** the following format. Do not add or omi
 **Dependency:**
   * number: [Number]
   * suggestions: <suggestion to improve **dependency information** like missing dependencies
+**Compatible Operating System:** [Yes / No]
 **Overall Score:** [Poor / Fair / Good / Excellent]
 
 ---
@@ -113,6 +118,7 @@ class StructuredEvaluationInstallationResult(BaseModel):
     install_tutorial: Optional[bool]=Field(description="A boolean value. Is the installation tutorial provided?")
     dependency_number: Optional[int]=Field(description="A number. It is the number of dependencies that are required to install.")
     dependency_suggestions: Optional[str]=Field(description="A string value. It is the specific improvements if necessary, such as missing dependencies")
+    compatible_os: Optional[bool]=Field(description="A boolean value. Is compatible operating system described?")
     overall_score: Optional[str]=Field(description="A overall scroll for the installation quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
 
 class EvaluationInstallationResult(BaseModel):
@@ -163,8 +169,9 @@ class EvaluationInstallationTask(EvaluationTask):
         gitignore_path, 
         meta_data = None, 
         step_callback = None,
+        summarized_files_db = None,
     ):
-        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback)
+        super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "Installation Evaluation"
 
 
@@ -235,7 +242,7 @@ class EvaluationInstallationTask(EvaluationTask):
         }
         return evaluation, token_usage
     
-    def _evaluate(self, files: list[str] | None = None) -> tuple[dict | None, dict]:
+    def _evaluate(self, files: list[str] | None = None) -> tuple[dict | None, dict, list[str]]:
         evaluation, token_usage = self._free_evaluate(files)
         structured_evaluation, structured_token_usage = self._structured_evaluate(files)
 
@@ -245,5 +252,20 @@ class EvaluationInstallationTask(EvaluationTask):
         }
         total_token_usage = increase_token_usage(token_usage, structured_token_usage)
 
-        return combined_evaluation, total_token_usage
-        
+        return combined_evaluation, total_token_usage, files
+
+    def _collect_files(self):
+        task = CollectionTask(
+            llm=self.llm,
+            step_callback=self.step_callback,
+        )
+        task.compile(
+            repo_path=self.repo_path,
+            gitignore_path=Path(self.repo_path, ".gitignore"),
+            db=self.summarized_files_db,
+            goal_item=CollectionGoalItemEnum.Installation.name,
+        )
+        files = task.collect()
+        if files is None:
+            return []
+        return files

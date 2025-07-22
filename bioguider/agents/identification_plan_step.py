@@ -36,6 +36,9 @@ meaning that states and variables will persisted through multiple rounds of plan
 developing your collection plan incrementally and reflect on the intermediate observations at each round, instead of coding up 
 everything in one go. Be sure to take only one or two actions in each step.
 
+### **Important Instructions**
+{important_instructions}
+
 ### **Output**
 You plan should follow this format:
 Step: tool name, should be one of {tool_names}
@@ -81,6 +84,7 @@ class IdentificationPlanStep(PEOCommonStep):
 
     def _prepare_system_prompt(self, state: IdentificationWorkflowState) -> str:
         goal = state["goal"]
+        important_instructions = "N/A" if not "plan_instructions" in state else state["plan_instructions"]
         repo_structure = self.repo_structure
         intermdediate_steps = self._build_intermediate_steps(state)
         step_analysis, step_thoughts = self._build_intermediate_analysis_and_thoughts(state)
@@ -101,6 +105,7 @@ class IdentificationPlanStep(PEOCommonStep):
             intermediate_analysis=step_analysis,
             intermediate_thoughts=step_thoughts,
             tool_names=tool_names,
+            important_instructions=important_instructions,
         )
 
     def _convert_to_plan_actions_text(self, actions: list[dict]) -> str:
@@ -113,7 +118,7 @@ class IdentificationPlanStep(PEOCommonStep):
 
     def _execute_directly(self, state: IdentificationWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin.",

@@ -64,14 +64,17 @@ class IdentificationTask(AgentTask):
         self, 
         llm: BaseChatOpenAI,
         step_callback: Callable | None=None,
+        summarized_files_db: SummarizedFilesDb | None = None,
+        provided_files: list[str] | None = None,
     ):
-        super().__init__(llm=llm, step_callback=step_callback)
+        super().__init__(llm=llm, step_callback=step_callback, summarized_files_db=summarized_files_db)
         self.repo_path: str | None = None
         self.gitignore_path: str | None = None
         self.repo_structure: str | None = None
         self.tools = []
         self.custom_tools = []
         self.steps: list[PEOCommonStep] = []
+        self.provided_files = provided_files
 
     def _prepare_tools(self):
         tool_rd = read_directory_tool(repo_path=self.repo_path)
@@ -79,7 +82,7 @@ class IdentificationTask(AgentTask):
             llm=self.llm,
             repo_path=self.repo_path,
             output_callback=self.step_callback,
-            db=self.summary_file_db,
+            db=self.summarized_files_db,
         )
         tool_rf = read_file_tool(repo_path=self.repo_path)
         
@@ -106,7 +109,9 @@ class IdentificationTask(AgentTask):
     def _initialize(self):        
         if not os.path.exists(self.repo_path):
             raise ValueError(f"Repository path {self.repo_path} does not exist.")
-        files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
+        files = self.provided_files
+        if files is None:
+            files = read_directory(self.repo_path, os.path.join(self.repo_path, ".gitignore"))
         file_pairs = [(f, get_file_type(os.path.join(self.repo_path, f)).value) for f in files]
         self.repo_structure = ""
         for f, f_type in file_pairs:
@@ -188,7 +193,21 @@ class IdentificationTask(AgentTask):
         meta_data = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_meta_data(meta_data)
         
-    
+    def identify_customize_goal(
+        self,
+        goal: str,
+        final_answer_example: str,
+        plan_instructions: str = "N/A",
+        observe_instructions: str = "N/A",
+    ):
+        s = self._go_graph({
+            "goal": goal,
+            "final_answer_example": final_answer_example,
+            "plan_instructions": plan_instructions,
+            "observe_instructions": observe_instructions,
+        })
+        return s["final_answer"] if "final_answer" in s else None
+
     def _parse_project_type(self, proj_type_obj: str) -> ProjectTypeEnum:
         proj_type_obj = proj_type_obj.strip()
         the_obj = try_parse_json_object(proj_type_obj)

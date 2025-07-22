@@ -5,7 +5,7 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from bioguider.agents.agent_utils import ObservationResult
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 
@@ -34,11 +34,13 @@ Here is the 2-level file structure of the repository (`f` = file, `d` = director
 
   * Provide your reasoning under **Analysis**
   * Then list all relevant files and folders under **FinalAnswer**
+  * **FinalAnswer** format must exactly match this format:
+    **FinalAnswer**: {{"final_answer": [<file path>, <file path>, <file path>, ...]}}
   * Be sure to include the **full relative paths** with respect to the repository root.
-  * Your answer **must follow this exact format** (note: no JSON code block, no additional comments):
+  * Your answer **must exactly match the follwing format** (note: no JSON code block, no additional comments), **do not** make up anything:
 
   ```
-  **Analysis**: your analysis here  
+  **Analysis**: your analysis here 
   **FinalAnswer**: {{"final_answer": ["path/to/file1", "path/to/file2", ...]}}
   ```
 4. If you believe **more files still need to be collected**:
@@ -80,8 +82,8 @@ class CollectionObserveStep(PEOCommonStep):
         repo_structure = self.repo_structure
         intermediate_steps = self._build_intermediate_steps(state)
         prompt = ChatPromptTemplate.from_template(COLLECTION_OBSERVE_SYSTEM_PROMPT)
-        important_instructions = "N/A" if "important_instructions" not in collection_item or len(collection_item["important_instructions"]) == 0 \
-            else collection_item["important_instructions"]
+        important_instructions = "N/A" if "observe_important_instructions" not in collection_item or len(collection_item["observe_important_instructions"]) == 0 \
+            else collection_item["observe_important_instructions"]
         return prompt.format(
             goal_item_desc=goal_item_desc,
             related_file_description=collection_item["related_file_description"],
