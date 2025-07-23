@@ -15,7 +15,8 @@ class SummarizedFilesDbTestCase(unittest.TestCase):
             "111/222/333",
             "",
             3,
-            "balahbalah balahbalah balahbalah"
+            "balahbalah balahbalah balahbalah",
+            "N/A",
         )
     def tearDown(self):
         if self.db is None:
@@ -28,7 +29,8 @@ class SummarizedFilesDbTestCase(unittest.TestCase):
             "aaa/bbb/ccc",
             "",
             3,
-            "balahbalah balahbalah balahbalah"
+            "balahbalah balahbalah balahbalah",
+            "N/A",
         )
         self.assertTrue(res)
 
@@ -51,6 +53,7 @@ class SummarizedFilesDbTestCase(unittest.TestCase):
             "",
             3,
             "balahbalah",
+            "N/A",
             token_usage,
         )
         self.assertTrue(res)

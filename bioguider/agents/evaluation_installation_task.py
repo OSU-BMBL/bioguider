@@ -211,6 +211,8 @@ class EvaluationInstallationTask(EvaluationTask):
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=StructuredEvaluationInstallationResult,
         )
+        res: StructuredEvaluationInstallationResult = res
+        res.dependency_number = 0 if res.dependency_number is None else res.dependency_number
         self.print_step(step_output=reasoning_process)
         self.print_step(token_usage=token_usage)
 
