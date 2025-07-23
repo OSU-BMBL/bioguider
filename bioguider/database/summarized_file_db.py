@@ -114,7 +114,7 @@ class SummarizedFilesDb:
         file_path: str,
         instruction: str,
         summarize_level: int,
-        summarize_prompt: str,
+        summarize_prompt: str = "N/A",
     ) -> str | None:
         self._connect_to_db()
         self._ensure_tables()
