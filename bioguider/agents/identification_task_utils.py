@@ -18,3 +18,5 @@ class IdentificationWorkflowState(TypedDict):
     step_output: Optional[str]
     step_analysis: Optional[str]
     step_thoughts: Optional[str]
+
+    step_count: Optional[int]

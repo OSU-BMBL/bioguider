@@ -28,6 +28,7 @@ class CollectionWorkflowState(TypedDict):
 
     goal_item: Optional[str]
     final_answer: Optional[str]
+    step_count: Optional[int]
 
 RELATED_FILE_GOAL_ITEM = """
 Your task is to determine whether the file is related to **{goal_item}**.

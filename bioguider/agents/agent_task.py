@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from langgraph.graph.graph import CompiledGraph
 
-from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, MAX_STEP_COUNT
 from bioguider.database.summarized_file_db import SummarizedFilesDb
 
 class AgentTask(ABC):
@@ -82,7 +82,7 @@ class AgentTask(ABC):
         for s in self.graph.stream(
             input=input, 
             stream_mode="values",
-            config={"recursion_limit": 500},
+            config={"recursion_limit": MAX_STEP_COUNT},
         ):
             print(s)
 
