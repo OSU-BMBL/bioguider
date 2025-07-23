@@ -173,6 +173,7 @@ class IdentificationTask(AgentTask):
         s = self._go_graph({
             "goal": IDENTIFICATION_GOAL_PROJECT_TYPE,
             "final_answer_example": PROJECT_TYPE_FINAL_ANSWER_EXAMPLE,
+            "step_count": 0,
         })
         proj_type = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_project_type(proj_type)
@@ -181,6 +182,7 @@ class IdentificationTask(AgentTask):
         s = self._go_graph({
             "goal": IDENTIFICATION_GOAL_PRIMARY_LANGUAGE,
             "final_answer_example": PRIMARY_LANGUAGE_FINAL_ANSWER_EXAMPLE,
+            "step_count": 0,
         })
         language = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_primary_language(language)
@@ -189,6 +191,7 @@ class IdentificationTask(AgentTask):
         s = self._go_graph({
             "goal": IDENTIFICATION_GOAL_META_DATA,
             "final_answer_example": META_DATA_FINAL_ANSWER_EXAMPLE,
+            "step_count": 0,
         })
         meta_data = s["final_answer"] if "final_answer" in s else "unknown type"
         return self._parse_meta_data(meta_data)
@@ -205,6 +208,7 @@ class IdentificationTask(AgentTask):
             "final_answer_example": final_answer_example,
             "plan_instructions": plan_instructions,
             "observe_instructions": observe_instructions,
+            "step_count": 0,
         })
         return s["final_answer"] if "final_answer" in s else None
 

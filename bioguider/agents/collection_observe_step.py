@@ -8,6 +8,7 @@ from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
+from bioguider.utils.constants import MAX_STEP_COUNT
 
 
 COLLECTION_OBSERVE_SYSTEM_PROMPT = """You are an expert software developer and technical documentation analyst.
@@ -92,11 +93,14 @@ class CollectionObserveStep(PEOCommonStep):
             important_instructions=important_instructions,
         )
     def _execute_directly(self, state: CollectionWorkflowState):
+        step_count = state["step_count"]
+        instruction = "Now, we have reached max recursion limit, please give me the **final answer** based on the current information" \
+            if step_count == MAX_STEP_COUNT - 2 else "Let's begin thinking."
         system_prompt = self._build_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
-            instruction_prompt="Let's begin thinking.",
+            instruction_prompt=instruction,
             schema=ObservationResult,
         )
         state["final_answer"] = res.FinalAnswer
@@ -104,9 +108,10 @@ class CollectionObserveStep(PEOCommonStep):
         thoughts = res.Thoughts
         state["step_analysis"] = analysis
         state["step_thoughts"] = thoughts
+        state["step_count"] += 1
         self._print_step(
             state,
-            step_output=f"**Observation Reasoning Process**\n{reasoning_process}"
+            step_output=f"**Observation Reasoning Process: {state['step_count']}**\n{reasoning_process}"
         )
         self._print_step(
             state,

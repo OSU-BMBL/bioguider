@@ -50,10 +50,10 @@ def test_EvaluationManager_on_installation(llm, step_callback):
     assert len(files) > 0
 
 # @pytest.mark.skip()
-def test_EvaluationManager_on_POPPER_installation(llm, step_callback):
+def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)
-    mgr.prepare_repo("https://github.com/snap-stanford/POPPER")
+    mgr.prepare_repo("https://github.com/satijalab/seurat")
 
     installation_evaluation, installation_files = mgr.evaluate_installation()
     readme_evaluation, readme_files = mgr.evaluate_readme()

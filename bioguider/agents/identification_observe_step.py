@@ -5,6 +5,7 @@ from bioguider.agents.agent_utils import ObservationResult
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 from bioguider.agents.identification_task_utils import IdentificationWorkflowState
 from bioguider.agents.peo_common_step import PEOWorkflowState, PEOCommonStep
+from bioguider.utils.constants import MAX_STEP_COUNT
 
 
 ## observation system prompt
@@ -76,11 +77,14 @@ class IdentificationObserveStep(PEOCommonStep):
         )
 
     def _execute_directly(self, state: IdentificationWorkflowState):
+        step_count = state["step_count"]
+        instruction = "Now, we have reached max recursion limit, please give me the **final answer** based on the current information" \
+            if step_count == MAX_STEP_COUNT - 2 else "Now, Let's begin."
         system_prompt = self._prepare_system_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
-            instruction_prompt="Now, let's begin.",
+            instruction_prompt=instruction,
             schema=ObservationResult,
         )
         state["final_answer"] = res.FinalAnswer
@@ -88,9 +92,10 @@ class IdentificationObserveStep(PEOCommonStep):
         thoughts = res.Thoughts
         state["step_analysis"] = analysis
         state["step_thoughts"] = thoughts
+        state["step_count"] += 1
         self._print_step(
             state,
-            step_output=f"**Observation Reasoning Process**\n{reasoning_process}"
+            step_output=f"**Observation Reasoning Process {state['step_count']}**\n{reasoning_process}"
         )
         self._print_step(
             state,

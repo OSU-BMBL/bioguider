@@ -208,6 +208,7 @@ If **any one** of these is present, the document should be classified as Contrib
 """,
         "plan_important_instructions": """ - A comiled standalone software file is non-textual and appears to be in an executable format (e.g., `.exe`, `.dll`, `.so`, `.bin`, `.elf`).
  - A comiled standalone software file **is not a script or compiled library**, that is, It is not a wrapper script (e.g., shell, Python, Python notebook or Rmd) nor a dynamic/shared library meant for linking.
+   So, when you are identifying a binary file, **do not** use any tools (our tools don't work for binary file), you need to figure out if it is compiled standalone software file by the file name and extension on your own.
  - When identifying source code file, prioritize analyzing the file's **extension** and **file name** and try to avoid reading file, using check_file_related_tool or summarizing file content.
  - When identifying example data, prioritize analyzing the file's **extension** (like .dat, .csv, .fastq, and so on) and **file name** (like example_data.txt, example.dat, and so on). If extension/name is ambiguous, use summarizing file content to decide.
  - **Note**: You **only need to detect** whether at least **one** compiled standalone software file, **one** source code file and **one** example data file exist — no need to list all such files.

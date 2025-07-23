@@ -176,7 +176,7 @@ class CollectionTask(AgentTask):
         self.graph = graph.compile()
 
     def collect(self) -> list[str] | None:
-        s = self._go_graph({"goal_item": self.goal_item})
+        s = self._go_graph({"goal_item": self.goal_item, "step_count": 0})
         if s is None or 'final_answer' not in s:
             return None
         if s["final_answer"] is None:
