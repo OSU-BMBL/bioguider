@@ -10,12 +10,61 @@ from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.gitignore_checker import GitignoreChecker
 
 from ..utils.pyphen_utils import PyphenReadability
-from bioguider.agents.agent_utils import increase_token_usage, read_file, summarize_file
+from bioguider.agents.agent_utils import (
+    increase_token_usage, 
+    read_file, read_license_file, 
+    summarize_file
+)
 from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps
 from bioguider.agents.evaluation_task import EvaluationTask
-from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
+from bioguider.utils.constants import (
+    DEFAULT_TOKEN_USAGE, 
+    ProjectMetadata,
+    ProjectLevelEvaluationREADMEResult,
+    StructuredEvaluationREADMEResult,
+    FreeProjectLevelEvaluationREADMEResult,
+    FreeFolderLevelEvaluationREADMEResult,
+    EvaluationREADMEResult,
+)
 
 logger = logging.getLogger(__name__)
+
+README_PROJECT_LEVEL_SYSTEM_PROMPT = """
+You are an expert in evaluating the quality of README files in software repositories. 
+Your task is to analyze the provided README file and identify if it is a project-level README file or a folder-level README file.
+
+---
+
+### **Classification Guidelines**
+
+ - **Project-level README**:
+   - Located in the repository root (e.g., `/`, `.github/`, or `docs/`).
+   - Contains project-wide content: overview, installation steps, global usage, badges, links to main docs or contributing guide.
+
+ - **Folder-level README**:
+   - Located inside a subfolder.
+   - Describes the specific folder: its purpose, contents, how to use or run what's inside, local instructions.
+
+---
+
+### **Output Format**
+Based solely on the file's **path**, **name**, and **content**, classify the README as either a **project-level** or **folder-level** README.
+Output **exactly** the following format:
+
+**FinalAnswer**
+**Project-level:** [Yes / No]
+
+---
+
+### **README Path**
+{readme_path}
+
+---
+
+### **README content**
+{readme_content}
+
+"""
 
 STRUCTURED_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -111,79 +160,71 @@ Your final report must **exactly match** the following format. Do not add or omi
 
 """
 
-EVALUATION_README_SYSTEM_PROMPT = """
+PROJECT_LEVEL_EVALUATION_README_SYSTEM_PROMPT = """
+You are an expert in evaluating the quality of README files in software repositories. 
+Your task is to analyze the provided project-level README file and generate a comprehensive quality report. 
+You will be given:
+1. A README file.
+2. A structured evaluation of the README file and its reasoning process.
+
+---
+
+### **Instructions**
+1. Based on the provided structured evaluation and its reasoning process, generate a free evaluation of the README file.
+2. Focus on the explanation of assessment in structured evaluation and how to improve the README file based on the structured evaluation and its reasoning process.
+   * For each suggestion to improve the README file, you **must provide some examples** of the original text snippet and the improving comments.
+3. For each item in the structured evaluation, provide a detailed assessment followed by specific, actionable comments for improvement.
+4. Your improvement suggestions must also include the original text snippet and the improving comments.
+5. Your improvement suggestions must also include suggestions to improve readability.
+6. If you think the it is good enough, you can say so.
+
+---
+
+### **Output Format**
+Your output must **exactly match** the following format. Do not add or omit any sections.
+
+**FinalAnswer**
+**Available:**
+  <Your assessment and suggestion here>
+**Readability:** 
+  <Your assessment and suggestion here>
+**Project Purpose:** 
+  <Your assessment and suggestion here>
+**Hardware and software spec and compatibility description:**
+  <Your assessment and suggestion here>
+**Dependencies clearly stated:** 
+  <Your assessment and suggestion here>
+**License Information Included:** 
+  <Your assessment and suggestion here>
+** Code contributor / Author information included
+  <Your assessment and suggestion here>
+
+---
+
+### **Structured Evaluation and Reasoning Process**
+{structured_evaluation}
+
+---
+
+### **README Path**
+{readme_path}
+
+---
+
+### **README content**
+{readme_content}
+
+"""
+
+FOLDER_LEVEL_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
 Your task is to analyze the provided README file and generate a comprehensive quality report.
 
 ---
 
-### **Step 1:  Identify README type
-
-First, determine whether the provided README is a **project-level README** (typically at the root of a repository) or a **folder-level README** (typically inside subdirectories).
-
----
-
 ### **Evaluation Criteria**
 
-#### If the README is a **project-level** file, evaluate it using the following criteria.
-
-For each criterion below, provide a brief assessment followed by specific, actionable comments for improvement.
-
-**1. Project Clarity & Purpose**
- * **Assessment**: [Your evaluation of whether the project's purpose is clear.]
- * **Improvement Suggestions**:
-    * **Original text:** [Quote a specific line/section from the README.]
-    * **Improving comments:** [Provide your suggestions to improve clarity.]
-    * **Original text:** [Quote a specific line/section from the README.]
-    * **Improving comments:** [Provide your suggestions to improve clarity.]
-    ...
-
-**2. Installation Instructions**
- * **Assessment**: [Your evaluation of the installation instructions.]
- * **Improvement Suggestions**:
-    * **Original text:** [Quote text related to installation.]
-    * **Improving comments:** [Provide your suggestions.]
-    * **Original text:** [Quote text related to installation.]
-    * **Improving comments:** [Provide your suggestions.]
-    ...
-
-**3. Usage Instructions**
- * **Assessment**: [Your evaluation of the usage instructions.]
- * **Improvement Suggestions**:
-    * **Original text:** [Quote text related to usage.]
-    * **Improving comments:** [Provide your suggestions.]
-    * **Original text:** [Quote text related to usage.]
-    * **Improving comments:** [Provide your suggestions.]
-    ...
-
-**4. Contributing Guidelines**
- * **Assessment**: [Your evaluation of the contributing guidelines.]
- * **Improvement Suggestions**:
-    * **Original text:** [Quote text related to contributions.]
-    * **Improving comments:** [Provide your suggestions.]
-    * **Original text:** [Quote text related to contributions.]
-    * **Improving comments:** [Provide your suggestions.]
-    ...
-
-**5. License Information**
- * **Assessment**: [Your evaluation of the license information.]
- * **Improvement Suggestions**:
-    * **Original text:** [Quote text related to the license.]
-    * **Improving comments:** [Provide your suggestions.]
-    * **Original text:** [Quote text related to the license.]
-    * **Improving comments:** [Provide your suggestions.]
-    ...
-
-**6. Readability Analysis**
- * **Flesch Reading Ease**: `{flesch_reading_ease}` (A higher score is better, with 60-70 being easily understood by most adults).
- * **Flesch-Kincaid Grade Level**: `{flesch_kincaid_grade}` (Represents the US school-grade level needed to understand the text).
- * **Gunning Fog Index**: `{gunning_fog_index}` (A score above 12 is generally considered too hard for most people).
- * **SMOG Index**: `{smog_index}` (Estimates the years of education needed to understand the text).
- * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
-
----
-
-#### If if is a **folder-level** file, use the following criteria instead.
+The README file is a **folder-level** file, use the following criteria instead.
 
 For each criterion below, provide a brief assessment followed by specific, actionable comments for improvement.
 
@@ -219,8 +260,6 @@ For each criterion below, provide a brief assessment followed by specific, actio
 #### Your output **must exactly match**  the following template:
 
 **FinalAnswer**
-
- * Project-Level README: Yes / No
  * **Score:** [Poor / Fair / Good / Excellent]
   * **Key Strengths**: <brief summary of the README's strongest points in 2-3 sentences> 
   * **Overall Improvement Suggestions:**
@@ -230,11 +269,9 @@ For each criterion below, provide a brief assessment followed by specific, actio
 
 #### Notes
 
-* **Project-Level README**: "Yes" if root-level; "No" if folder-level.
 * **Score**: Overall quality rating, could be Poor / Fair / Good / Excellent.
 * **Key Strengths**: Briefly highlight the README's strongest aspects.
 * **Improvement Suggestions**: Provide concrete snippets and suggested improvements.
-
 
 ---
 
@@ -246,56 +283,6 @@ For each criterion below, provide a brief assessment followed by specific, actio
 ### **README Content:**
 {readme_content}
 """
-
-
-class StructuredEvaluationREADMEResult(BaseModel):
-    available_score: Optional[bool]=Field(description="A boolean value, Is the README accessible and present?")
-    readability_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    readability_suggestions: Optional[str]=Field(description="Suggestions to improve readability if necessary")
-    project_purpose_score: Optional[bool]=Field(description="A boolean value. Is the project's goal or function clearly stated?")
-    project_purpose_suggestions: Optional[str]=Field(description="Suggestions if not clear")
-    hardware_and_software_spec_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    hardware_and_software_spec_suggestions: Optional[str]=Field(description="Suggestions if not clear")
-    dependency_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    dependency_suggestions: Optional[str]=Field(description="Suggestions if dependencies are not clearly stated")
-    license_score: Optional[bool]=Field(description="A boolean value, Are contributor or maintainer details provided?")
-    license_suggestions: Optional[str]=Field(description="Suggestions to improve license information")
-    contributor_author_score: Optional[bool]=Field(description="A boolean value. are contributors or author included?")
-    overall_score: str=Field(description="A overall scroll for the README quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-
-class EvaluationREADMEResult(BaseModel):
-    project_level: Optional[bool]=Field(description="A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
-    score: Optional[str]=Field(description="An overall score")
-    key_strengths: Optional[str]=Field(description="A string specifying the key strengths of README file.")
-    overall_improvement_suggestions: Optional[list[str]]=Field(description="A list of overall improvement suggestions")
-
-EvaluationREADMEResultSchema = {
-    "title": "EvaluationREADMEResult",
-    "type": "object",
-    "properties": {
-        "project_level": {
-            "anyOf": [{"type": "boolean"}, {"type": "null"}],
-            "description": "A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE: folder-level.",
-            "title": "Project Level"
-        },
-        "score": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "An overall score",
-            "title": "Score"
-        },
-        "key_strengths": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "A string specifying the key strengths of README file.",
-            "title": "Key Strengths",
-        },
-        "overall_improvement_suggestions": {
-            "anyOf": [{"items": {"type": "string"}, "type": "array"}, {"type": "null"}],
-            "description": "A list of improvement suggestions",
-            "title": "Overall Improvement Suggestions"
-        }
-    },
-    "required": ["project_level", "score", "key_strengths", "overall_improvement_suggestions"]
-}
 
 class EvaluationREADMETask(EvaluationTask):
     def __init__(
@@ -310,7 +297,45 @@ class EvaluationREADMETask(EvaluationTask):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "README Evaluation"
 
-    def _structured_evaluate(self, free_readme_evaluations: dict[str, dict]):
+    def _project_level_evaluate(self, readme_files: list[str]) -> tuple[dict, dict]:
+        """
+        Evaluate if the README files are a project-level README file.
+        """
+        total_token_usage = {**DEFAULT_TOKEN_USAGE}
+        project_level_evaluations = {}
+        for readme_file in readme_files:
+            full_path = Path(self.repo_path, readme_file)
+            readme_content = read_file(full_path)
+            if readme_content is None or len(readme_content.strip()) == 0:
+                logger.error(f"Error in reading file {readme_file}")
+                project_level_evaluations[readme_file] = {
+                    "project_level": "/" in readme_file,
+                    "project_level_reasoning_process": f"Error in reading file {readme_file}" \
+                        if readme_content is None else f"{readme_file} is an empty file.",
+                }
+                continue
+            system_prompt = ChatPromptTemplate.from_template(
+                README_PROJECT_LEVEL_SYSTEM_PROMPT
+            ).format(
+                readme_path=readme_file,
+                readme_content=readme_content,
+            )
+            agent = CommonAgentTwoChainSteps(llm=self.llm)
+            response, _, token_usage, reasoning_process = agent.go(
+                system_prompt=system_prompt,
+                instruction_prompt=EVALUATION_INSTRUCTION,
+                schema=ProjectLevelEvaluationREADMEResult,
+            )
+            total_token_usage = increase_token_usage(total_token_usage, token_usage)
+            self.print_step(step_output=f"README: {readme_file} project level README")
+            project_level_evaluations[readme_file] = {
+                "project_level": response.project_level,
+                "project_level_reasoning_process": reasoning_process,
+            }
+
+        return project_level_evaluations, total_token_usage
+
+    def _structured_evaluate(self, readme_project_level: dict[str, dict] | None = None):
         """ Evaluate README in structure:
         available: bool
         readability: score and suggestion
@@ -322,11 +347,10 @@ class EvaluationREADMETask(EvaluationTask):
         overall score: 
         """
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
-        if free_readme_evaluations is None:
+        if readme_project_level is None:
             return None, total_token_usage
         
-        license_path = "LICENSE"
-        license_content = read_file(Path(self.repo_path, license_path))
+        license_content, license_path = read_license_file(self.repo_path)
         license_summarized_content = summarize_file(
             llm=self.llm,
             name=license_path,
@@ -336,9 +360,9 @@ class EvaluationREADMETask(EvaluationTask):
         ) if license_content is not None else "N/A"
         license_path = license_path if license_content is not None else "N/A"
         structured_readme_evaluations = {}
-        for readme_file in free_readme_evaluations.keys():
-            evaluation = free_readme_evaluations[readme_file]["evaluation"]
-            if not evaluation["project_level"]:
+        for readme_file in readme_project_level.keys():
+            project_level = readme_project_level[readme_file]["project_level"]
+            if not project_level:
                 continue
             full_path = Path(self.repo_path, readme_file)
             readme_content = read_file(full_path)
@@ -347,7 +371,7 @@ class EvaluationREADMETask(EvaluationTask):
                 continue
             if len(readme_content.strip()) == 0:
                 structured_readme_evaluations[readme_file] = {
-                    "structured_evaluation": StructuredEvaluationREADMEResult(
+                    "evaluation": StructuredEvaluationREADMEResult(
                         available_score=False,
                         readability_score="Poor",
                         readability_suggestions="No readability provided",
@@ -362,7 +386,7 @@ class EvaluationREADMETask(EvaluationTask):
                         contributor_author_score=False,
                         overall_score="Poor",
                     ),
-                    "structured_reasoning_process": f"{readme_file} is an empty file.",
+                    "reasoning_process": f"{readme_file} is an empty file.",
                 }
                 continue
             readability = PyphenReadability()
@@ -389,91 +413,166 @@ class EvaluationREADMETask(EvaluationTask):
             self.print_step(step_output=f"README: {readme_file} structured evaluation")
             self.print_step(step_output=reasoning_process)
             structured_readme_evaluations[readme_file] = {
-                "structured_evaluation": response,
-                "structured_reasoning_process": reasoning_process,
+                "evaluation": response,
+                "reasoning_process": reasoning_process,
             }
             total_token_usage = increase_token_usage(total_token_usage, token_usage)
 
         return structured_readme_evaluations, total_token_usage
         
 
-    def _free_evaluate(self, files: list[str]):
-        readme_files = files
+    def _free_project_level_readme_evaluate(
+        self, 
+        readme_file: str,
+        structured_reasoning_process: str,
+    ) -> tuple[FreeProjectLevelEvaluationREADMEResult | None, dict, str]:
+        readme_path = Path(self.repo_path, readme_file)
+        readme_content = read_file(readme_path)
+        if readme_content is None:
+            logger.error(f"Error in reading file {readme_file}")
+            return None, {**DEFAULT_TOKEN_USAGE}, f"Error in reading file {readme_file}"
+        if readme_content.strip() == "":
+            return FreeProjectLevelEvaluationREADMEResult(
+                available=False,
+                readability="Poor",
+                project_purpose="Poor",
+                hardware_and_software_spec="Poor",
+                dependency="Poor",
+            ), {**DEFAULT_TOKEN_USAGE}, f"{readme_file} is an empty file."
+        
+        system_prompt = ChatPromptTemplate.from_template(
+            PROJECT_LEVEL_EVALUATION_README_SYSTEM_PROMPT
+        ).format(
+            readme_path=readme_file,
+            readme_content=readme_content,
+            structured_evaluation=structured_reasoning_process,
+        )
+        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        response, _, token_usage, reasoning_process = agent.go(
+            system_prompt=system_prompt,
+            instruction_prompt=EVALUATION_INSTRUCTION,
+            schema=FreeProjectLevelEvaluationREADMEResult,
+        )
+        self.print_step(step_output=f"README: {readme_file} free project level README")
+        self.print_step(step_output=reasoning_process)
+        return response, token_usage, reasoning_process
+
+    def _free_folder_level_readme_evaluate(
+        self, 
+        readme_file: str,
+    ) -> tuple[FreeFolderLevelEvaluationREADMEResult | None, dict, str]:
+        readme_path = Path(self.repo_path, readme_file)
+        readme_content = read_file(readme_path)
+        if readme_content is None:
+            logger.error(f"Error in reading file {readme_file}")
+            return None, {**DEFAULT_TOKEN_USAGE}, f"Error in reading file {readme_file}"
+        if readme_content.strip() == "":
+            return FreeFolderLevelEvaluationREADMEResult(
+                score="Poor",
+                key_strengths=f"{readme_file} is an empty file.",
+                overall_improvement_suggestions=[f"{readme_file} is an empty file."],
+            ), {**DEFAULT_TOKEN_USAGE}, f"{readme_file} is an empty file."
+        
+        readability = PyphenReadability()
+        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
+            _, _, _, _, _ = readability.readability_metrics(readme_content)
+        system_prompt = ChatPromptTemplate.from_template(
+            FOLDER_LEVEL_EVALUATION_README_SYSTEM_PROMPT
+        ).format(
+            readme_path=readme_file,
+            readme_content=readme_content,
+            flesch_reading_ease=flesch_reading_ease,
+            flesch_kincaid_grade=flesch_kincaid_grade,
+            gunning_fog_index=gunning_fog_index,
+            smog_index=smog_index,
+        )
+        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        response, _, token_usage, reasoning_process = agent.go(
+            system_prompt=system_prompt,
+            instruction_prompt=EVALUATION_INSTRUCTION,
+            schema=FreeFolderLevelEvaluationREADMEResult,
+        )
+        self.print_step(step_output=f"README: {readme_file} free folder level README")
+        self.print_step(step_output=reasoning_process)
+        return response, token_usage, reasoning_process
+
+    def _free_evaluate(
+        self, 
+        readme_project_level: dict[str, dict], 
+        structured_readme_evaluations: dict[str, dict]
+    ):
+        readme_files = readme_project_level.keys()
         if readme_files is None or len(readme_files) == 0:
             return None, {**DEFAULT_TOKEN_USAGE}
         
-        readme_evaluations = {}
+        free_readme_evaluations = {}
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
         for readme_file in readme_files:
             readme_path = Path(self.repo_path, readme_file)
+            project_level = readme_project_level[readme_file]["project_level"]
             readme_content = read_file(readme_path)
             if readme_content is None:
                 logger.error(f"Error in reading file {readme_file}")
                 continue
-            if len(readme_content.strip()) == 0:
-                readme_evaluations[readme_file] = {
-                    "evaluation": {
-                        "project_level": not "/" in readme_file,
-                        "score": "Poor",
-                        "key_strengths": f"{readme_file} is an empty file.",
-                        "overall_improvement_suggestions": f"{readme_file} is an empty file.",
-                    },
-                    "reasoning_process": f"{readme_file} is an empty file.",
+            if project_level:
+                evaluation, token_usage, reasoning_process = self._free_project_level_readme_evaluate(
+                    readme_file=readme_file,
+                    structured_reasoning_process=structured_readme_evaluations[readme_file]["reasoning_process"],
+                )
+                if evaluation is None:
+                    continue
+                free_readme_evaluations[readme_file] = {
+                    "evaluation": evaluation,
+                    "reasoning_process": reasoning_process,
                 }
-                continue
-
-            readability = PyphenReadability()
-            flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(readme_content)
-            system_prompt = ChatPromptTemplate.from_template(
-                EVALUATION_README_SYSTEM_PROMPT
-            ).format(
-                readme_content=readme_content,
-                readme_path=readme_file,
-                flesch_reading_ease=flesch_reading_ease,
-                flesch_kincaid_grade=flesch_kincaid_grade,
-                gunning_fog_index=gunning_fog_index,
-                smog_index=smog_index,
-            )
-            # conversation = CommonConversation(llm=self.llm)
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
-            response, _, token_usage, reasoning_process = agent.go(
-                system_prompt=system_prompt,
-                instruction_prompt=EVALUATION_INSTRUCTION,
-                schema=EvaluationREADMEResultSchema,
-            )
-            response = EvaluationREADMEResult(**response)
-            self.print_step(step_output=f"README: {readme_file} free evaluation")
-            self.print_step(step_output=reasoning_process)
-            readme_evaluations[readme_file] = {
-                "evaluation": {
-                    "project_level": response.project_level,
-                    "score": response.score,
-                    "key_strengths": response.key_strengths,
-                    "overall_improvement_suggestions": response.overall_improvement_suggestions,
-                }, 
-                "reasoning_process": reasoning_process
-            }
-            total_token_usage = increase_token_usage(total_token_usage, token_usage)
-        return readme_evaluations, total_token_usage
+                total_token_usage = increase_token_usage(total_token_usage, token_usage)
             
-    def _evaluate(self, files: list[str]) -> tuple[dict, dict, list[str]]:
-        free_readme_evaluations, free_token_usage = self._free_evaluate(files)
-        structured_readme_evaluations, structured_token_usage = self._structured_evaluate(free_readme_evaluations)
+            else:
+                evaluation, token_usage, reasoning_process = self._free_folder_level_readme_evaluate(
+                    readme_file=readme_file,
+                )
+                if evaluation is None:
+                    continue
+                free_readme_evaluations[readme_file] = {
+                    "evaluation": evaluation,
+                    "reasoning_process": reasoning_process,
+                }
+                total_token_usage = increase_token_usage(total_token_usage, token_usage)
+
+        return free_readme_evaluations, total_token_usage
+            
+    def _evaluate(self, files: list[str]) -> tuple[dict[str, EvaluationREADMEResult], dict, list[str]]:
+        total_token_usage = {**DEFAULT_TOKEN_USAGE}
+        project_level_evaluations, project_level_token_usage = self._project_level_evaluate(files)
+        total_token_usage = increase_token_usage(total_token_usage, project_level_token_usage)
+        structured_readme_evaluations, structured_token_usage = self._structured_evaluate(project_level_evaluations)
+        total_token_usage = increase_token_usage(total_token_usage, structured_token_usage)
+        free_readme_evaluations, free_token_usage = self._free_evaluate(project_level_evaluations, structured_readme_evaluations)
+        total_token_usage = increase_token_usage(total_token_usage, free_token_usage)
 
         # combine result
         combined_evaluations = {}
         for f in files:
-            if not f in structured_readme_evaluations:
-                combined_evaluations = {**free_readme_evaluations[f]}
+            if not f in free_readme_evaluations:
+                continue
+            project_level = project_level_evaluations[f]["project_level"]
+            if project_level:
+                combined_evaluations[f] = EvaluationREADMEResult(
+                    project_level=project_level,
+                    structured_evaluation=structured_readme_evaluations[f]["evaluation"],
+                    free_evaluation=free_readme_evaluations[f]["evaluation"],
+                    structured_reasoning_process=structured_readme_evaluations[f]["reasoning_process"],
+                    free_reasoning_process=free_readme_evaluations[f]["reasoning_process"],
+                )
             else:
-                combined_evaluations[f] = {
-                    **free_readme_evaluations[f],
-                    **structured_readme_evaluations[f],
-                }
+                combined_evaluations[f] = EvaluationREADMEResult(
+                    project_level=project_level,
+                    structured_evaluation=None,
+                    free_evaluation=free_readme_evaluations[f]["evaluation"],
+                    structured_reasoning_process=None,
+                    free_reasoning_process=free_readme_evaluations[f]["reasoning_process"],
+                )
         
-        total_token_usage = increase_token_usage(free_token_usage, structured_token_usage)
-
         return combined_evaluations, total_token_usage, files
     
     def _collect_files(self):

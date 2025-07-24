@@ -426,6 +426,7 @@ def try_parse_with_llm(llm: BaseChatOpenAI, input_text: str, schema: any):
     system_prompt = ChatPromptTemplate.from_template(
         STRING_TO_OBJECT_SYSTEM_PROMPT
     ).format(input_text=input_text)
+    system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt)
     ])
@@ -443,3 +444,33 @@ def try_parse_with_llm(llm: BaseChatOpenAI, input_text: str, schema: any):
     except Exception as e:
         logger.error(e)
         return None
+
+def read_license_file(repo_path: str) -> tuple[str | None, str|None]:
+    # find hardcoded license file
+    hardcoded_license_files = [
+        "LICENSE",
+        "LICENSE.txt",
+        "LICENSE.md",
+        "LICENSE.rst",
+    ]
+    license_files = []
+    for file in hardcoded_license_files:
+        if os.path.exists(os.path.join(repo_path, file)):
+            with open(os.path.join(repo_path, file), "r") as f:
+                license_files.append((f.read(), os.path.join(repo_path, file)))
+    
+    max_item = max(license_files, key=lambda x: len(x[0])) if len(license_files) > 0 else (None, None)
+    if max_item[0] is not None:
+        return max_item[0], max_item[1]
+
+    # find in root directory
+    for root, _, files in os.walk(repo_path):
+        for file in files:
+            if file.lower() == "license":
+                with open(os.path.join(root, file), "r") as f:
+                    return f.read(), os.path.join(root, file)
+            if file[:8].lower() == "license.":
+                with open(os.path.join(root, file), "r") as f:
+                    return f.read(), os.path.join(root, file)
+    return None, None
+
