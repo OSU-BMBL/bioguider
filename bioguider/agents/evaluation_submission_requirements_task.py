@@ -1,13 +1,18 @@
 
-from typing import Optional
-from pydantic import BaseModel, Field
+
 from bioguider.agents.agent_utils import try_parse_json_object, try_parse_with_llm
 from bioguider.agents.evaluation_task import EvaluationTask
 from bioguider.agents.collection_task import CollectionTask
 from bioguider.agents.identification_task import IdentificationTask
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
-from bioguider.agents.evaluation_installation_task import StructuredEvaluationInstallationResult
-from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
+from bioguider.utils.constants import (
+    DEFAULT_TOKEN_USAGE, 
+    EvaluationInstallationResult, 
+    EvaluationREADMEResult,
+    SoftwarePackageContentResult,
+    DemoInstructionsResult,
+    EvaluationSubmissionRequirementsResult,
+)
 
 DEMO_INSTRUCTION_GOAL = """
 1. Identify if it provides the instructions to run on provided data
@@ -18,11 +23,6 @@ DEMO_INSTRUCTION_GOAL = """
 DEMO_INSTRUCTION_FINAL_ANSWER = \
 '{{"run_on_data_instruction": <True or False>, "run_on_custom_instruction": <True or False>, "expected_output_description": <True Or False>}}'
 
-class DemoInstructionsResult(BaseModel):
-    run_on_data_instruction: Optional[bool] = Field(description="A boolean value. Does it provide instructions on how to run on provided data?")
-    run_on_custom_instruction: Optional[bool] = Field(description="A boolean value. Does it provide instructions on how to run on custom data?")
-    expected_output_description: Optional[bool] = Field(description="A boolean value. Does it provide the description of expected output?")
-
 class EvaluationSubmissionRequirementsTask(EvaluationTask):
     def __init__(
         self, 
@@ -32,8 +32,8 @@ class EvaluationSubmissionRequirementsTask(EvaluationTask):
         meta_data = None, 
         step_callback = None, 
         summarized_files_db = None,
-        readme_files_evaluation: dict | None = None,
-        installation_evaluation: dict | None = None,
+        readme_files_evaluation: dict[str, EvaluationREADMEResult] | None = None,
+        installation_evaluation: EvaluationInstallationResult | None = None,
         installation_files: list[str] | None = None
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
@@ -59,24 +59,24 @@ class EvaluationSubmissionRequirementsTask(EvaluationTask):
 
         return files
     
-    def _evaluate_software_package_content(self):
+    def _evaluate_software_package_content(self) -> tuple[SoftwarePackageContentResult, list[str]]:
         files = self._collect_software_package_content()
         if len(files) == 3:
-            return {
-                "compiled_standalone_software": files[0].strip().lower() != "n/a",
-                "source_code": files[1].strip().lower() != "n/a",
-                "demo_dataset": files[2].strip().lower() != "n/a",
-            }, files
+            return SoftwarePackageContentResult(
+                compiled_standalone_software=files[0].strip().lower() != "n/a",
+                source_code=files[1].strip().lower() != "n/a",
+                demo_dataset=files[2].strip().lower() != "n/a",
+            ), files
         else:
-            return {
-                "compiled_standalone_software": False,
-                "source_code": False,
-                "demo_dataset": False,
-            }, files
+            return SoftwarePackageContentResult(
+                compiled_standalone_software=False,
+                source_code=False,
+                demo_dataset=False,
+            ), files
     
-    def _evaluatie_demo_instructions(self):
+    def _evaluatie_demo_instructions(self) -> tuple[DemoInstructionsResult | None, list[str]]:
         readme_files = [f for f in self.readme_files_evaluation.keys() \
-                        if self.readme_files_evaluation[f]["evaluation"]["project_level"]]
+                        if self.readme_files_evaluation[f].project_level]
         installation_files = self.installation_files if self.installation_files is not None else []
         provided_files = readme_files + installation_files
         provided_files = provided_files if len(provided_files) > 0 else None
@@ -99,43 +99,58 @@ class EvaluationSubmissionRequirementsTask(EvaluationTask):
         parsed_obj = self._parse_demo_instruction_result(final_answer)
         return parsed_obj, provided_files
 
-    def _parse_demo_instruction_result(self, result: str | dict):
+    def _parse_demo_instruction_result(self, result: str | dict) -> DemoInstructionsResult:
+        parsed_obj = None
         if isinstance(result, dict):
-            return result
-        obj = try_parse_json_object(result)
-        if obj is None:
-            obj, token_usage = try_parse_with_llm(
-                llm=self.llm,
-                input_text=result,
-                schema=DemoInstructionsResult,
-            )
-            obj = vars(obj) if obj is not None else obj
-            self.print_step(token_usage=token_usage)
-            self.print_step(step_output=str(obj))
+            parsed_obj = result
+        else:
+            parsed_obj = try_parse_json_object(result)
+            if parsed_obj is None:
+                parsed_obj, token_usage = try_parse_with_llm(
+                    llm=self.llm,
+                    input_text=result,
+                    schema=DemoInstructionsResult,
+                )
+                parsed_obj = vars(parsed_obj) if parsed_obj is not None else parsed_obj
+                self.print_step(token_usage=token_usage)
+                self.print_step(step_output=str(parsed_obj))
 
-        return obj
-
+        return DemoInstructionsResult(
+            run_on_data_instruction = parsed_obj["run_on_data_instruction"] \
+                if "run_on_data_instruction" in parsed_obj else False,
+            run_on_custom_instruction = parsed_obj["run_on_custom_instruction"] \
+                if "run_on_custom_instruction" in parsed_obj else False,
+            expected_output_description = parsed_obj["expected_output_description"] \
+                if "expected_output_description" in parsed_obj else False,
+        )
 
     def _combine_evaluation(
         self,
-        software_evaluation: dict,
-        demo_evaluation: dict,
-    ):
+        software_evaluation: SoftwarePackageContentResult,
+        demo_evaluation: DemoInstructionsResult,
+    ) -> EvaluationSubmissionRequirementsResult:
         readme_files = [f for f in self.readme_files_evaluation.keys() \
-                        if self.readme_files_evaluation[f]["evaluation"]["project_level"]]
-        structured_install_evaluation: StructuredEvaluationInstallationResult = \
-            self.installation_evaluation["structured_evaluation"]
+                        if self.readme_files_evaluation[f].project_level]
+        structured_install_evaluation = self.installation_evaluation.structured_evaluation
         software_dependency = structured_install_evaluation.dependency_number > 0
         install_tutorial = structured_install_evaluation.install_tutorial
-        license = any([self.readme_files_evaluation[f]["structured_evaluation"].license_score for f in readme_files])
-        return {
-            **software_evaluation,
-            **demo_evaluation,
-            "complete_readme": len(readme_files) > 0,
-            "software_dependency": software_dependency,
-            "install_tutorial": install_tutorial,
-            "license": license,
-        }
+        license = any([
+            self.readme_files_evaluation[f].structured_evaluation.license_score \
+                if self.readme_files_evaluation[f].structured_evaluation is not None \
+                else False for f in readme_files
+        ])
+        return EvaluationSubmissionRequirementsResult(
+            compiled_standalone_software=software_evaluation.compiled_standalone_software,
+            source_code=software_evaluation.source_code,
+            demo_dataset=software_evaluation.demo_dataset,
+            run_on_data_instruction=demo_evaluation.run_on_data_instruction,
+            run_on_custom_instruction=demo_evaluation.run_on_custom_instruction,
+            expected_output_description=demo_evaluation.expected_output_description,
+            complete_readme=len(readme_files) > 0,
+            software_dependency=software_dependency,
+            install_tutorial=install_tutorial,
+            license=license,
+        )
 
     def _evaluate(self, files):
         

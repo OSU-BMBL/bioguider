@@ -2,6 +2,8 @@
 from enum import Enum
 from typing import Optional
 
+from pydantic import BaseModel, Field
+
 DEFAULT_TOKEN_USAGE = {
     "total_tokens": 0,
     "completion_tokens": 0,
@@ -40,4 +42,87 @@ class ProjectMetadata:
 
 MAX_FILE_LENGTH=10 *1024 # 10K
 MAX_SENTENCE_NUM=20
-MAX_STEP_COUNT=30
+MAX_STEP_COUNT=3*10
+
+class ProjectLevelEvaluationREADMEResult(BaseModel):
+    project_level: Optional[bool]=Field(description="A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
+
+class StructuredEvaluationREADMEResult(BaseModel):
+    available_score: Optional[bool]=Field(description="A boolean value, Is the README accessible and present?")
+    readability_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    readability_suggestions: Optional[str]=Field(description="Suggestions to improve readability if necessary")
+    project_purpose_score: Optional[bool]=Field(description="A boolean value. Is the project's goal or function clearly stated?")
+    project_purpose_suggestions: Optional[str]=Field(description="Suggestions if not clear")
+    hardware_and_software_spec_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    hardware_and_software_spec_suggestions: Optional[str]=Field(description="Suggestions if not clear")
+    dependency_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    dependency_suggestions: Optional[str]=Field(description="Suggestions if dependencies are not clearly stated")
+    license_score: Optional[bool]=Field(description="A boolean value, Are contributor or maintainer details provided?")
+    license_suggestions: Optional[str]=Field(description="Suggestions to improve license information")
+    contributor_author_score: Optional[bool]=Field(description="A boolean value. are contributors or author included?")
+    overall_score: str=Field(description="A overall scroll for the README quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+
+class FreeProjectLevelEvaluationREADMEResult(BaseModel):
+    available: Optional[str]=Field(description="A string including assessment and suggestion for the availability of the README file")
+    readability: Optional[str]=Field(description="A string including assessment and suggestion for the readability of the README file")
+    project_purpose: Optional[str]=Field(description="A string including assessment and suggestion for the project purpose of the README file")
+    hardware_and_software_spec: Optional[str]=Field(description="A string including assessment and suggestion for the hardware and software spec and compatibility description of the README file")
+    dependency: Optional[str]=Field(description="A string including assessment and suggestion for the dependencies of the README file")
+    license: Optional[str]=Field(description="A string including assessment and suggestion for the license information of the README file")
+    contributor_author: Optional[str]=Field(description="A string including assessment and suggestion for the contributor and author information of the README file")
+
+class FreeFolderLevelEvaluationREADMEResult(BaseModel):
+    score: Optional[str]=Field(description="An overall score")
+    key_strengths: Optional[str]=Field(description="A string specifying the key strengths of README file.")
+    overall_improvement_suggestions: Optional[list[str]]=Field(description="A list of overall improvement suggestions")
+
+class EvaluationREADMEResult(BaseModel):
+    project_level: bool
+    structured_evaluation: StructuredEvaluationREADMEResult | None
+    free_evaluation: FreeProjectLevelEvaluationREADMEResult | FreeFolderLevelEvaluationREADMEResult | None
+    structured_reasoning_process: str | None
+    free_reasoning_process: str | None
+
+
+class StructuredEvaluationInstallationResult(BaseModel):
+    install_available: Optional[bool]=Field(description="A boolean value. Is the installation documents accessible and present?")
+    install_tutorial: Optional[bool]=Field(description="A boolean value. Is the installation tutorial provided?")
+    dependency_number: Optional[int]=Field(description="A number. It is the number of dependencies that are required to install.")
+    dependency_suggestions: Optional[str]=Field(description="A string value. It is the specific improvements if necessary, such as missing dependencies")
+    compatible_os: Optional[bool]=Field(description="A boolean value. Is compatible operating system described?")
+    overall_score: Optional[str]=Field(description="A overall scroll for the installation quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+
+class FreeEvaluationInstallationResult(BaseModel):
+    ease_of_access: Optional[str]=Field(description="A string including assessment and suggestions for the ease of access of the installation information")
+    clarity_of_dependency: Optional[str]=Field(description="A string including assessment and suggestions for the clarity of dependency specification")
+    hardware_requirements: Optional[str]=Field(description="A string including assessment and suggestions for the hardware requirements")
+    installation_guide: Optional[str]=Field(description="A string including assessment and suggestions for the installation guide")
+    compatible_os: Optional[str]=Field(description="A string including assessment and suggestions for the compatible operating system")
+
+class EvaluationInstallationResult(BaseModel):
+    structured_evaluation: StructuredEvaluationInstallationResult | None
+    free_evaluation: FreeEvaluationInstallationResult | None
+    structured_reasoning_process: str | None
+    free_reasoning_process: str | None
+
+class SoftwarePackageContentResult(BaseModel):
+    compiled_standalone_software: Optional[bool] = Field(description="A boolean value. Does it provide the compiled standalone software?")
+    source_code: Optional[bool] = Field(description="A boolean value. Does it provide the source code?")
+    demo_dataset: Optional[bool] = Field(description="A boolean value. Does it provide the demo dataset?")
+
+class DemoInstructionsResult(BaseModel):
+    run_on_data_instruction: Optional[bool] = Field(description="A boolean value. Does it provide instructions on how to run on provided data?")
+    run_on_custom_instruction: Optional[bool] = Field(description="A boolean value. Does it provide instructions on how to run on custom data?")
+    expected_output_description: Optional[bool] = Field(description="A boolean value. Does it provide the description of expected output?")
+
+class EvaluationSubmissionRequirementsResult(BaseModel):
+    compiled_standalone_software: bool
+    source_code: bool
+    demo_dataset: bool
+    run_on_data_instruction: bool
+    run_on_custom_instruction: bool
+    expected_output_description: bool
+    complete_readme: bool
+    software_dependency: bool
+    install_tutorial: bool
+    license: bool

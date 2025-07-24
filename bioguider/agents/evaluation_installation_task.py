@@ -1,24 +1,25 @@
 import os
 from pathlib import Path
 import logging
-from typing import Callable, Optional
-from abc import ABC, abstractmethod
 from langchain.prompts import ChatPromptTemplate
-from langchain_openai.chat_models.base import BaseChatOpenAI
-from pydantic import BaseModel, Field
 from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.agents.collection_task import CollectionTask
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, CollectionGoalItemEnum
-from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
+from bioguider.utils.constants import (
+    DEFAULT_TOKEN_USAGE, 
+    ProjectMetadata,
+    StructuredEvaluationInstallationResult,
+    FreeEvaluationInstallationResult,
+    EvaluationInstallationResult,
+)
 from bioguider.rag.data_pipeline import count_tokens
 from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
-from .common_agent import CommonConversation
-from ..utils.pyphen_utils import PyphenReadability
-from ..utils.gitignore_checker import GitignoreChecker
+
 from .evaluation_task import EvaluationTask
-from .agent_utils import increase_token_usage, read_file
+from .agent_utils import read_file
+from bioguider.utils.utils import increase_token_usage
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,10 @@ Your task is to analyze the provided files related to installation and generate 
 4. **Compatible Operating System**: Is the compatible operating system described?
    * Output: `Yes` or `No`
 
-5. **Overall Score**: Give an overall quality rating of the Installation information.
+5. **Hardware Requirements**: Is the hardware requirements described?
+   * Output: `Yes` or `No`
+
+6. **Overall Score**: Give an overall quality rating of the Installation information.
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
 
 ---
@@ -58,6 +62,7 @@ Your final report must **exactly match** the following format. Do not add or omi
   * number: [Number]
   * suggestions: <suggestion to improve **dependency information** like missing dependencies
 **Compatible Operating System:** [Yes / No]
+**Hardware Requirements:** [Yes / No]
 **Overall Score:** [Poor / Fair / Good / Excellent]
 
 ---
@@ -68,43 +73,45 @@ Your final report must **exactly match** the following format. Do not add or omi
 """
 
 
-EVALUATION_INSTALLATION_SYSTEM_PROMPT = """
+FREE_EVALUATION_INSTALLATION_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of **installation instructions** in software repositories.
 Your task is to analyze the provided content of installation-related files and generate a **comprehensive, structured quality report**.
+You will be given:
+1. The content of installation-related files.
+2. A structured evaluation of the installation-related files and its reasoning process.
 
 ---
 
-### Evaluation Criteria
-
-Please assess the installation information using the following criteria. For each, provide a concise evaluation and specific feedback:
-
-1. **Ease of Access**
-   * Is the installation information clearly presented and easy to locate within the repository?
-   * Is it included in a top-level README, a dedicated INSTALL.md file, or other accessible locations?
-
-2. **Clarity of Dependency Specification**
-   * Are all software and library dependencies clearly listed?
-   * Are installation methods (e.g., `pip`, `conda`, `apt`) for those dependencies explicitly provided?
-
-3. **Hardware Requirements**
-   * Does the documentation specify hardware needs (e.g., GPU, memory, OS) if relevant?
-
-4. **Step-by-Step Installation Guide**
-   * Is there a clear, ordered set of instructions for installing the software?
-   * Are example commands or configuration steps provided to help users follow along?
+### **Instructions**
+1. Based on the provided structured evaluation and its reasoning process, generate a free evaluation of the installation-related files.
+2. Focus on the explanation of assessment in structured evaluation and how to improve the installation-related files based on the structured evaluation and its reasoning process.
+   * For each suggestion to improve the installation-related files, you **must provide some examples** of the original text snippet and the improving comments.
+3. For each item in the structured evaluation, provide a detailed assessment followed by specific, actionable comments for improvement.
+4. Your improvement suggestions must also include the original text snippet and the improving comments.
+5. Your improvement suggestions must also include suggestions to improve readability.
+6. If you think the it is good enough, you can say so.
 
 ---
 
-### Output Format
-
-Your response **must exactly follow** the structure below:
+### **Output Format**
+Your output must **exactly match** the following format. Do not add or omit any sections.
 
 **FinalAnswer**
-**Overall Score:** [Poor / Fair / Good / Excellent]  
-**Ease of Access:** <your comments>  
-**Clarity of Dependency Specification:** <your comments>  
-**Hardware Requirements:** <your comments>  
-**Installation Guide:** <your comments>  
+**Ease of Access:** 
+  <Your assessment and suggestion here>
+**Clarity of Dependency Specification:**
+  <Your assessment and suggestion here>
+**Hardware Requirements:**
+  <Your assessment and suggestion here>
+**Installation Guide:**
+  <Your assessment and suggestion here>  
+**Compatible Operating System:**
+  <Your assessment and suggestion here>
+
+---
+
+### **Structured Evaluation and Reasoning Process**
+{structured_evaluation_and_reasoning_process}
 
 ---
 
@@ -112,54 +119,6 @@ Your response **must exactly follow** the structure below:
 {installation_files_content}
 
 """
-
-class StructuredEvaluationInstallationResult(BaseModel):
-    install_available: Optional[bool]=Field(description="A boolean value. Is the installation documents accessible and present?")
-    install_tutorial: Optional[bool]=Field(description="A boolean value. Is the installation tutorial provided?")
-    dependency_number: Optional[int]=Field(description="A number. It is the number of dependencies that are required to install.")
-    dependency_suggestions: Optional[str]=Field(description="A string value. It is the specific improvements if necessary, such as missing dependencies")
-    compatible_os: Optional[bool]=Field(description="A boolean value. Is compatible operating system described?")
-    overall_score: Optional[str]=Field(description="A overall scroll for the installation quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-
-class EvaluationInstallationResult(BaseModel):
-    ease_of_access: Optional[str]=Field(description="Is the installation information easy to access")
-    score: Optional[str]=Field(description="An overall score, could be Poor, Fair, Good or Excellent")
-    clarity_of_dependency: Optional[str]=Field(description="Are all dependencies clearly listed")
-    hardware_requirements: Optional[str]=Field(description="Are all hardware requirements clearly specified")
-    installation_guide: Optional[str]=Field(description="Is there a clear, ordered set of instructions for installing the software")
-
-EvaluationInstallationResultSchema = {
-    "title": "EvaluationREADMEResult",
-    "type": "object",
-    "properties": {
-        "ease_of_access": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "Is the installation information easy to access",
-            "title": "Ease of Access"
-        },
-        "score": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "An overall score, could be Poor, Fair, Good or Excellent",
-            "title": "Score"
-        },
-        "clarity_of_dependency": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "Are all dependencies clearly listed",
-            "title": "Clarity of Dependency",
-        },
-        "hardware_requirements": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "Are all hardware requirements clearly specified",
-            "title": "Hardware Requirements"
-        },
-        "installation_guide": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
-            "description": "Is there a clear, ordered set of instructions for installing the software",
-            "title": "Installation Guide"
-        }
-    },
-    "required": ["ease_of_access", "score", "clarity_of_dependency", "hardware_requirements", "installation_guide"]
-}
 
 class EvaluationInstallationTask(EvaluationTask):
     def __init__(
@@ -217,25 +176,30 @@ class EvaluationInstallationTask(EvaluationTask):
         self.print_step(token_usage=token_usage)
 
         return {
-            "structured_evaluation": res,
-            "structured_reasoning_process": reasoning_process,
+            "evaluation": res,
+            "reasoning_process": reasoning_process,
         }, token_usage
     
-    def _free_evaluate(self, files: list[str] | None=None) -> tuple[dict|None, dict]:
+    def _free_evaluate(
+        self, 
+        files: list[str] | None=None,
+        structured_evaluation_and_reasoning_process: str | None=None,
+    ) -> tuple[dict|None, dict]:
         if files is None or len(files) == 0:
             return None, {**DEFAULT_TOKEN_USAGE}
         
+        structured_evaluation_and_reasoning_process = structured_evaluation_and_reasoning_process or "N/A"
         files_content = self._collect_install_files_content(files)
-        system_prompt = ChatPromptTemplate.from_template(EVALUATION_INSTALLATION_SYSTEM_PROMPT).format(
-            installation_files_content=files_content
+        system_prompt = ChatPromptTemplate.from_template(FREE_EVALUATION_INSTALLATION_SYSTEM_PROMPT).format(
+            installation_files_content=files_content,
+            structured_evaluation_and_reasoning_process=structured_evaluation_and_reasoning_process,
         )
         agent = CommonAgentTwoChainSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
-            schema=EvaluationInstallationResultSchema,
+            schema=FreeEvaluationInstallationResult,
         )
-        res = EvaluationInstallationResult(**res)
         self.print_step(step_output=reasoning_process)
         self.print_step(token_usage=token_usage)
         evaluation = {
@@ -244,15 +208,20 @@ class EvaluationInstallationTask(EvaluationTask):
         }
         return evaluation, token_usage
     
-    def _evaluate(self, files: list[str] | None = None) -> tuple[dict | None, dict, list[str]]:
-        evaluation, token_usage = self._free_evaluate(files)
-        structured_evaluation, structured_token_usage = self._structured_evaluate(files)
+    def _evaluate(self, files: list[str] | None = None) -> tuple[EvaluationInstallationResult | None, dict, list[str]]:
+        total_token_usage = {**DEFAULT_TOKEN_USAGE}
 
-        combined_evaluation = {
-            **evaluation,
-            **structured_evaluation,
-        }
-        total_token_usage = increase_token_usage(token_usage, structured_token_usage)
+        structured_evaluation, structured_token_usage = self._structured_evaluate(files)
+        total_token_usage = increase_token_usage(total_token_usage, structured_token_usage)
+        evaluation, token_usage = self._free_evaluate(files, structured_evaluation["reasoning_process"])
+        total_token_usage = increase_token_usage(total_token_usage, token_usage)
+
+        combined_evaluation = EvaluationInstallationResult(
+            structured_evaluation=structured_evaluation["evaluation"],
+            free_evaluation=evaluation["evaluation"],
+            structured_reasoning_process=structured_evaluation["reasoning_process"],
+            free_reasoning_process=evaluation["reasoning_process"],
+        )
 
         return combined_evaluation, total_token_usage, files
 

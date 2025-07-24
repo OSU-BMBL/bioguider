@@ -12,7 +12,7 @@ def test_EvaluationInstallationTask_RepoAgent(llm, step_callback, root_path):
         gitignore_path=f"{root_path}/RepoAgent/.gitignore",
         step_callback=step_callback,
     )
-    evaluations = task.evaluate(files)
+    evaluations, token_usage, files = task._evaluate(files)
 
     assert evaluations is not None
     assert files is not None and len(files) > 0

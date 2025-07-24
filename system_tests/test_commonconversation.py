@@ -1,7 +1,7 @@
 
 import pytest
 
-from bioguider.agents.common_agent import CommonConversation
+from bioguider.agents.common_conversation import CommonConversation
 
 def test_CommonConversation(llm):
     conversation = CommonConversation(llm=llm)

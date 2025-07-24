@@ -79,7 +79,7 @@ class IdentificationObserveStep(PEOCommonStep):
     def _execute_directly(self, state: IdentificationWorkflowState):
         step_count = state["step_count"]
         instruction = "Now, we have reached max recursion limit, please give me the **final answer** based on the current information" \
-            if step_count == MAX_STEP_COUNT - 2 else "Now, Let's begin."
+            if step_count == MAX_STEP_COUNT/3 - 2 else "Now, Let's begin."
         system_prompt = self._prepare_system_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(

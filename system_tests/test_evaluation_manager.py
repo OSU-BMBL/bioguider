@@ -53,7 +53,7 @@ def test_EvaluationManager_on_installation(llm, step_callback):
 def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)
-    mgr.prepare_repo("https://github.com/satijalab/seurat")
+    mgr.prepare_repo("https://github.com/OpenBMB/RepoAgent")
 
     installation_evaluation, installation_files = mgr.evaluate_installation()
     readme_evaluation, readme_files = mgr.evaluate_readme()
