@@ -1,5 +1,10 @@
 import logging
+import re
+import subprocess
+from typing import Optional
 import tiktoken
+
+from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 logger = logging.getLogger(__name__)
 
 def count_tokens(text: str, local_ollama: bool = False) -> int:
@@ -25,3 +30,42 @@ def count_tokens(text: str, local_ollama: bool = False) -> int:
         logger.warning(f"Error counting tokens with tiktoken: {e}")
         # Rough approximation: 4 characters per token
         return len(text) // 4
+
+
+def run_command(command: list, cwd: str = None, timeout: int = None):
+    """
+    Run a shell command with optional timeout and return stdout, stderr, and return code.
+    """
+    try:
+        result = subprocess.run(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout
+        )
+        return result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired as e:
+        return e.stdout or "", e.stderr or f"Command timed out after {timeout} seconds", -1
+
+def escape_braces(text: str) -> str:
+    # First replace single } not part of }} with }}
+    text = re.sub(r'(?<!})}(?!})', '}}', text)
+    # Then replace single { not part of {{
+    text = re.sub(r'(?<!{){(?!{)', '{{', text)
+    return text
+
+def increase_token_usage(
+    token_usage: Optional[dict] = None,
+    incremental: dict = {**DEFAULT_TOKEN_USAGE},
+):
+    if token_usage is None:
+        token_usage = {**DEFAULT_TOKEN_USAGE}
+    token_usage["total_tokens"] += incremental["total_tokens"]
+    token_usage["completion_tokens"] += incremental["completion_tokens"]
+    token_usage["prompt_tokens"] += incremental["prompt_tokens"]
+
+    return token_usage
+
+    

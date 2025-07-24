@@ -1,7 +1,7 @@
 
 import pytest
 
-from bioguider.agents.agent_utils import escape_braces
+from bioguider.utils.utils import escape_braces
 
 def test_escape_braces():
     # Test case with single braces

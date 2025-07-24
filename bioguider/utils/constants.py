@@ -42,7 +42,7 @@ class ProjectMetadata:
 
 MAX_FILE_LENGTH=10 *1024 # 10K
 MAX_SENTENCE_NUM=20
-MAX_STEP_COUNT=30
+MAX_STEP_COUNT=3*10
 
 class ProjectLevelEvaluationREADMEResult(BaseModel):
     project_level: Optional[bool]=Field(description="A boolean value specifying if the README file is **project-level** README. TRUE: project-level, FALSE, folder-level")
@@ -126,4 +126,3 @@ class EvaluationSubmissionRequirementsResult(BaseModel):
     software_dependency: bool
     install_tutorial: bool
     license: bool
-    

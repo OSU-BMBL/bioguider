@@ -3,7 +3,6 @@ import json
 from json import JSONDecodeError
 import os
 import re
-import subprocess
 from typing import List, Optional, Tuple, Union
 from langchain_openai import AzureChatOpenAI
 from langchain_deepseek import ChatDeepSeek
@@ -25,6 +24,7 @@ from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, MAX_FILE_LENGTH, MAX_
 from bioguider.utils.file_utils import get_file_type
 from ..utils.gitignore_checker import GitignoreChecker
 from ..database.summarized_file_db import SummarizedFilesDb
+from bioguider.agents.common_conversation import CommonConversation
 
 logger = logging.getLogger(__name__)
 
@@ -238,19 +238,6 @@ def summarize_file(
     
     return out, token_usage
 
-def increase_token_usage(
-    token_usage: Optional[dict] = None,
-    incremental: dict = {**DEFAULT_TOKEN_USAGE},
-):
-    if token_usage is None:
-        token_usage = {**DEFAULT_TOKEN_USAGE}
-    token_usage["total_tokens"] += incremental["total_tokens"]
-    token_usage["completion_tokens"] += incremental["completion_tokens"]
-    token_usage["prompt_tokens"] += incremental["prompt_tokens"]
-
-    return token_usage
-
-
   # Set up a prompt template
 class CustomPromptTemplate(StringPromptTemplate):
     # The template to use
@@ -355,30 +342,6 @@ def convert_plan_to_string(plan: PlanAgentResult) -> str:
         plan_str += action_str
     return plan_str
 
-def run_command(command: list, cwd: str = None, timeout: int = None):
-    """
-    Run a shell command with optional timeout and return stdout, stderr, and return code.
-    """
-    try:
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout
-        )
-        return result.stdout, result.stderr, result.returncode
-    except subprocess.TimeoutExpired as e:
-        return e.stdout or "", e.stderr or f"Command timed out after {timeout} seconds", -1
-
-def escape_braces(text: str) -> str:
-    # First replace single } not part of }} with }}
-    text = re.sub(r'(?<!})}(?!})', '}}', text)
-    # Then replace single { not part of {{
-    text = re.sub(r'(?<!{){(?!{)', '{{', text)
-    return text
-
 STRING_TO_OBJECT_SYSTEM_PROMPT = """
 You are an expert to understand data. You will be provided a text, and your task is to extracted structured data from the provided text.
 
@@ -426,24 +389,14 @@ def try_parse_with_llm(llm: BaseChatOpenAI, input_text: str, schema: any):
     system_prompt = ChatPromptTemplate.from_template(
         STRING_TO_OBJECT_SYSTEM_PROMPT
     ).format(input_text=input_text)
-    system_prompt = system_prompt.replace("{", "{{").replace("}", "}}")
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt)
-    ])
-    agent = prompt | llm.with_structured_output(schema)
-    callback_handler = OpenAICallbackHandler()
-
-    try:
-        res = agent.invoke(
-            input={},
-            config={
-                "callbacks": [callback_handler],
-            },
-        )
-        return res, vars(callback_handler)
-    except Exception as e:
-        logger.error(e)
-        return None
+    
+    conversation = CommonConversation(llm=llm)
+    res, token_usage = conversation.generate_with_schema(
+        system_prompt=system_prompt,
+        instruction_prompt="Let's start to parse the input text.",
+        schema=schema,
+    )
+    return res, token_usage
 
 def read_license_file(repo_path: str) -> tuple[str | None, str|None]:
     # find hardcoded license file

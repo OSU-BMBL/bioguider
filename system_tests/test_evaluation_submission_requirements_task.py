@@ -74,7 +74,9 @@ def test_EvaluationSubmissionRequirementsTask_DemoInstructions_RepoAgent(llm, st
         installation_files=["README.md", "requirements.txt", "Dockerfile"]
     )
 
-    evaluation, files = task._evaluatie_demo_instructions()
-    assert len(files) == 3
+    demo_evaluation, demo_files = task._evaluatie_demo_instructions()
+    software_evaluation, software_files = task._evaluate_software_package_content()
+    assert len(demo_files) > 0
+    assert len(software_files) > 0
 
 

@@ -18,7 +18,8 @@ from bioguider.rag.data_pipeline import count_tokens
 from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 
 from .evaluation_task import EvaluationTask
-from .agent_utils import increase_token_usage, read_file
+from .agent_utils import read_file
+from bioguider.utils.utils import increase_token_usage
 
 
 logger = logging.getLogger(__name__)

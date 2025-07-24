@@ -5,7 +5,7 @@ from textstat import textstat
 
 from langchain_core.prompts import ChatPromptTemplate
 from bioguider.agents.agent_utils import read_file
-from bioguider.agents.common_agent import CommonConversation
+from bioguider.agents.common_conversation import CommonConversation
 
 logger = logging.getLogger(__name__)
 

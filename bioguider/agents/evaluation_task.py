@@ -11,7 +11,7 @@ from bioguider.agents.agent_utils import read_file
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
-from .common_agent import CommonConversation
+from .common_conversation import CommonConversation
 from ..utils.pyphen_utils import PyphenReadability
 
 logger = logging.getLogger(__name__)

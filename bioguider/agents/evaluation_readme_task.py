@@ -9,8 +9,7 @@ from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.gitignore_checker import GitignoreChecker
 
 from ..utils.pyphen_utils import PyphenReadability
-from bioguider.agents.agent_utils import (
-    increase_token_usage, 
+from bioguider.agents.agent_utils import ( 
     read_file, read_license_file, 
     summarize_file
 )
@@ -25,6 +24,7 @@ from bioguider.utils.constants import (
     FreeFolderLevelEvaluationREADMEResult,
     EvaluationREADMEResult,
 )
+from bioguider.utils.utils import increase_token_usage
 
 logger = logging.getLogger(__name__)
 
