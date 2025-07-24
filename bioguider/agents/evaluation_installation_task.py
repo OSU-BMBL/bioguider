@@ -1,11 +1,7 @@
 import os
 from pathlib import Path
 import logging
-from typing import Callable, Optional
-from abc import ABC, abstractmethod
 from langchain.prompts import ChatPromptTemplate
-from langchain_openai.chat_models.base import BaseChatOpenAI
-from pydantic import BaseModel, Field
 from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
@@ -20,9 +16,7 @@ from bioguider.utils.constants import (
 )
 from bioguider.rag.data_pipeline import count_tokens
 from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
-from .common_agent import CommonConversation
-from ..utils.pyphen_utils import PyphenReadability
-from ..utils.gitignore_checker import GitignoreChecker
+
 from .evaluation_task import EvaluationTask
 from .agent_utils import increase_token_usage, read_file
 

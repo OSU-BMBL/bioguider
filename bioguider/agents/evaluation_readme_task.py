@@ -1,10 +1,9 @@
 
 import logging
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from pydantic import BaseModel, Field
 
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.gitignore_checker import GitignoreChecker
