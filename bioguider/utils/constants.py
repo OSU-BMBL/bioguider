@@ -91,6 +91,7 @@ class StructuredEvaluationInstallationResult(BaseModel):
     dependency_suggestions: Optional[str]=Field(description="A string value. It is the specific improvements if necessary, such as missing dependencies")
     compatible_os: Optional[bool]=Field(description="A boolean value. Is compatible operating system described?")
     overall_score: Optional[str]=Field(description="A overall scroll for the installation quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    hardware_requirements: Optional[bool]=Field(description="A boolean value. Is the hardware requirements described?")
 
 class FreeEvaluationInstallationResult(BaseModel):
     ease_of_access: Optional[str]=Field(description="A string including assessment and suggestions for the ease of access of the installation information")
@@ -126,3 +127,5 @@ class EvaluationSubmissionRequirementsResult(BaseModel):
     software_dependency: bool
     install_tutorial: bool
     license: bool
+    hardware_requirements: bool
+    compatible_os: bool

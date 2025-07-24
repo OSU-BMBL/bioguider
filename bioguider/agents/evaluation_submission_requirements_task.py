@@ -134,6 +134,8 @@ class EvaluationSubmissionRequirementsTask(EvaluationTask):
         structured_install_evaluation = self.installation_evaluation.structured_evaluation
         software_dependency = structured_install_evaluation.dependency_number > 0
         install_tutorial = structured_install_evaluation.install_tutorial
+        hardware_requirements = structured_install_evaluation.hardware_requirements
+        compatible_os = structured_install_evaluation.compatible_os
         license = any([
             self.readme_files_evaluation[f].structured_evaluation.license_score \
                 if self.readme_files_evaluation[f].structured_evaluation is not None \
@@ -150,6 +152,8 @@ class EvaluationSubmissionRequirementsTask(EvaluationTask):
             software_dependency=software_dependency,
             install_tutorial=install_tutorial,
             license=license,
+            hardware_requirements=hardware_requirements,
+            compatible_os=compatible_os,
         )
 
     def _evaluate(self, files):
