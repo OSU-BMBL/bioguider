@@ -63,13 +63,14 @@ class StructuredEvaluationREADMEResult(BaseModel):
     overall_score: str=Field(description="A overall scroll for the README quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
 
 class FreeProjectLevelEvaluationREADMEResult(BaseModel):
-    available: Optional[str]=Field(description="A string including assessment and suggestion for the availability of the README file")
-    readability: Optional[str]=Field(description="A string including assessment and suggestion for the readability of the README file")
-    project_purpose: Optional[str]=Field(description="A string including assessment and suggestion for the project purpose of the README file")
-    hardware_and_software_spec: Optional[str]=Field(description="A string including assessment and suggestion for the hardware and software spec and compatibility description of the README file")
-    dependency: Optional[str]=Field(description="A string including assessment and suggestion for the dependencies of the README file")
-    license: Optional[str]=Field(description="A string including assessment and suggestion for the license information of the README file")
-    contributor_author: Optional[str]=Field(description="A string including assessment and suggestion for the contributor and author information of the README file")
+    available: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the availability of the README file")
+    readability: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the readability of the README file")
+    project_purpose: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the project purpose of the README file")
+    hardware_and_software_spec: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the hardware and software spec and compatibility description of the README file")
+    dependency: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the dependencies of the README file")
+    license: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the license information of the README file")
+    contributor_author: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the contributor and author information of the README file")
+    overall_score: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the overall score of the README file")
 
 class FreeFolderLevelEvaluationREADMEResult(BaseModel):
     score: Optional[str]=Field(description="An overall score")
@@ -94,11 +95,12 @@ class StructuredEvaluationInstallationResult(BaseModel):
     hardware_requirements: Optional[bool]=Field(description="A boolean value. Is the hardware requirements described?")
 
 class FreeEvaluationInstallationResult(BaseModel):
-    ease_of_access: Optional[str]=Field(description="A string including assessment and suggestions for the ease of access of the installation information")
-    clarity_of_dependency: Optional[str]=Field(description="A string including assessment and suggestions for the clarity of dependency specification")
-    hardware_requirements: Optional[str]=Field(description="A string including assessment and suggestions for the hardware requirements")
-    installation_guide: Optional[str]=Field(description="A string including assessment and suggestions for the installation guide")
-    compatible_os: Optional[str]=Field(description="A string including assessment and suggestions for the compatible operating system")
+    ease_of_access: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestions for the ease of access of the installation information")
+    clarity_of_dependency: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestions for the clarity of dependency specification")
+    hardware_requirements: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestions for the hardware requirements")
+    installation_guide: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestions for the installation guide")
+    compatible_os: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestions for the compatible operating system")
+    overall_score: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestions for the overall score of the installation")
 
 class EvaluationInstallationResult(BaseModel):
     structured_evaluation: StructuredEvaluationInstallationResult | None
