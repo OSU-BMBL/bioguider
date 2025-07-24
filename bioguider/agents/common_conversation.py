@@ -20,7 +20,7 @@ class CommonConversation:
         )
         response = result.generations[0][0].text
         token_usage = result.llm_output.get("token_usage")
-        return response, token_usage
+        return response, vars(token_usage)
     
     def generate_with_schema(self, system_prompt: str, instruction_prompt: str, schema: any):
         system_prompt = escape_braces(system_prompt)
