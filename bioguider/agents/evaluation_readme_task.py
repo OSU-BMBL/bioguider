@@ -175,29 +175,75 @@ You will be given:
 3. For each item in the structured evaluation, provide a detailed assessment followed by specific, actionable comments for improvement.
 4. Your improvement suggestions must also include the original text snippet and the improving comments.
 5. Your improvement suggestions must also include suggestions to improve readability.
-6. If you think the it is good enough, you can say so.
-
+6. In each section output, please first give a detailed explanation of the assessment, and then provide the detailed suggestion for improvement. If you think the it is good enough, you can say so.
+  The following is an example of the output format:
+  **Available:**
+    Detailed explanation of the assessment. Such as: The README file is present in the repository. The content of the file has been shared completely and is accessible. This confirms the availability of the README documentation for evaluation. There's no issue with availability.
+    Detailed suggestion for improvement. Such as: Add a brief introductory section summarizing the project and its main purpose would help orient readers.
+  **Readability:**
+    Detailed explanation of the assessment. Such as: The README is relatively easy to read for someone around the sixth-grade level. While the technical details provided are moderately easy to understand for those familiar with programming and command-line tools, newbies or non-technical users might face challenges due to jargon and lack of introductory explanations.
+    Detailed suggestion for improvement. Such as: 
+    - Add a brief introductory section summarizing the project and its main purpose would help orient readers.
+    - <original text snippet> - <improving comments>
+    - <original text snippet> - <improving comments>
+    - ...
+    - Break down long instructions into smaller bullet points.
+  **Project Purpose:**
+    Detailed explanation of the assessment. Such as: The README indirectly describes project activities like benchmarking and assessing functionalities using LLMs and tools like Poetry. However, it lacks a direct statement that defines the overarching project goals or explains who the intended audience is.
+    Detailed suggestion for improvement. Such as: 
+    - Including a clear project purpose at the beginning, such as: "This project provides a framework for evaluating tabular data models using large language model (LLM)-based assessments. Developers and researchers interested in benchmarking data model performance will find this repository particularly useful."
+    - <original text snippet> - <improving comments>
+    - <original text snippet> - <improving comments>
+    - ...
+  **Hardware and software spec and compatibility description:**
+    Detailed explanation of the assessment. Such as: The README provides partial information about software requirements, emphasizing tools like Poetry. Instructions regarding the setup of `.env` files and API keys are also provided. However, it doesn't specify hardware considerations like memory requirements or explain whether the software is compatible with particular operating systems. This omission can limit usability for certain users.
+    Detailed suggestion for improvement. Such as: 
+    - Adding a subsection titled "Hardware Requirements" to outline memory, processor, or other computational dependencies for running benchmarks effectively.
+    - <original text snippet> - <improving comments>
+    - <original text snippet> - <improving comments>
+    - ...
+  **Dependencies clearly stated:**
+    Detailed explanation of the assessment. Such as: Dependencies are referenced sporadically throughout the README (e.g., using Poetry to install certain tools). However, there isn't a dedicated section that consolidates these into a simple and easy-to-follow format. This could hinder understanding, especially for users looking to quickly identify and install necessary dependencies.
+    Detailed suggestion for improvement. Such as: 
+    - The dependencies are listed in the README and requirements.txt file. No need to improve.
+  **License Information Included:**
+    Detailed explanation of the assessment. Such as: The README mentions the MIT license, which is known for its permissive nature and widespread acceptance. The license information is clear and understandable. No improvements are necessary here.
+    Detailed suggestion for improvement. Such as: No need to improve.
+  **Code contributor / Author information included:**
+    Detailed explanation of the assessment. Such as: The README does not contain a section that credits contributors or maintains lines of communication for potential users or collaborators. This is an important omission, as it fails to acknowledge authors' efforts or encourage interaction.
+    Detailed suggestion for improvement. Such as: 
+    - Including a new "Contributors" section to credit the developers, provide contact information (e.g., email or GitHub profiles), or invite collaboration.
+    - <original text snippet> - <improving comments>
+  **Overall Score:**
+    Detailed explanation of the assessment. Such as: The README is relatively easy to read for someone around the sixth-grade level. While the technical details provided are moderately easy to understand for those familiar with programming and command-line tools, newbies or non-technical users might face challenges due to jargon and lack of introductory explanations.
+    Detailed suggestion for improvement. Such as: 
+    - Add a brief introductory section summarizing the project and its main purpose would help orient readers.
+    - <original text snippet> - <improving comments>
+    - <original text snippet> - <improving comments>
+    - ...
+    - Break down long instructions into smaller bullet points.
 ---
 
 ### **Output Format**
-Your output must **exactly match** the following format. Do not add or omit any sections.
+Your output must **exactly match** the following format. Do not add or omit any sections. 
 
 **FinalAnswer**
 **Available:**
-  <Your assessment and suggestion here>
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 **Readability:** 
-  <Your assessment and suggestion here>
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 **Project Purpose:** 
-  <Your assessment and suggestion here>
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 **Hardware and software spec and compatibility description:**
-  <Your assessment and suggestion here>
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 **Dependencies clearly stated:** 
-  <Your assessment and suggestion here>
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 **License Information Included:** 
-  <Your assessment and suggestion here>
-** Code contributor / Author information included
-  <Your assessment and suggestion here>
-
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
+**Code contributor / Author information included
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
+**Overall Score:**
+  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 ---
 
 ### **Structured Evaluation and Reasoning Process**

@@ -90,11 +90,39 @@ You will be given:
 4. Your improvement suggestions must also include the original text snippet and the improving comments.
 5. Your improvement suggestions must also include suggestions to improve readability.
 6. If you think the it is good enough, you can say so.
+7. In each section output, please first give a detailed explanation of the assessment, and then provide the detailed suggestion for improvement. If you think the it is good enough, you can say so.
+  The following is an example of the output format:
+  **Ease of Access:**
+    Detailed explanation of the assessment. Such as: The INSTALLATION file is present in the repository. The content of the file has been shared completely and is accessible. This confirms the availability of the installation documentation for evaluation. There's no issue with availability.
+    Detailed suggestion for improvement. Such as: No need to improve accessibility of the installation documentation.
+  **Clarity of Dependency Specification:**
+    Detailed explanation of the assessment. Such as: The installation section provides a clear list of dependencies. No need to improve.
+    Detailed suggestion for improvement. Such as: No need to improve.
+  **Hardware Requirements:**
+    Detailed explanation of the assessment. Such as: No hardware requirements are provided in the installation section.
+    Detailed suggestion for improvement. Such as: Add a section to describe the hardware requirements for the installation.
+  **Installation Guide:**
+    Detailed explanation of the assessment. Such as: The installation guide is present in the INSTALLATION file, but lacks a clear and concise guide for the installation process.
+    Detailed suggestion for improvement. Such as: 
+    - Add a clear and concise guide for the installation process.
+    - Improve the readability of the installation guide, like:
+      - <original text snippet> - <improving comments>
+      - <original text snippet> - <improving comments>
+      - ...
+  **Compatible Operating System:**
+    Detailed explanation of the assessment. Such as: No compatible operating system is provided in the installation section.
+    Detailed suggestion for improvement. Such as: 
+    - Add a section to describe the compatible operating systems for the installation.
+    - For example, Ubuntu 22.04 LTS+, CentOS 7+, Mac OS X 10.15+, Windows 10+ are supported.
+    - ...
+  **Overall Score:**
+    Detailed explanation of the assessment. Such as: The installation section provides a clear list of installation steps. No need to improve.
+    Detailed suggestion for improvement. Such as: Add a section to describe the compatible operating systems for the installation.
 
 ---
 
 ### **Output Format**
-Your output must **exactly match** the following format. Do not add or omit any sections.
+Your output must **exactly match** the following format. Do not add or omit any sections. In the output, your detailed assessment and detailed suggestion must include the original text snippet and the improving comments, and include the analysis and explanation.
 
 **FinalAnswer**
 **Ease of Access:** 
@@ -106,6 +134,8 @@ Your output must **exactly match** the following format. Do not add or omit any 
 **Installation Guide:**
   <Your assessment and suggestion here>  
 **Compatible Operating System:**
+  <Your assessment and suggestion here>
+**Overall Score:**
   <Your assessment and suggestion here>
 
 ---
@@ -194,7 +224,7 @@ class EvaluationInstallationTask(EvaluationTask):
             installation_files_content=files_content,
             structured_evaluation_and_reasoning_process=structured_evaluation_and_reasoning_process,
         )
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
