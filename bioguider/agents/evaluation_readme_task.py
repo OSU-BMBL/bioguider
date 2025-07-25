@@ -13,7 +13,10 @@ from bioguider.agents.agent_utils import (
     read_file, read_license_file, 
     summarize_file
 )
-from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps
+from bioguider.agents.common_agent_2step import (
+    CommonAgentTwoChainSteps, 
+    CommonAgentTwoSteps,
+)
 from bioguider.agents.evaluation_task import EvaluationTask
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
@@ -168,6 +171,28 @@ You will be given:
 
 ---
 
+### **Output Format**
+Your output must **exactly match** the following format. Do not add or omit any sections. 
+
+**FinalAnswer**
+**Available:**
+  <Your assessment and suggestion here>
+**Readability:** 
+  <Your assessment and suggestion here>
+**Project Purpose:** 
+  <Your assessment and suggestion here>
+**Hardware and software spec and compatibility description:**
+  <Your assessment and suggestion here>
+**Dependencies clearly stated:** 
+  <Your assessment and suggestion here>
+**License Information Included:** 
+  <Your assessment and suggestion here>
+**Code contributor / Author information included
+  <Your assessment and suggestion here>
+**Overall Score:**
+  <Your assessment and suggestion here>
+---
+
 ### **Instructions**
 1. Based on the provided structured evaluation and its reasoning process, generate a free evaluation of the README file.
 2. Focus on the explanation of assessment in structured evaluation and how to improve the README file based on the structured evaluation and its reasoning process.
@@ -175,8 +200,9 @@ You will be given:
 3. For each item in the structured evaluation, provide a detailed assessment followed by specific, actionable comments for improvement.
 4. Your improvement suggestions must also include the original text snippet and the improving comments.
 5. Your improvement suggestions must also include suggestions to improve readability.
-6. In each section output, please first give a detailed explanation of the assessment, and then provide the detailed suggestion for improvement. If you think the it is good enough, you can say so.
+6. In the **FinalAnswer** of output, in each section output, please first give a detailed explanation of the assessment, and then provide the detailed suggestion for improvement. If you think the it is good enough, you can say so.
   The following is an example of the output format:
+  **FinalAnswer**
   **Available:**
     Detailed explanation of the assessment. Such as: The README file is present in the repository. The content of the file has been shared completely and is accessible. This confirms the availability of the README documentation for evaluation. There's no issue with availability.
     Detailed suggestion for improvement. Such as: Add a brief introductory section summarizing the project and its main purpose would help orient readers.
@@ -222,28 +248,7 @@ You will be given:
     - <original text snippet> - <improving comments>
     - ...
     - Break down long instructions into smaller bullet points.
----
 
-### **Output Format**
-Your output must **exactly match** the following format. Do not add or omit any sections. 
-
-**FinalAnswer**
-**Available:**
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**Readability:** 
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**Project Purpose:** 
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**Hardware and software spec and compatibility description:**
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**Dependencies clearly stated:** 
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**License Information Included:** 
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**Code contributor / Author information included
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
-**Overall Score:**
-  <Your detailed assessment and detailed suggestion here, including the original text snippet and the improving comments>
 ---
 
 ### **Structured Evaluation and Reasoning Process**
@@ -492,7 +497,7 @@ class EvaluationREADMETask(EvaluationTask):
             readme_content=readme_content,
             structured_evaluation=structured_reasoning_process,
         )
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
+        agent = CommonAgentTwoSteps(llm=self.llm)
         response, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
