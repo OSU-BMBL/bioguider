@@ -144,7 +144,7 @@ class CollectionExecuteStep(PEOCommonStep):
         agent_executor = AgentExecutor(
             agent=agent,
             tools=self.custom_tools,
-            max_iterations=10,
+            max_iterations=30,
         )
         response = agent_executor.invoke(
             input={"plan_actions": plan_actions, "input": "Now, let's begin."},

@@ -104,14 +104,14 @@ COLLECTION_PROMPTS = {
         "goal_item": "User Guide",
         "related_file_description": """A document qualifies as a **User Guide** if it includes **at least one** of the following elements.
 If **any one** of these is present, the document should be classified as a User Guide — full coverage is **not required**:
- - Overview: A brief introduction to the software, its purpose, and its intended audience.
- - Installation Instructions: Step-by-step setup procedures.
- - Input/Output Specifications: Detailed information on the data the software accepts and produces.
- - Configuration Options: Descriptions of settings and parameters that can be adjusted.
- - Function/Interface Listings: Comprehensive lists of available functions or interfaces, including their descriptions, parameters, and return values.
- - Mathematical Equations/Numerical Methods: Embedded documentation explaining the underlying mathematical concepts or algorithms.
- - Developer Guidance: Instructions on how to extend the software or contribute to its development.
- **Do not** classify the document as a User Guide if it primarily serves as a Tutorial or Example. Such documents typically include:
+ - Document **functions, methods, or classes**
+ - Describe **input parameters, return values**, and **usage syntax**
+ - Include **technical guidance** for using specific APIs
+ - Are often found in folders such as
+   * `man/` (for `.Rd` files in R)
+   * `docs/reference/`, `docs/api/`, `docs/dev/` (for Python) or similar
+   * Standalone files with names like `api.md`, `reference.md`, `user_guide.md`
+**Do not** classify the document as a User Guide if it primarily serves as a Tutorial or Example. Such documents typically include:
  - Sample Datasets: Example data used to illustrate functionality.
  - Narrative Explanations: Story-like descriptions guiding the user through examples.
  - Code Walkthroughs: Detailed explanations of code snippets in a tutorial format.
