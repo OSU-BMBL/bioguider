@@ -102,16 +102,96 @@ COLLECTION_GOAL = """Your goal is to collect the names of all files that are rel
 COLLECTION_PROMPTS = {
     "UserGuide": {
         "goal_item": "User Guide",
-        "related_file_description": """A document qualifies as a **User Guide** if it includes **at least one** of the following elements.
+        "related_file_description": """A document qualifies asAbsolutely! Here's a **clean, precise, and LLM-friendly prompt** that guides the model to collect **only user guide / API documentation files**, while **explicitly excluding tutorials and vignettes**.
+
+---
+
+### 🔍 **LLM Prompt: Collect Only User Guide and API Files from a GitHub Repository**
+
+You are an expert in analyzing GitHub repositories.
+
+Your task is to **identify and collect all user guide and API documentation files** from a GitHub repository.
+
+> ⚠️ **Important:**
+> Do **not** collect:
+>
+> * Tutorial or vignette files (e.g., walkthroughs, getting started guides, instructional notebooks)
+> * Files used for demonstrations or educational purposes
+>   These are handled by a separate agent.
+
+---
+
+### ✅ **What to Collect (User Guide / API Files)**
+
+These files typically:
+
+* Document **functions, methods, or classes**
+* Describe **input parameters, return values**, and **usage syntax**
+* Include **technical guidance** for using specific APIs
+* Are often found in folders such as:
+
+  * `man/` (for `.Rd` files in R)
+  * `docs/reference/`, `docs/api/`, or similar
+  * Standalone files with names like `api.md`, `reference.md`, `user_guide.md`
+
+You may include:
+
+* Roxygen-generated `.Rd` files (in R packages)
+* Markdown or HTML files that serve as technical references
+* Function-level documentation embedded in specialized files (not general source code)
+
+---
+
+### ❌ **What to Exclude**
+
+Do **not** include:
+
+* Tutorial or vignette files (e.g., `.Rmd`, `.ipynb`, or Markdown files with step-by-step instructions or narrative text)
+* Educational notebooks or example workflows
+* Any file focused on teaching, guiding beginners, or demonstrating full pipelines
+
+---
+
+### 📤 **Output Format**
+
+Respond with a structured list like the following:
+
+```json
+[
+  {
+    "path": "man/AddAzimuthScores.Rd",
+    "type": "R API documentation",
+    "description": "Documents the AddAzimuthScores function with its arguments and return values."
+  },
+  {
+    "path": "docs/api/user_guide.md",
+    "type": "Markdown user guide",
+    "description": "Provides technical descriptions of available API endpoints."
+  }
+]
+```
+
+---
+
+### 📝 Notes
+
+* Be concise and accurate.
+* Only include files that directly describe APIs or user-facing functions.
+* Do not include files already covered by a tutorial agent (e.g., vignettes or walkthroughs).
+
+---
+
+Would you like a version of this prompt tailored for Python or multi-language repos?
+ a **User Guide** if it includes **at least one** of the following elements.
 If **any one** of these is present, the document should be classified as a User Guide — full coverage is **not required**:
- - Overview: A brief introduction to the software, its purpose, and its intended audience.
- - Installation Instructions: Step-by-step setup procedures.
- - Input/Output Specifications: Detailed information on the data the software accepts and produces.
- - Configuration Options: Descriptions of settings and parameters that can be adjusted.
- - Function/Interface Listings: Comprehensive lists of available functions or interfaces, including their descriptions, parameters, and return values.
- - Mathematical Equations/Numerical Methods: Embedded documentation explaining the underlying mathematical concepts or algorithms.
- - Developer Guidance: Instructions on how to extend the software or contribute to its development.
- **Do not** classify the document as a User Guide if it primarily serves as a Tutorial or Example. Such documents typically include:
+ - Document **functions, methods, or classes**
+ - Describe **input parameters, return values**, and **usage syntax**
+ - Include **technical guidance** for using specific APIs
+ - Are often found in folders such as
+   * `man/` (for `.Rd` files in R)
+   * `docs/reference/`, `docs/api/`, `docs/dev/` (for Python) or similar
+   * Standalone files with names like `api.md`, `reference.md`, `user_guide.md`
+**Do not** classify the document as a User Guide if it primarily serves as a Tutorial or Example. Such documents typically include:
  - Sample Datasets: Example data used to illustrate functionality.
  - Narrative Explanations: Story-like descriptions guiding the user through examples.
  - Code Walkthroughs: Detailed explanations of code snippets in a tutorial format.
