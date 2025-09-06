@@ -19,8 +19,26 @@ class CommonConversation:
             callbacks=[callback_handler]
         )
         response = result.generations[0][0].text
-        token_usage = result.llm_output.get("token_usage")
-        return response, vars(token_usage)
+        # Try to normalize token usage across providers
+        token_usage = {}
+        try:
+            if hasattr(result, "llm_output") and result.llm_output is not None:
+                raw = result.llm_output.get("token_usage") or result.llm_output.get("usage")
+                if isinstance(raw, dict):
+                    token_usage = {
+                        "total_tokens": raw.get("total_tokens") or raw.get("total"),
+                        "prompt_tokens": raw.get("prompt_tokens") or raw.get("prompt"),
+                        "completion_tokens": raw.get("completion_tokens") or raw.get("completion"),
+                    }
+        except Exception:
+            pass
+        if not token_usage:
+            token_usage = {
+                "total_tokens": getattr(callback_handler, "total_tokens", 0),
+                "prompt_tokens": getattr(callback_handler, "prompt_tokens", 0),
+                "completion_tokens": getattr(callback_handler, "completion_tokens", 0),
+            }
+        return response, token_usage
     
     def generate_with_schema(self, system_prompt: str, instruction_prompt: str, schema: any):
         system_prompt = escape_braces(system_prompt)
