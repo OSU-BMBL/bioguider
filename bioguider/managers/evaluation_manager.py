@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from bioguider.agents.evaluation_userguide_task import EvaluationUserGuideTask
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.database.code_structure_db import CodeStructureDb
 from bioguider.utils.constants import ProjectMetadata
@@ -9,6 +10,7 @@ from bioguider.utils.gitignore_checker import GitignoreChecker
 from ..agents.identification_task import IdentificationTask
 from ..rag.rag import RAG
 from ..utils.file_utils import parse_repo_url
+from ..utils.code_structure_builder import CodeStructureBuilder
 from ..database.summarized_file_db import SummarizedFilesDb
 from ..agents.evaluation_readme_task import EvaluationREADMETask
 from ..agents.evaluation_installation_task import EvaluationInstallationTask
@@ -32,7 +34,12 @@ class EvaluationManager:
         author, repo_name = parse_repo_url(repo_url)
         self.summary_file_db = SummarizedFilesDb(author, repo_name)
         self.code_structure_db = CodeStructureDb(author, repo_name)
-        self.code_structure_db.build_code_structure()
+        code_structure_builder = CodeStructureBuilder(
+            repo_path=repo_url, 
+            gitignore_path=Path(repo_url, ".gitignore"), 
+            code_structure_db=self.code_structure_db
+        )
+        code_structure_builder.build_code_structure()
 
     def identify_project(self) -> ProjectMetadata:
         repo_path = self.rag.repo_dir
@@ -122,6 +129,20 @@ class EvaluationManager:
         evaluation, files = evaluation_task.evaluate()
 
         return evaluation, files
+
+    def evaluate_userguide(self):
+        evaluation_task = EvaluationUserGuideTask(
+            llm=self.llm,
+            repo_path=self.rag.repo_dir,
+            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
+            meta_data=self.project_metadata,
+            step_callback=self.step_callback,
+            summarized_files_db=self.summary_file_db,
+            code_structure_db=self.code_structure_db,
+        )
+        evaluation, files = evaluation_task.evaluate()
+        return evaluation, files
+
         
         
     
