@@ -68,11 +68,11 @@ class EvaluationUserGuideTask(EvaluationTask):
         task = CollectionTask(
             llm=self.llm,
             step_callback=self.step_callback,
+            summarized_files_db=self.summarized_files_db,
         )
         task.compile(
             repo_path=self.repo_path,
             gitignore_path=Path(self.repo_path, ".gitignore"),
-            db=self.summarized_files_db,
             goal_item=CollectionGoalItemEnum.UserGuide.name,
         )
         files = task.collect()

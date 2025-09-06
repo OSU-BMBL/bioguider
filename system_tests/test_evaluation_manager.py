@@ -64,7 +64,7 @@ def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
     )
     assert len(files) > 0
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
     import json
     import os
@@ -158,4 +158,15 @@ def test_EvaluationManager_on_POPPER(llm, step_callback):
     )
 
     assert len(submit_files) > 0
+
+
+#@pytest.mark.skip()
+def test_EvaluationManager_evaluate_userguide_on_POPPER(llm, step_callback):
+    mgr = EvaluationManager(llm, step_callback)
+    mgr.prepare_repo("https://github.com/snap-stanford/POPPER")
+
+    evaluation, files = mgr.evaluate_userguide()
+
+    assert len(files) > 0
+    assert evaluation is not None
 
