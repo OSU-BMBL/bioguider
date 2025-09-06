@@ -49,7 +49,7 @@ def test_EvaluationManager_on_installation(llm, step_callback):
     evaluation, files = mgr.evaluate_installation()
     assert len(files) > 0
 
-# @pytest.mark.skip()
+@pytest.mark.skip()
 def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)
@@ -63,6 +63,50 @@ def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
         installation_evaluation=installation_evaluation,
     )
     assert len(files) > 0
+
+# @pytest.mark.skip()
+def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
+    import json
+    import os
+    from datetime import datetime
+    
+    json_obj = EvaluationREADMEResult.model_json_schema()
+    mgr = EvaluationManager(llm, step_callback)
+    repo_url = "https://github.com/satijalab/seurat"
+    mgr.prepare_repo(repo_url)
+
+    installation_evaluation, installation_files = mgr.evaluate_installation()
+    readme_evaluation, readme_files = mgr.evaluate_readme()
+    evaluation, files =  mgr.evaluate_submission_requirements(
+        readme_files_evaluation=readme_evaluation,
+        installation_files=installation_files,
+        installation_evaluation=installation_evaluation,
+    )
+    assert len(files) > 0
+    
+    # Save evaluation results to a file
+    results = {
+        "timestamp": datetime.now().isoformat(),
+        "repo_url": repo_url,
+        "installation_evaluation": installation_evaluation,
+        "installation_files": installation_files,
+        "readme_evaluation": readme_evaluation,
+        "readme_files": readme_files,
+        "submission_requirements_evaluation": evaluation,
+        "submission_requirements_files": files
+    }
+    
+    # Create logs directory if it doesn't exist
+    os.makedirs("logs", exist_ok=True)
+    
+    # Save to JSON file with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"logs/seurat_evaluation_results_{timestamp}.json"
+    
+    with open(filename, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=2, default=str)
+    
+    print(f"Evaluation results saved to: {filename}")
 
 @pytest.mark.skip()
 def test_EvaluationManager_on_POPPER(llm, step_callback):
