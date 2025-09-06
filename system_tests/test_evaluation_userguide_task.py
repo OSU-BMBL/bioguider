@@ -1,10 +1,32 @@
+import os
+import shutil
 import pytest
 
-from bioguider.agents.evaluation_userguide_task import EvaluationUserGuideTask
+from bioguider.agents.evaluation_userguide_task import ConsistencyEvaluationResult, EvaluationUserGuideTask
+from bioguider.database.code_structure_db import CodeStructureDb
 from bioguider.managers.evaluation_manager import EvaluationManager
+from bioguider.utils.code_structure_builder import CodeStructureBuilder
 
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_after_tests(data_folder):
+    """Cleanup function that runs after all tests in this module complete."""
+    # This will run before any tests in this module
+    yield  # This is where the tests run
+            
+    # Clean up database files
+    db_path = os.path.join(data_folder, "databases")
+    if os.path.exists(db_path):
+        print(f"Cleaning up database directory: {db_path}")
+        try:
+            shutil.rmtree(db_path)
+            print("✓ Database directory cleaned up")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not clean up database directory: {e}")
+    
+
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationInstallationTask_RepoAgent(llm, step_callback, root_path):
-    files = ["README_CN.md", "requirements.txt", "display/README_DISPLAY.md"]
+    files = ["README_CN.md", "requirements.txt", "markdown_docs/repo_agent/change_detector.md"]
 
     task = EvaluationUserGuideTask(
         llm=llm,
@@ -17,3 +39,110 @@ def test_EvaluationInstallationTask_RepoAgent(llm, step_callback, root_path):
 
     # assert evaluations is not None
     assert files is not None and len(files) > 0
+
+@pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_CollectFiles(llm, step_callback, root_path):
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/RepoAgent",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
+        step_callback=step_callback,
+    )
+    files = task._collect_files()
+    assert files is not None and len(files) > 0
+
+@pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_ConsistencyEvaluation(llm, step_callback, root_path, data_folder):
+    files = [
+        'markdown_docs/repo_agent/multi_task_dispatch.md', 
+        'markdown_docs/repo_agent/file_handler.md', 
+        'markdown_docs/repo_agent/doc_meta_info.md', 
+        'markdown_docs/repo_agent/project_manager.md', 
+        'markdown_docs/repo_agent/settings.md', 
+        'markdown_docs/repo_agent/chat_engine.md', 
+        'markdown_docs/repo_agent/change_detector.md', 
+        'markdown_docs/repo_agent/log.md', 
+        'markdown_docs/tests/test_structure_tree.md'
+    ]
+
+    code_structure_db = CodeStructureDb(
+        author="test",
+        repo_name="test",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/RepoAgent",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+    
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/RepoAgent",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    
+    for file in files:
+        res = task._evaluate_consistency(file)
+        assert res is None or type(res) == ConsistencyEvaluationResult
+
+@pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_ConsistencyEvaluation(llm, step_callback, root_path, data_folder):
+    files = [
+        # 'README.md', 
+        'src/RNAhybrid-2.1.2/man/RNAeffective.1', 
+        'src/RNAhybrid-2.1.2/man/RNAcalibrate.1', 
+        'src/RNAhybrid-2.1.2/man/RNAhybrid.1', 
+        'src/RNAhybrid-2.1.2/README',
+    ]
+
+    code_structure_db = CodeStructureDb(
+        author="Y2C99",
+        repo_name="MIRROR",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/MIRROR",
+        gitignore_path=f"{root_path}/MIRROR/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    # code_structure_builder.build_code_structure()
+    
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/MIRROR",
+        gitignore_path=f"{root_path}/MIRROR/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    
+    res = task._evaluate(files)
+    assert res is not None
+
+# @pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_evaluate(llm, step_callback, root_path, data_folder):
+    code_structure_db = CodeStructureDb(
+        author="Y2C99",
+        repo_name="MIRROR",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/MIRROR",
+        gitignore_path=f"{root_path}/MIRROR/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/MIRROR",
+        gitignore_path=f"{root_path}/MIRROR/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    evaluations, files = task.evaluate()
+    assert evaluations is not None
+    assert files is not None

@@ -104,3 +104,59 @@ Your final report must **exactly match** the following format. Do not add or omi
 ---
 
 """
+
+CONSISTENCY_EVAL_SYSTEM_PROMPT = """
+You are an expert in evaluating the consistency of user guide in software repositories.
+Your task is to analyze both:
+1. the provided file related to user guide/API documentation,
+2. the code definitions related to the user guide/API documentation
+and generate a structured consistency assessment based on the following criteria.
+
+---
+
+### **Evaluation Criteria**
+
+**Consistency**:
+  * **Score**: [Poor / Fair / Good / Excellent]
+  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring]
+  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
+
+### **Output Format**
+Your output **must exactly match** the following format:
+```
+**Consistency**:
+  * **Score**: [Poor / Fair / Good / Excellent]
+  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring]
+  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
+```
+
+### **Output Example**
+
+```
+**Consistency**:
+  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Development**:
+    - Inconsistent function/class/method name 1
+    - Inconsistent docstring 1
+    - Inconsistent function/class/method name 2
+    - Inconsistent docstring 2
+    - ...
+  * **Strengths**: 
+    - Strengths 1
+    - Strengths 2
+    - ...
+```
+
+---
+
+### **Input User Guide/API Documentation**
+{user_guide_api_documentation}
+
+### **Code Definitions**
+{code_definitions}
+
+---
+
+"""

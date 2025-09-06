@@ -289,8 +289,9 @@ class CustomOutputParser(AgentOutputParser):
         action_input = match.group(2)
         # Return the action and action input
         action_dict = None
-        action_input = action_input.strip(" ").strip('"')
-        action_input_replaced = action_input.replace("'", '"')
+        action_input_replaced = action_input.strip().strip(" ").strip('"').strip('`').strip()
+        action_input_replaced = action_input_replaced.replace("'", '"')
+        action_input_replaced = action_input_replaced.replace("`", '"')
         try:
             action_dict = json.loads(action_input_replaced)
         except json.JSONDecodeError:
@@ -299,10 +300,11 @@ class CustomOutputParser(AgentOutputParser):
             # try using ast to parse input string
             import ast
             try:
-                action_dict = ast.literal_eval(action_input)
+                action_dict = ast.literal_eval(action_input_replaced)
                 if not isinstance(action_dict, dict):
                     action_dict = None
             except Exception as e:
+                logger.error(f"Error parsing action input: {action_input} -> {action_input_replaced}\n{e}")
                 pass
         return AgentAction(
             tool=action, 

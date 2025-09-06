@@ -6,7 +6,7 @@ import pytest
 def prepare_logging():
     level = logging.INFO
     logging.basicConfig(level=level)
-    file_handler = logging.FileHandler("./logs/app.log")
+    file_handler = logging.FileHandler("./logs/test.log")
     file_handler.setLevel(level)
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(level)
@@ -20,3 +20,6 @@ def prepare_logging():
     root_logger.addHandler(file_handler)
     root_logger.addHandler(stream_handler)
 
+@pytest.fixture(scope="module")
+def data_folder():
+    return "./tests/data"

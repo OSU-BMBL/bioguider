@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
+from bioguider.database.code_structure_db import CodeStructureDb
 from bioguider.utils.constants import ProjectMetadata
 from bioguider.utils.gitignore_checker import GitignoreChecker
 
@@ -30,6 +31,8 @@ class EvaluationManager:
         
         author, repo_name = parse_repo_url(repo_url)
         self.summary_file_db = SummarizedFilesDb(author, repo_name)
+        self.code_structure_db = CodeStructureDb(author, repo_name)
+        self.code_structure_db.build_code_structure()
 
     def identify_project(self) -> ProjectMetadata:
         repo_path = self.rag.repo_dir

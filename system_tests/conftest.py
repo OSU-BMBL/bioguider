@@ -230,3 +230,6 @@ def plan_actions():
 def root_path():
     return "/bmbl_data/shaohong/projects/github"
 
+@pytest.fixture(scope="module")
+def data_folder():
+    return "./system_tests/test_data"
