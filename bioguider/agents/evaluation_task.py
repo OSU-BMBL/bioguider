@@ -184,7 +184,7 @@ class EvaluationTask(ABC):
             token_usage=token_usage,
         )
 
-    def evaluate(self) -> dict:
+    def evaluate(self) -> tuple[dict, list[str]]:
         self._enter_evaluation()
         files = self._collect_files()
         evaluations, token_usage, files = self._evaluate(files)
@@ -198,7 +198,7 @@ class EvaluationTask(ABC):
         self.print_step(token_usage=token_usage)
 
     @abstractmethod
-    def _evaluate(self, files: list[str]) -> tuple[dict, dict]:
+    def _evaluate(self, files: list[str]) -> tuple[dict, dict, list[str]]:
         pass
 
     @abstractmethod

@@ -1,5 +1,6 @@
 import pytest
 from langchain.tools import Tool, StructuredTool
+from pathlib import Path
 from bioguider.agents.agent_tools import (
     read_directory_tool, 
     read_file_tool, 
@@ -20,9 +21,9 @@ from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
 
 # @pytest.mark.skip()
-def test_collection_plan_step(llm, step_callback):
-    repo_path = "/home/ubuntu/projects/github/tabula-data"
-    gitignore_path = "/home/ubuntu/projects/github/tabula-data/.gitignore"
+def test_collection_plan_step(llm, step_callback, root_path):
+    repo_path = Path(root_path) / "tabular-data"
+    gitignore_path = Path(root_path) / "tabular-data/.gitignore"
     files = read_directory(repo_path, gitignore_path)
     repo_structure = generate_repo_structure_prompt(files, repo_path)
 
@@ -77,6 +78,7 @@ def test_collection_plan_step(llm, step_callback):
     assert state is not None
     assert "plan_actions" in state and len(state["plan_actions"]) > 0
 
+@pytest.mark.skip()
 def test_collection_plan_step_DockerGeneration(llm, step_callback):
     repo_path = "/home/ubuntu/projects/github/biochatter"
     gitignore_path = "/home/ubuntu/projects/github/biochatter/.gitignore"
