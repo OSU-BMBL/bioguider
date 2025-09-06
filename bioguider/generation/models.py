@@ -69,4 +69,9 @@ class GenerationManifest(BaseModel):
     artifacts: List[OutputArtifact] = Field(default_factory=list)
     skipped: List[str] = Field(default_factory=list)
 
+class GenerationReport(BaseModel):
+    repo_url: Optional[str] = None
+    output_dir: Optional[str] = None
+    sections: List[Dict[str, Any]] = Field(default_factory=list)
+
 

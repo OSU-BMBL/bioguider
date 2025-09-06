@@ -15,7 +15,7 @@ from bioguider.generation import (
     LLMContentGenerator,
     LLMCleaner,
 )
-from bioguider.generation.models import GenerationManifest
+from bioguider.generation.models import GenerationManifest, GenerationReport
 from bioguider.utils.file_utils import parse_repo_url
 
 
@@ -118,7 +118,7 @@ class DocumentationGenerationManager:
 
         self.print_step(step_name="WriteOutputs", step_output=f"repo_key={out_repo_key}")
         out_dir = self.output.prepare_output_dir(out_repo_key)
-        artifacts = self.output.write_files(out_dir, revised)
+        artifacts = self.output.write_files(out_dir, revised, diff_stats_by_file=diff_stats)
 
         manifest = GenerationManifest(
             repo_url=report.repo_url,
@@ -130,7 +130,31 @@ class DocumentationGenerationManager:
             skipped=missing,
         )
         self.output.write_manifest(out_dir, manifest)
+        # Write human-readable generation report
+        gen_report_path = self._write_generation_report(out_dir, report.repo_url or str(self.repo_url_or_path or ""), plan, diff_stats, suggestions)
         self.print_step(step_name="Done", step_output=f"output_dir={out_dir}")
         return out_dir
+
+    def _write_generation_report(self, out_dir: str, repo_url: str, plan, diff_stats: Dict[str, dict], suggestions):
+        # Build a simple markdown report
+        lines: list[str] = []
+        lines.append(f"# Documentation Generation Report\n")
+        lines.append(f"Repo: {repo_url}\n")
+        lines.append(f"Output: {out_dir}\n")
+        lines.append("\n## Summary of Changes\n")
+        for e in plan.planned_edits:
+            sug = next((s for s in suggestions if s.id == e.suggestion_id), None)
+            why = sug.source.get("evidence", "") if sug and sug.source else ""
+            lines.append(f"- File: `{e.file_path}` | Action: {e.edit_type} | Section: {e.anchor.get('value','')} | Added lines: {diff_stats.get(e.file_path,{}).get('added_lines',0)}")
+            if why:
+                lines.append(f"  - Why: {why}")
+        lines.append("\n## Planned Edits\n")
+        for e in plan.planned_edits:
+            lines.append(f"- `{e.file_path}` -> {e.edit_type} -> {e.anchor.get('value','')}")
+        report_md = "\n".join(lines)
+        dest = os.path.join(out_dir, "GENERATION_REPORT.md")
+        with open(dest, "w", encoding="utf-8") as fobj:
+            fobj.write(report_md)
+        return dest
 
 

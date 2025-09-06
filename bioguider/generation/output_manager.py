@@ -26,7 +26,7 @@ class OutputManager:
         name = name.replace(".git", "")
         return name
 
-    def write_files(self, output_dir: str, files: Dict[str, str]) -> List[OutputArtifact]:
+    def write_files(self, output_dir: str, files: Dict[str, str], diff_stats_by_file: Dict[str, dict] | None = None) -> List[OutputArtifact]:
         artifacts: List[OutputArtifact] = []
         for rel_path, content in files.items():
             dest = os.path.join(output_dir, rel_path)
@@ -37,7 +37,7 @@ class OutputManager:
                 dest_rel_path=rel_path,
                 original_rel_path=rel_path,
                 change_summary="revised document",
-                diff_stats={}
+                diff_stats=(diff_stats_by_file or {}).get(rel_path, {})
             ))
         return artifacts
 
