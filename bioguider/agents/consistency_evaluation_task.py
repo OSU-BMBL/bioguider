@@ -5,7 +5,7 @@ from typing import Callable
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel
 
-from bioguider.agents.consistency_collection_task_utils import ConsistencyEvaluationState
+from bioguider.agents.consistency_evaluation_task_utils import ConsistencyEvaluationState
 from bioguider.database.code_structure_db import CodeStructureDb
 from .consistency_collection_step import ConsistencyCollectionStep
 from .consistency_query_step import ConsistencyQueryStep

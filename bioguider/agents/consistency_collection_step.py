@@ -5,7 +5,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
-from bioguider.agents.consistency_collection_task_utils import ConsistencyCollectionWorkflowState, ConsistencyEvaluationState
+from bioguider.agents.consistency_evaluation_task_utils import ConsistencyEvaluationState
 from bioguider.agents.peo_common_step import PEOCommonStep
 
 

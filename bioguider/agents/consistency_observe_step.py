@@ -4,7 +4,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
 from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
-from bioguider.agents.consistency_collection_task_utils import ConsistencyCollectionWorkflowState, ConsistencyEvaluationState
+from bioguider.agents.consistency_evaluation_task_utils import ConsistencyEvaluationState
 from bioguider.agents.peo_common_step import PEOCommonStep
 
 CONSISTENCY_OBSERVE_SYSTEM_PROMPT = """
@@ -64,7 +64,7 @@ Your output **must exactly match** the following format:
 
 """
 
-class ConsistencyEvaluationResult(BaseModel):
+class ConsistencyEvaluationObserveResult(BaseModel):
     consistency_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
     consistency_assessment: str=Field(description="Your evaluation of whether the user guide/API documentation is consistent with the code definitions")
     consistency_development: list[str]=Field(description="A list of inconsistent function/class/method name and inconsistent docstring")
@@ -95,9 +95,9 @@ class ConsistencyObserveStep(PEOCommonStep):
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the consistency evaluation step.",
-            schema=ConsistencyEvaluationResult,
+            schema=ConsistencyEvaluationObserveResult,
         )
-        res: ConsistencyEvaluationResult = res
+        res: ConsistencyEvaluationObserveResult = res
         state["consistency_score"] = res.consistency_score
         state["consistency_assessment"] = res.consistency_assessment
         state["consistency_development"] = res.consistency_development

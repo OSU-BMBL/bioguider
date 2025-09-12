@@ -1,9 +1,7 @@
 
 
-from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.agents.common_step import CommonStep
-from bioguider.agents.consistency_collection_task_utils import ConsistencyCollectionWorkflowState, ConsistencyEvaluationState
-from bioguider.agents.peo_common_step import PEOCommonStep
+from bioguider.agents.consistency_evaluation_task_utils import ConsistencyEvaluationState
 from bioguider.database.code_structure_db import CodeStructureDb
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 

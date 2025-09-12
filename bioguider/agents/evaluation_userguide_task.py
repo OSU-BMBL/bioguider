@@ -1,37 +1,24 @@
 
-import os
 from pathlib import Path
 import logging
 from langchain.prompts import ChatPromptTemplate
-from markdownify import markdownify as md
 from pydantic import BaseModel, Field
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.agents.collection_task import CollectionTask
-from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationTask
-from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, CollectionGoalItemEnum
+from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationTask, ConsistencyEvaluationResult
+from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
-    ProjectMetadata,
-    StructuredEvaluationInstallationResult,
-    FreeEvaluationInstallationResult,
-    EvaluationInstallationResult,
 )
-from bioguider.rag.data_pipeline import count_tokens
-from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 from ..utils.pyphen_utils import PyphenReadability
 
 from .evaluation_task import EvaluationTask
 from .agent_utils import read_file
 from bioguider.utils.utils import increase_token_usage
-from .evaluation_userguide_prompts import CONSISTENCY_EVAL_SYSTEM_PROMPT, INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
-from .consistency_collection_task import ConsistencyCollectionTask
+from .evaluation_userguide_prompts import INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
 
-class ConsistencyEvaluationResult(BaseModel):
-    consistency_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    consistency_assessment: str=Field(description="Your evaluation of whether the user guide/API documentation is consistent with the code definitions")
-    consistency_development: list[str]=Field(description="A list of inconsistent function/class/method name and inconsistent docstring")
-    consistency_strengths: list[str]=Field(description="A list of strengths of the user guide/API documentation on consistency")
 
 class UserGuideEvaluationResult(BaseModel):
     overall_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
@@ -79,7 +66,7 @@ class EvaluationUserGuideTask(EvaluationTask):
         files = task.collect()
         return files
 
-    def _evaluate_consistency(self, file: str) -> tuple[EvaluationInstallationResult | None, dict, list[str]]:
+    def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
         consistency_evaluation_task = ConsistencyEvaluationTask(
             llm=self.llm,
             code_structure_db=self.code_structure_db,
@@ -87,42 +74,7 @@ class EvaluationUserGuideTask(EvaluationTask):
         )
         with open(Path(self.repo_path, file), "r") as f:
             user_guide_api_documentation = f.read()
-        res = consistency_evaluation_task.evaluate(user_guide_api_documentation)
-
-        consistency_evaluation_task.evaluate(file)
-
-        consistency_collect_task = ConsistencyCollectionTask(
-            llm=self.llm,
-            code_structure_db=self.code_structure_db,
-            step_callback=self.step_callback,
-        )
-        consistency_collect_task.compile(repo_path=self.repo_path, gitignore_path=Path(self.repo_path, ".gitignore"))
-        with open(Path(self.repo_path, file), "r") as f:
-            user_guide_api_documentation = f.read()
-        res, code_definitions = consistency_collect_task.collect(user_guide_api_documentation)
-
-        if not res:
-            # No sufficient information to evaluate the consistency of the user guide/API documentation
-            return None, {**DEFAULT_TOKEN_USAGE}
-
-        system_prompt = ChatPromptTemplate.from_template(
-            CONSISTENCY_EVAL_SYSTEM_PROMPT
-        ).format(
-            user_guide_api_documentation=user_guide_api_documentation,
-            code_definitions=code_definitions,
-        )
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
-            system_prompt=system_prompt,
-            instruction_prompt="Now, let's begin the consistency evaluation step.",
-            schema=ConsistencyEvaluationResult,
-        )
-        res: ConsistencyEvaluationResult = res
-        self.print_step(step_output=f"Consistency Evaluation Result: {res}")
-        self.print_step(step_output=f"Consistency Evaluation Reasoning Process: {reasoning_process}")
-        self.print_step(token_usage=token_usage)
-
-        return res, token_usage
+        return consistency_evaluation_task.evaluate(user_guide_api_documentation), {**DEFAULT_TOKEN_USAGE}
 
     def _evaluate_individual_userguide(self, file: str) -> tuple[IndividualUserGuideEvaluationResult | None, dict]:
         content = read_file(Path(self.repo_path, file))
