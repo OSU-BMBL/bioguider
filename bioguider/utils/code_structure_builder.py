@@ -1,8 +1,10 @@
 from pathlib import Path
 import logging
 
+from bioguider.utils.r_file_handler import RFileHandler
+
 from .gitignore_checker import GitignoreChecker
-from .file_handler import FileHandler
+from .python_file_handler import PythonFileHandler
 from ..database.code_structure_db import CodeStructureDb
 
 logger = logging.getLogger(__name__)
@@ -16,16 +18,19 @@ class CodeStructureBuilder:
     ):
         self.repo_path = repo_path
         self.gitignore_checker = GitignoreChecker(repo_path, gitignore_path)
-        self.file_handler = FileHandler(repo_path)
+        self.file_handler = PythonFileHandler(repo_path)
         self.code_structure_db = code_structure_db
 
     def build_code_structure(self):
         files = self.gitignore_checker.check_files_and_folders()
         for file in files:
-            if not file.endswith(".py"):
+            if not file.endswith(".py") and not file.endswith(".R"):
                 continue
             logger.info(f"Building code structure for {file}")
-            file_handler = FileHandler(Path(self.repo_path) / file)
+            if file.endswith(".py"):
+                file_handler = PythonFileHandler(Path(self.repo_path) / file)
+            else:
+                file_handler = RFileHandler(Path(self.repo_path) / file)
             functions_and_classes = file_handler.get_functions_and_classes()
             # fixme: currently, we don't extract reference graph for each function or class
             for function_or_class in functions_and_classes:

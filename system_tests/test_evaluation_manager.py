@@ -6,6 +6,9 @@ from bioguider.managers.evaluation_manager import EvaluationManager
 from bioguider.utils.constants import PrimaryLanguageEnum, ProjectTypeEnum
 from bioguider.agents.evaluation_readme_task import EvaluationREADMEResult, StructuredEvaluationREADMEResult
 
+import logging
+logger = logging.getLogger(__name__)
+
 @pytest.mark.skip()
 def test_EvaluationManager(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
@@ -161,12 +164,19 @@ def test_EvaluationManager_on_POPPER(llm, step_callback):
 
 
 #@pytest.mark.skip()
-def test_EvaluationManager_evaluate_userguide_on_POPPER(llm, step_callback):
+def test_EvaluationManager_evaluate_userguide_on_RepoAgent(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
-    mgr.prepare_repo("https://github.com/snap-stanford/POPPER")
+    mgr.prepare_repo("https://github.com/OpenBMB/RepoAgent")
 
     evaluation, files = mgr.evaluate_userguide()
 
     assert len(files) > 0
     assert evaluation is not None
+
+    import json
+    from bioguider.utils.utils import convert_to_serializable
+    converted_evaluation = convert_to_serializable(evaluation)
+    output = json.dumps(converted_evaluation, indent=2)
+    logger.info(output)
+
 

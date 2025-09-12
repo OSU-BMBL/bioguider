@@ -1,7 +1,7 @@
 import ast
 import os
 
-class FileHandler:
+class PythonFileHandler:
     def __init__(self, file_path: str):
         self.file_path = file_path
 

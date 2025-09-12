@@ -1,11 +1,15 @@
 import os
 import shutil
 import pytest
+import logging
 
 from bioguider.agents.evaluation_userguide_task import ConsistencyEvaluationResult, EvaluationUserGuideTask
 from bioguider.database.code_structure_db import CodeStructureDb
 from bioguider.managers.evaluation_manager import EvaluationManager
 from bioguider.utils.code_structure_builder import CodeStructureBuilder
+from bioguider.utils.utils import convert_to_serializable
+
+logger = logging.getLogger(__name__)
 
 @pytest.fixture(scope="module", autouse=True)
 def cleanup_after_tests(data_folder):
@@ -122,7 +126,7 @@ def test_EvaluationUserGuideTask_ConsistencyEvaluation(llm, step_callback, root_
     res = task._evaluate(files)
     assert res is not None
 
-# @pytest.mark.skip(reason="Skipping this test")
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_evaluate(llm, step_callback, root_path, data_folder):
     code_structure_db = CodeStructureDb(
         author="Y2C99",
@@ -146,3 +150,52 @@ def test_EvaluationUserGuideTask_evaluate(llm, step_callback, root_path, data_fo
     evaluations, files = task.evaluate()
     assert evaluations is not None
     assert files is not None
+
+# @pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_ConsistencyEvaluation_on_RepoAgent(llm, step_callback, root_path, data_folder):
+    files = [
+        # "markdown_docs/repo_agent/multi_task_dispatch.md", 
+        "markdown_docs/repo_agent/file_handler.md", 
+        # "markdown_docs/repo_agent/doc_meta_info.md", 
+        # "markdown_docs/display/book_tools/generate_summary_from_book.md", 
+        "markdown_docs/display/book_tools/generate_repoagent_books.md",
+    ]
+
+    code_structure_db = CodeStructureDb(
+        author="OpenBMB",
+        repo_name="RepoAgent",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/RepoAgent",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+    
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/RepoAgent",
+        gitignore_path=f"{root_path}/RepoAgent/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    
+    res = task._evaluate(files)
+    import json
+    from pydantic import BaseModel
+        
+    # Convert the result to a serializable format
+    # res is a tuple: (evaluations_dict, token_usage_dict, files_list)
+    serializable_res = convert_to_serializable(res)
+    output = json.dumps(serializable_res, indent=2)
+    logger.info(f"Evaluation result: {output}")
+    assert res is not None
+
+
+
+
+
+
+
+
