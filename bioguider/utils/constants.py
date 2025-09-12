@@ -119,15 +119,15 @@ class DemoInstructionsResult(BaseModel):
     expected_output_description: Optional[bool] = Field(description="A boolean value. Does it provide the description of expected output?")
 
 class EvaluationSubmissionRequirementsResult(BaseModel):
-    compiled_standalone_software: bool
-    source_code: bool
-    demo_dataset: bool
-    run_on_data_instruction: bool
-    run_on_custom_instruction: bool
-    expected_output_description: bool
-    complete_readme: bool
-    software_dependency: bool
-    install_tutorial: bool
-    license: bool
-    hardware_requirements: bool
-    compatible_os: bool
+    compiled_standalone_software: bool | None
+    source_code: bool | None
+    demo_dataset: bool | None
+    run_on_data_instruction: bool | None
+    run_on_custom_instruction: bool | None
+    expected_output_description: bool | None
+    complete_readme: bool | None
+    software_dependency: bool | None
+    install_tutorial: bool | None
+    license: bool | None
+    hardware_requirements: bool | None
+    compatible_os: bool | None
