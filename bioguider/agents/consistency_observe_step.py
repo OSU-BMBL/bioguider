@@ -1,0 +1,107 @@
+
+
+from langchain.prompts import ChatPromptTemplate
+from langchain_openai.chat_models.base import BaseChatOpenAI
+from pydantic import BaseModel, Field
+from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
+from bioguider.agents.consistency_collection_task_utils import ConsistencyCollectionWorkflowState, ConsistencyEvaluationState
+from bioguider.agents.peo_common_step import PEOCommonStep
+
+CONSISTENCY_OBSERVE_SYSTEM_PROMPT = """
+You are an expert developer specializing in the biomedical domain.
+Your task is to analyze both:
+1. the provided file related to user guide/API documentation,
+2. the code definitions related to the user guide/API documentation
+and generate a structured consistency assessment based on the following criteria.
+
+---
+
+### **Evaluation Criteria**
+
+**Consistency**:
+  * **Score**: [Poor / Fair / Good / Excellent]
+  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent]
+  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
+
+---
+
+### **Output Format**
+Your output **must exactly match** the following format:
+```
+**Consistency**:
+  * **Score**: [Poor / Fair / Good / Excellent]
+  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent]
+  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
+```
+
+### **Output Example**
+
+```
+**Consistency**:
+  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Development**:
+    - Inconsistent function/class/method name 1
+    - Inconsistent docstring 1
+    - Inconsistent function/class/method name 2
+    - Inconsistent docstring 2
+    - ...
+  * **Strengths**: 
+    - Strengths 1
+    - Strengths 2
+    - ...
+```
+
+---
+
+### **Input User Guide/API Documentation**
+{user_guide_api_documentation}
+
+### **Code Definitions**
+{code_definitions}
+
+
+"""
+
+class ConsistencyEvaluationResult(BaseModel):
+    consistency_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    consistency_assessment: str=Field(description="Your evaluation of whether the user guide/API documentation is consistent with the code definitions")
+    consistency_development: list[str]=Field(description="A list of inconsistent function/class/method name and inconsistent docstring")
+    consistency_strengths: list[str]=Field(description="A list of strengths of the user guide/API documentation on consistency")
+
+
+class ConsistencyObserveStep(PEOCommonStep):
+    def __init__(self, llm: BaseChatOpenAI):
+        super().__init__(llm)
+        self.step_name = "Consistency Observe Step"
+
+    def _prepare_system_prompt(self, state: ConsistencyEvaluationState):
+        all_query_rows = state["all_query_rows"]
+        user_guide_api_documentation = state["user_guide_api_documentation"]
+        code_definition = ""
+        for row in all_query_rows:
+            content = f"name: {row['name']}\nfile_path: {row['path']}\nparent: {row['parent']}\nparameters: {row['params']}\ndoc_string: {row['doc_string']}"
+            code_definition += content
+            code_definition += "\n\n\n"
+        return ChatPromptTemplate.from_template(CONSISTENCY_OBSERVE_SYSTEM_PROMPT).format(
+            code_definitions=code_definition,
+            user_guide_api_documentation=user_guide_api_documentation,
+        )
+
+    def _execute_directly(self, state: ConsistencyEvaluationState):
+        system_prompt = self._prepare_system_prompt(state)
+        agent = CommonAgentTwoSteps(llm=self.llm)
+        res, _, token_usage, reasoning_process = agent.go(
+            system_prompt=system_prompt,
+            instruction_prompt="Now, let's begin the consistency evaluation step.",
+            schema=ConsistencyEvaluationResult,
+        )
+        res: ConsistencyEvaluationResult = res
+        state["consistency_score"] = res.consistency_score
+        state["consistency_assessment"] = res.consistency_assessment
+        state["consistency_development"] = res.consistency_development
+        state["consistency_strengths"] = res.consistency_strengths
+        return state, token_usage
+
+

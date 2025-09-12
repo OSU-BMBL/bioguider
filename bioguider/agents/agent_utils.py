@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, MAX_FILE_LENGTH, MAX_SENTENCE_NUM
 from bioguider.utils.file_utils import get_file_type
+from bioguider.utils.utils import clean_action_input
 from ..utils.gitignore_checker import GitignoreChecker
 from ..database.summarized_file_db import SummarizedFilesDb
 from bioguider.agents.common_conversation import CommonConversation
@@ -289,9 +290,7 @@ class CustomOutputParser(AgentOutputParser):
         action_input = match.group(2)
         # Return the action and action input
         action_dict = None
-        action_input_replaced = action_input.strip().strip(" ").strip('"').strip('`').strip()
-        action_input_replaced = action_input_replaced.replace("'", '"')
-        action_input_replaced = action_input_replaced.replace("`", '"')
+        action_input_replaced = clean_action_input(action_input)
         try:
             action_dict = json.loads(action_input_replaced)
         except json.JSONDecodeError:

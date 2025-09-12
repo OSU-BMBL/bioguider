@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.agents.collection_task import CollectionTask
+from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationTask
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, CollectionGoalItemEnum
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
@@ -79,6 +80,17 @@ class EvaluationUserGuideTask(EvaluationTask):
         return files
 
     def _evaluate_consistency(self, file: str) -> tuple[EvaluationInstallationResult | None, dict, list[str]]:
+        consistency_evaluation_task = ConsistencyEvaluationTask(
+            llm=self.llm,
+            code_structure_db=self.code_structure_db,
+            step_callback=self.step_callback,
+        )
+        with open(Path(self.repo_path, file), "r") as f:
+            user_guide_api_documentation = f.read()
+        res = consistency_evaluation_task.evaluate(user_guide_api_documentation)
+
+        consistency_evaluation_task.evaluate(file)
+
         consistency_collect_task = ConsistencyCollectionTask(
             llm=self.llm,
             code_structure_db=self.code_structure_db,

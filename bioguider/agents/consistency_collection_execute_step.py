@@ -36,6 +36,7 @@ Your job is to **execute the given plan step by step**, using the tools availabl
 ### **Output Format (Strict Order Required)**
 
 For **each step**, follow the **exact format** below and **do not change the order of the fields** under any circumstances:
+Note: **Do not** use any code fences or backticks in the Action Input field.
 
 ```
 Thought: Describe what you are thinking or planning to do next.  

@@ -35,8 +35,8 @@ class EvaluationManager:
         self.summary_file_db = SummarizedFilesDb(author, repo_name)
         self.code_structure_db = CodeStructureDb(author, repo_name)
         code_structure_builder = CodeStructureBuilder(
-            repo_path=repo_url, 
-            gitignore_path=Path(repo_url, ".gitignore"), 
+            repo_path=self.rag.repo_dir, 
+            gitignore_path=Path(self.rag.repo_dir, ".gitignore"), 
             code_structure_db=self.code_structure_db
         )
         code_structure_builder.build_code_structure()

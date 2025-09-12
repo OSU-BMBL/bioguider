@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 class ConsistencyCollectionWorkflowState(TypedDict):
     user_guide_api_documentation: str
+    functions_and_classes: Optional[list[dict]]
+    all_query_rows: Optional[list[any]]
     step_output_callback: Optional[Callable]
     intermediate_steps: Optional[str]
     step_output: Optional[str]
@@ -24,6 +26,16 @@ class ConsistencyCollectionWorkflowState(TypedDict):
     final_answer: Optional[str]
     final_assembly_result: Optional[str]
     step_count: Optional[int]
+
+class ConsistencyEvaluationState(TypedDict):
+    user_guide_api_documentation: str
+    step_output_callback: Optional[Callable]
+    functions_and_classes: Optional[list[dict]]
+    all_query_rows: Optional[list[any]]
+    consistency_score: Optional[str]
+    consistency_assessment: Optional[str]
+    consistency_development: Optional[list[str]]
+    consistency_strengths: Optional[list[str]]
 
 class retrieve_method_definition_and_docstring_tool:
     """ Retrieve the method definition and docstring.
