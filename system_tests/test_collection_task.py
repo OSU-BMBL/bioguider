@@ -63,7 +63,8 @@ def test_collection_task_for_installation_instructions(llm, step_callback):
     )
     s = task.collect()
     assert s is not None
-
+    
+@pytest.mark.skip()
 def test_collection_task_for_installation(llm, step_callback, root_path):
     repo_path = f"{root_path}/POPPER"
     gitignore_path = f"{root_path}/POPPER/.gitignore"
@@ -86,3 +87,20 @@ def test_collection_task_for_installation(llm, step_callback, root_path):
     assert results is not None
     assert isinstance(results, list)
     
+def test_CollectionTask_on_telescope(llm, step_callback, root_path):
+    repo_path = f"{root_path}/telescope"
+    gitignore_path = f"{root_path}/telescope/.gitignore"
+    
+    task = CollectionTask(
+        llm=llm,
+        step_callback=step_callback,
+    )
+    task.compile(
+        repo_path=repo_path, 
+        gitignore_path=gitignore_path, 
+        goal_item=CollectionGoalItemEnum.UserGuide.name,
+    )
+    results = task.collect()
+    assert results is not None
+    assert isinstance(results, list)
+

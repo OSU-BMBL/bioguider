@@ -94,8 +94,13 @@ class CollectionObserveStep(PEOCommonStep):
         )
     def _execute_directly(self, state: CollectionWorkflowState):
         step_count = state["step_count"]
-        instruction = "Now, we have reached max recursion limit, please give me the **final answer** based on the current information" \
-            if step_count == MAX_STEP_COUNT/3 - 2 else "Let's begin thinking."
+        plan = state["plan_actions"]
+        plan = plan.strip()
+        if len(plan) == 0:
+            instruction = "No plan provided, please let's generate the final answer based on the current information."
+        else:
+            instruction = "Now, we have reached max recursion limit, please give me the **final answer** based on the current information" \
+                if step_count == MAX_STEP_COUNT/3 - 2 else "Let's begin thinking."
         system_prompt = self._build_prompt(state)
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(

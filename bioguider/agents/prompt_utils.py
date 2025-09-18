@@ -104,6 +104,7 @@ COLLECTION_PROMPTS = {
         "goal_item": "User Guide",
         "related_file_description": """A document qualifies as a **User Guide** if it includes **at least one** of the following elements.
 If **any one** of these is present, the document should be classified as a User Guide — full coverage is **not required**:
+ - **Not source code or a script** (*.py, *.R) or notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction.
  - Document **functions, methods, or classes**
  - Describe **input parameters, return values**, and **usage syntax**
  - Include **technical guidance** for using specific APIs
@@ -117,10 +118,12 @@ If **any one** of these is present, the document should be classified as a User 
  - Code Walkthroughs: Detailed explanations of code snippets in a tutorial format.
 **Do not** classify the document as a User Guide if it is souce code or a script (*.py, *.R) that is not intended for end-user interaction.
  - You can include directory names if all files in the directory are relevant to the goal item.""",
-        "plan_important_instructions": """ - **Do not** classify the document as a User Guide if it is source code or a script (*.py, *.R) that is not intended for end-user interaction.
+        "plan_important_instructions": """ - **Do not** try to summarize or read the content of any source code or script (*.py, *.R) or notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction.
+ - **Do not** classify the document as a User Guide if it is source code or a script (*.py, *.R) that is not intended for end-user interaction.
  - **Do not** classify the document as a User Guide if it is a notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction.
  - You plan **must not** include any source code or script (*.py, *.R) or notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction.""",
-        "observe_important_instructions": """ - **Do not** classify the document as a User Guide if it is source code or a script (*.py, *.R) that is not intended for end-user interaction."""
+        "observe_important_instructions": """ - **Do not** classify the document as a User Guide if it is source code or a script (*.py, *.R) that is not intended for end-user interaction.
+ - **Do not** include any source code or script (*.py, *.R) or notebook (*.ipynb, *.Rmd) in the final answer that is not intended for end-user interaction."""
     },
     "Tutorial": {
         "goal_item": "Tutorials & Vignettes",
