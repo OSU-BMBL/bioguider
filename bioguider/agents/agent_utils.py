@@ -2,6 +2,7 @@
 import json
 from json import JSONDecodeError
 import os
+from pathlib import Path
 import re
 from typing import List, Optional, Tuple, Union
 from langchain_openai import AzureChatOpenAI
@@ -123,18 +124,18 @@ def pretty_print(message, printout = True):
 HUGE_FILE_LENGTH = 10 * 1024 # 10K
 
 def read_file(
-    file_path: str,    
+    file_path: str | Path,
 ) -> str | None:
-    file_path = file_path.strip()
+    file_path = str(file_path).strip()
     if not os.path.isfile(file_path):
         return None
     with open(file_path, 'r') as f:
         content = f.read()
         return content
 
-def write_file(file_path: str, content: str):
+def write_file(file_path: str | Path, content: str):
     try:
-        file_path = file_path.strip()
+        file_path = str(file_path).strip()
         with open(file_path, "w") as fobj:
             fobj.write(content)
             return True
@@ -143,10 +144,11 @@ def write_file(file_path: str, content: str):
         return False
 
 def read_directory(
-    dir_path: str,
+    dir_path: str | Path,
     gitignore_path: str,
     level: int=1,
 ) -> list[str] | None:
+    dir_path = str(dir_path).strip()
     if not os.path.isdir(dir_path):
         return None
     gitignore_checker = GitignoreChecker(
@@ -185,16 +187,16 @@ Now, let's start to summarize.
 
 def summarize_file(
     llm: BaseChatOpenAI, 
-    name: str, 
+    name: str | Path, 
     content: str | None = None, 
     level: int = 3,
     summary_instructions: str | None = None,
     summarize_prompt: str = "N/A",
     db: SummarizedFilesDb | None = None,
 ) -> Tuple[str, dict]:
+    name = str(name).strip()
     if content is None:
-        try:
-            name = name.strip()
+        try:            
             with open(name, "r") as fobj:
                 content = fobj.read()
         except Exception as e:
@@ -412,7 +414,7 @@ def read_license_file(repo_path: str) -> tuple[str | None, str|None]:
     ]
     license_files = []
     for file in hardcoded_license_files:
-        file_path = os.path.join(repo_path, file)
+        file_path = os.path.join(str(repo_path), file)
         file_path = file_path.strip()
         if os.path.exists(file_path):
             with open(file_path, "r") as f:
