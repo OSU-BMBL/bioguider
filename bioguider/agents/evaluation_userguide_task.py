@@ -72,6 +72,7 @@ class EvaluationUserGuideTask(EvaluationTask):
             code_structure_db=self.code_structure_db,
             step_callback=self.step_callback,
         )
+        file = file.strip()
         with open(Path(self.repo_path, file), "r") as f:
             user_guide_api_documentation = f.read()
         return consistency_evaluation_task.evaluate(user_guide_api_documentation), {**DEFAULT_TOKEN_USAGE}
@@ -121,6 +122,8 @@ class EvaluationUserGuideTask(EvaluationTask):
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
         user_guide_evaluation_results = {}
         for file in files:
+            if file.endswith(".py") or file.endswith(".R"):
+                continue
             user_guide_evaluation_result, token_usage = self._evaluate_individual_userguide(file)
             total_token_usage = increase_token_usage(total_token_usage, token_usage)
             user_guide_evaluation_results[file] = user_guide_evaluation_result

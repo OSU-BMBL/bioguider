@@ -151,7 +151,7 @@ def test_EvaluationUserGuideTask_evaluate(llm, step_callback, root_path, data_fo
     assert evaluations is not None
     assert files is not None
 
-# @pytest.mark.skip(reason="Skipping this test")
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_ConsistencyEvaluation_on_RepoAgent(llm, step_callback, root_path, data_folder):
     files = [
         # "markdown_docs/repo_agent/multi_task_dispatch.md", 
@@ -193,8 +193,31 @@ def test_EvaluationUserGuideTask_ConsistencyEvaluation_on_RepoAgent(llm, step_ca
     assert res is not None
 
 
+def test_EvaluationUserGuideTask_evaluate_on_telescope(llm, step_callback, root_path, data_folder):
+    files = ["README.md"]
 
+    code_structure_db = CodeStructureDb(
+        author="mlbendall",
+        repo_name="telescope",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/telescope",
+        gitignore_path=f"{root_path}/telescope/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
 
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/telescope",
+        gitignore_path=f"{root_path}/telescope/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    evaluations, files = task.evaluate()
+    assert evaluations is not None
+    assert files is not None
 
 
 
