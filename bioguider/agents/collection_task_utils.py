@@ -89,6 +89,7 @@ Returns:
     def run(self, file_path: str) -> str:
         if not self.repo_path in file_path:
             file_path = os.path.join(self.repo_path, file_path)
+        file_path = file_path.strip()
         if not os.path.isfile(file_path):
             return "Can't read file"
         

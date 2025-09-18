@@ -119,7 +119,8 @@ If **any one** of these is present, the document should be classified as a User 
  - You can include directory names if all files in the directory are relevant to the goal item.""",
         "plan_important_instructions": """ - **Do not** classify the document as a User Guide if it is source code or a script (*.py, *.R) that is not intended for end-user interaction.
  - **Do not** classify the document as a User Guide if it is a notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction.
- - You plan **must not** include any source code or script (*.py, *.R) or notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction."""
+ - You plan **must not** include any source code or script (*.py, *.R) or notebook (*.ipynb, *.Rmd) that is not intended for end-user interaction.""",
+        "observe_important_instructions": """ - **Do not** classify the document as a User Guide if it is source code or a script (*.py, *.R) that is not intended for end-user interaction."""
     },
     "Tutorial": {
         "goal_item": "Tutorials & Vignettes",

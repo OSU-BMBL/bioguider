@@ -125,6 +125,7 @@ HUGE_FILE_LENGTH = 10 * 1024 # 10K
 def read_file(
     file_path: str,    
 ) -> str | None:
+    file_path = file_path.strip()
     if not os.path.isfile(file_path):
         return None
     with open(file_path, 'r') as f:
@@ -133,6 +134,7 @@ def read_file(
 
 def write_file(file_path: str, content: str):
     try:
+        file_path = file_path.strip()
         with open(file_path, "w") as fobj:
             fobj.write(content)
             return True
@@ -192,6 +194,7 @@ def summarize_file(
 ) -> Tuple[str, dict]:
     if content is None:
         try:
+            name = name.strip()
             with open(name, "r") as fobj:
                 content = fobj.read()
         except Exception as e:
@@ -409,8 +412,10 @@ def read_license_file(repo_path: str) -> tuple[str | None, str|None]:
     ]
     license_files = []
     for file in hardcoded_license_files:
-        if os.path.exists(os.path.join(repo_path, file)):
-            with open(os.path.join(repo_path, file), "r") as f:
+        file_path = os.path.join(repo_path, file)
+        file_path = file_path.strip()
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
                 license_files.append((f.read(), os.path.join(repo_path, file)))
     
     max_item = max(license_files, key=lambda x: len(x[0])) if len(license_files) > 0 else (None, None)
