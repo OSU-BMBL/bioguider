@@ -12,12 +12,12 @@ logger = logging.getLogger(__name__)
 class CodeStructureBuilder:
     def __init__(
         self, 
-        repo_path: str, 
-        gitignore_path: str,
+        repo_path: str | Path, 
+        gitignore_path: str | Path,
         code_structure_db: CodeStructureDb,
     ):
-        self.repo_path = repo_path
-        self.gitignore_checker = GitignoreChecker(repo_path, gitignore_path)
+        self.repo_path = str(repo_path)
+        self.gitignore_checker = GitignoreChecker(repo_path, str(gitignore_path))
         self.file_handler = PythonFileHandler(repo_path)
         self.code_structure_db = code_structure_db
 
