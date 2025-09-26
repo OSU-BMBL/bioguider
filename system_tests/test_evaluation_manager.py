@@ -163,7 +163,7 @@ def test_EvaluationManager_on_POPPER(llm, step_callback):
     assert len(submit_files) > 0
 
 
-#@pytest.mark.skip()
+@pytest.mark.skip()
 def test_EvaluationManager_evaluate_userguide_on_RepoAgent(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
     mgr.prepare_repo("https://github.com/OpenBMB/RepoAgent")
@@ -179,4 +179,11 @@ def test_EvaluationManager_evaluate_userguide_on_RepoAgent(llm, step_callback):
     output = json.dumps(converted_evaluation, indent=2)
     logger.info(output)
 
+def test_EvaluationManager_evaluate_tutorial_on_telescope(llm, step_callback):
+    mgr = EvaluationManager(llm, step_callback)
+    mgr.prepare_repo("https://github.com/mlbendall/telescope")
 
+    evaluation, files = mgr.evaluate_tutorial()
+
+    assert evaluation is not None
+    assert files is not None

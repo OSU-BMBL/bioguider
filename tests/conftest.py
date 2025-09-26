@@ -23,3 +23,7 @@ def prepare_logging():
 @pytest.fixture(scope="module")
 def data_folder():
     return "./tests/data"
+
+@pytest.fixture(scope="module")
+def root_path():
+    return "/bmbl_data/shaohong/projects/github"

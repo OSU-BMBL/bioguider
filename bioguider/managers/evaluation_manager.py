@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from bioguider.agents.evaluation_tutorial_task import EvaluationTutorialTask
 from bioguider.agents.evaluation_userguide_task import EvaluationUserGuideTask
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.database.code_structure_db import CodeStructureDb
@@ -132,6 +133,19 @@ class EvaluationManager:
 
     def evaluate_userguide(self):
         evaluation_task = EvaluationUserGuideTask(
+            llm=self.llm,
+            repo_path=self.rag.repo_dir,
+            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
+            meta_data=self.project_metadata,
+            step_callback=self.step_callback,
+            summarized_files_db=self.summary_file_db,
+            code_structure_db=self.code_structure_db,
+        )
+        evaluation, files = evaluation_task.evaluate()
+        return evaluation, files
+    
+    def evaluate_tutorial(self):
+        evaluation_task = EvaluationTutorialTask(
             llm=self.llm,
             repo_path=self.rag.repo_dir,
             gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
