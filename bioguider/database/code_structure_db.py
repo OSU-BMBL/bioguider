@@ -123,15 +123,8 @@ class CodeStructureDb:
                 os.makedirs(db_path, exist_ok=True)
             except Exception as e:
                 logging.error(e)
-                return False
-        db_path = os.path.join(db_path, "databases")
-        # Ensure the local path exists
-        try:
-            os.makedirs(db_path, exist_ok=True)
-        except Exception as e:
-            logging.error(e)
-            return False
-        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}.db")
+                return False        
+        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}_code_structure.db")
         if not os.path.exists(db_path):
             try:
                 with open(db_path, "w"):
@@ -142,6 +135,24 @@ class CodeStructureDb:
         self.connection = sqlite3.connect(db_path)
         return True
     
+    def is_database_built(self) -> bool:
+        res = self._connect_to_db()
+        if not res:
+            return False
+        res = self._ensure_tables()
+        if not res:
+            return False
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(f"SELECT * FROM {CODE_STRUCTURE_TABLE_NAME}")
+            return cursor.fetchone() is not None
+        except Exception as e:
+            logging.error(e)
+            return False
+        finally:
+            self.connection.close()
+            self.connection = None
+
     def insert_code_structure(
         self,
         name: str,

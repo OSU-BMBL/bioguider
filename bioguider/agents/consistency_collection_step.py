@@ -12,12 +12,12 @@ from bioguider.agents.peo_common_step import PEOCommonStep
 CONSISTANCY_COLLECTION_SYSTEM_PROMPT = """
 ### **Goal**  
 You are an expert developer specializing in the biomedical domain.
-You will be given a user guide/API documentation. Your task is to collect all the functions, classes, and methods that the user guide/API documentation mentions.
+You will be given a {domain} documentation. Your task is to collect all the functions, classes, and methods that the {domain} documentation mentions.
 
 ---
 
-### **Input User Guide/API Documentation**
-{user_guide_api_documentation}
+### **Input {domain} Documentation**
+{documentation}
 
 ### **Output Format**
 The collected functions, classes, and methods **must exactly match** the following format, **do not** make up anything:
@@ -52,12 +52,12 @@ parent: CommonAgent
 """
 
 class ConsistencyCollectionResult(BaseModel):
-    functions_and_classes: list[dict] = Field(description="A list of functions and classes that the user guide/API documentation mentions")
+    functions_and_classes: list[dict] = Field(description="A list of functions and classes that the documentation mentions")
 
 ConsistencyCollectionResultJsonSchema = {
   "properties": {
     "functions_and_classes": {
-      "description": "A list of functions and classes that the user guide/API documentation mentions",
+      "description": "A list of functions and classes that the documentation mentions",
       "items": {
         "type": "object"
       },
@@ -78,9 +78,11 @@ class ConsistencyCollectionStep(PEOCommonStep):
         self.step_name = "Consistency Collection Step"
 
     def _prepare_system_prompt(self, state: ConsistencyEvaluationState) -> str:
-        user_guide_api_documentation = state["user_guide_api_documentation"]
+        documentation = state["documentation"]
+        domain = state["domain"]
         return ChatPromptTemplate.from_template(CONSISTANCY_COLLECTION_SYSTEM_PROMPT).format(
-            user_guide_api_documentation=user_guide_api_documentation,
+            domain=domain,
+            documentation=documentation,
         )
 
     def _execute_directly(self, state: ConsistencyEvaluationState) -> tuple[dict, dict[str, int]]:

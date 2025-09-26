@@ -441,6 +441,10 @@ class RFileHandler:
     def _pos_to_line(self, pos: int) -> int:
         return self.text.count('\n', 0, max(0, pos)) + 1
 
+    def _find_next_char_in_text(self, text: str, ch: str, start: int) -> Optional[int]:
+        idx = text.find(ch, start)
+        return idx if idx != -1 else None
+
     # For nested parsing on a slice (already delimited correctly)
     def _matching_brace_pos_in_text(self, text: str, open_idx: int) -> Optional[int]:
         in_string: Optional[str] = None

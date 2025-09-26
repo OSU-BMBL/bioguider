@@ -3,7 +3,8 @@ from typing import Callable, Optional, TypedDict
 
 
 class ConsistencyEvaluationState(TypedDict):
-    user_guide_api_documentation: str
+    domain: str
+    documentation: str
     step_output_callback: Optional[Callable]
     functions_and_classes: Optional[list[dict]]
     all_query_rows: Optional[list[any]]
