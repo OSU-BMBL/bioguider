@@ -75,7 +75,10 @@ class EvaluationUserGuideTask(EvaluationTask):
         file = file.strip()
         with open(Path(self.repo_path, file), "r") as f:
             user_guide_api_documentation = f.read()
-        return consistency_evaluation_task.evaluate(user_guide_api_documentation), {**DEFAULT_TOKEN_USAGE}
+        return consistency_evaluation_task.evaluate(
+            domain="user guide/API",
+            documentation=user_guide_api_documentation,
+        ), {**DEFAULT_TOKEN_USAGE}
 
     def _evaluate_individual_userguide(self, file: str) -> tuple[IndividualUserGuideEvaluationResult | None, dict]:
         content = read_file(Path(self.repo_path, file))

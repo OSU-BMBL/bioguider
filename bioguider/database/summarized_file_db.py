@@ -38,10 +38,11 @@ where file_path = ? and instruction = ? and summarize_level = ? and summarize_pr
 """
 
 class SummarizedFilesDb:
-    def __init__(self, author: str, repo_name: str):
+    def __init__(self, author: str, repo_name: str, data_folder: str = None):
         self.author = author
         self.repo_name = repo_name
         self.connection: Connection | None = None
+        self.data_folder = data_folder
 
     def _ensure_tables(self) -> bool:
         if self.connection is None:
@@ -60,7 +61,9 @@ class SummarizedFilesDb:
     def _connect_to_db(self) -> bool:
         if self.connection is not None:
             return True
-        db_path = os.environ.get("DATA_FOLDER", "./data")
+        db_path = self.data_folder
+        if db_path is None:
+            db_path = os.environ.get("DATA_FOLDER", "./data")
         db_path = os.path.join(db_path, "databases")
         # Ensure the local path exists
         try:
@@ -68,7 +71,7 @@ class SummarizedFilesDb:
         except Exception as e:
             logging.error(e)
             return False
-        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}.db")
+        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}_summarized_file.db")
         if not os.path.exists(db_path):
             try:
                 with open(db_path, "w"):

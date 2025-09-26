@@ -10,8 +10,8 @@ from bioguider.agents.peo_common_step import PEOCommonStep
 CONSISTENCY_OBSERVE_SYSTEM_PROMPT = """
 You are an expert developer specializing in the biomedical domain.
 Your task is to analyze both:
-1. the provided file related to user guide/API documentation,
-2. the code definitions related to the user guide/API documentation
+1. the provided file related to {domain} documentation,
+2. the code definitions related to the {domain} documentation
 and generate a structured consistency assessment based on the following criteria.
 
 ---
@@ -20,9 +20,9 @@ and generate a structured consistency assessment based on the following criteria
 
 **Consistency**:
   * **Score**: [Poor / Fair / Good / Excellent]
-  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
   * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent]
-  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
+  * **Strengths**: [A list of strengths of the {domain} documentation on consistency]
 
 ---
 
@@ -31,16 +31,16 @@ Your output **must exactly match** the following format:
 ```
 **Consistency**:
   * **Score**: [Poor / Fair / Good / Excellent]
-  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
   * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent]
-  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
+  * **Strengths**: [A list of strengths of the {domain} documentation on consistency]
 ```
 
 ### **Output Example**
 
 ```
 **Consistency**:
-  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
+  * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
   * **Development**:
     - Inconsistent function/class/method name 1
     - Inconsistent docstring 1
@@ -55,8 +55,8 @@ Your output **must exactly match** the following format:
 
 ---
 
-### **Input User Guide/API Documentation**
-{user_guide_api_documentation}
+### **Input {domain} Documentation**
+{documentation}
 
 ### **Code Definitions**
 {code_definitions}
@@ -66,9 +66,9 @@ Your output **must exactly match** the following format:
 
 class ConsistencyEvaluationObserveResult(BaseModel):
     consistency_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    consistency_assessment: str=Field(description="Your evaluation of whether the user guide/API documentation is consistent with the code definitions")
+    consistency_assessment: str=Field(description="Your evaluation of whether the documentation is consistent with the code definitions")
     consistency_development: list[str]=Field(description="A list of inconsistent function/class/method name and inconsistent docstring")
-    consistency_strengths: list[str]=Field(description="A list of strengths of the user guide/API documentation on consistency")
+    consistency_strengths: list[str]=Field(description="A list of strengths of the documentation on consistency")
 
 
 class ConsistencyObserveStep(PEOCommonStep):
@@ -78,7 +78,8 @@ class ConsistencyObserveStep(PEOCommonStep):
 
     def _prepare_system_prompt(self, state: ConsistencyEvaluationState):
         all_query_rows = state["all_query_rows"]
-        user_guide_api_documentation = state["user_guide_api_documentation"]
+        documentation = state["documentation"]
+        domain = state["domain"]
         code_definition = ""
         for row in all_query_rows:
             content = f"name: {row['name']}\nfile_path: {row['path']}\nparent: {row['parent']}\nparameters: {row['params']}\ndoc_string: {row['doc_string']}"
@@ -86,7 +87,8 @@ class ConsistencyObserveStep(PEOCommonStep):
             code_definition += "\n\n\n"
         return ChatPromptTemplate.from_template(CONSISTENCY_OBSERVE_SYSTEM_PROMPT).format(
             code_definitions=code_definition,
-            user_guide_api_documentation=user_guide_api_documentation,
+            documentation=documentation,
+            domain=domain,
         )
 
     def _execute_directly(self, state: ConsistencyEvaluationState):

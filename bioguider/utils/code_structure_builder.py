@@ -22,6 +22,8 @@ class CodeStructureBuilder:
         self.code_structure_db = code_structure_db
 
     def build_code_structure(self):
+        if self.code_structure_db.is_database_built():
+            return
         files = self.gitignore_checker.check_files_and_folders()
         for file in files:
             if not file.endswith(".py") and not file.endswith(".R"):

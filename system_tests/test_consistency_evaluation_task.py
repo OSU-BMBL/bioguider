@@ -61,5 +61,8 @@ def test_ConsistencyEvaluationTask(llm, step_callback, data_folder):
         code_structure_db=code_structure_db,
         step_callback=step_callback,
     )
-    state = task.evaluate(user_guide_api_documentation=user_guide_api_documentation)
+    state = task.evaluate(
+        domain="user guide/API documentation",
+        documentation=user_guide_api_documentation,
+    )
     assert state is not None

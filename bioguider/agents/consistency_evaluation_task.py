@@ -28,13 +28,14 @@ class ConsistencyEvaluationTask:
         self.code_structure_db = code_structure_db
         self.step_callback = step_callback
 
-    def evaluate(self, user_guide_api_documentation: str) -> ConsistencyEvaluationResult:
+    def evaluate(self, domain: str, documentation: str) -> ConsistencyEvaluationResult:
         collection_step = ConsistencyCollectionStep(llm=self.llm)
         query_step = ConsistencyQueryStep(code_structure_db=self.code_structure_db)
         observe_step = ConsistencyObserveStep(llm=self.llm)
 
         state = ConsistencyEvaluationState(
-            user_guide_api_documentation=user_guide_api_documentation,
+            domain=domain,
+            documentation=documentation,
             step_output_callback=self.step_callback,
         )
 
