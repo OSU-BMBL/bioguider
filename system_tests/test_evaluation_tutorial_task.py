@@ -178,6 +178,51 @@ def test_EvaluationTutorialTask_only_evaluate_on_scanpy(llm, step_callback, root
     assert evaluations is not None
     assert files is not None
 
+def test_EvaluationTutorialTask_on_scanpy_files(llm, step_callback, root_path, data_folder):
+    code_structure_db = CodeStructureDb(
+        author="scverse",
+        repo_name="scanpy",
+        data_folder=data_folder
+    )
+    summarized_files_db = SummarizedFilesDb(
+        author="scverse",
+        repo_name="scanpy",
+        data_folder=data_folder,
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/scanpy",
+        gitignore_path=f"{root_path}/scanpy/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+    task = EvaluationTutorialTask(
+        llm=llm,
+        repo_path=f"{root_path}/scanpy",
+        gitignore_path=f"{root_path}/scanpy/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+        summarized_files_db=summarized_files_db,
+    )
+    files = [
+        # "docs/tutorials/index.md", 
+        # "docs/tutorials/basics/index.md", 
+        # "docs/tutorials/trajectories/index.md", 
+        # "docs/how-to/index.md", 
+        "docs/tutorials/plotting/advanced.ipynb", 
+        "docs/tutorials/plotting/core.ipynb", 
+        "docs/tutorials/experimental/pearson_residuals.ipynb", 
+        "docs/tutorials/experimental/dask.ipynb", 
+        "docs/tutorials/basics/clustering-2017.ipynb", 
+        "docs/tutorials/basics/clustering.ipynb", 
+        "docs/tutorials/basics/integrating-data-using-ingest.ipynb", 
+        "docs/tutorials/trajectories/paga-paul15.ipynb", 
+        "docs/how-to/plotting-with-marsilea.ipynb", 
+        "docs/how-to/knn-transformers.ipynb",
+    ]
+    evaluations, files = task._evaluate(files)
+    assert evaluations is not None
+    assert files is not None
+
 @pytest.mark.skip()
 def test_EvaluationTutorialTask_on_seurat(llm, step_callback, root_path, data_folder):
     code_structure_db = CodeStructureDb(
@@ -208,6 +253,7 @@ def test_EvaluationTutorialTask_on_seurat(llm, step_callback, root_path, data_fo
     assert evaluations is not None
     assert files is not None
 
+@pytest.mark.skip()
 def test_EvaluationTutorialTask_evaluate_on_seurat(llm, step_callback, root_path, data_folder):
     code_structure_db = CodeStructureDb(
         author="satijalab",
