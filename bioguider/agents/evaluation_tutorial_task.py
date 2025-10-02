@@ -102,7 +102,7 @@ class EvaluationTutorialTask(EvaluationTask):
     def _evaluate_individual_tutorial(self, file: str) -> tuple[IndividualTutorialEvaluationResult | None, dict]:
         content = read_file(Path(self.repo_path, file))
         if content is None:
-            logger.error(f"Error in reading file {file}")
+            logger.error(f"Error in reading file {file} - {Path(self.repo_path, file).resolve()}")
             return None, {**DEFAULT_TOKEN_USAGE}
 
         if file.endswith(".ipynb"):
