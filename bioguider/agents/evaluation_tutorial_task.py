@@ -108,6 +108,7 @@ class EvaluationTutorialTask(EvaluationTask):
         if file.endswith(".ipynb"):
             readability_content = extract_markdown_from_notebook(Path(self.repo_path, file))
             content = json.dumps(strip_notebook_to_code_and_markdown(Path(self.repo_path, file)))
+            content = content.replace("{", "<<").replace("}", ">>")
         else:
             readability_content = content
         readability = PyphenReadability()
