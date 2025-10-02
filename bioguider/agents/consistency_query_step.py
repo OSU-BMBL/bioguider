@@ -45,14 +45,17 @@ class ConsistencyQueryStep(CommonStep):
             else:
                 if file_path is not None and parent is not None:
                     rows = self.code_structure_db.select_by_name_and_parent_and_path(name, parent, file_path)
+                    rows = rows if rows is None else [rows]
                     if rows is None or len(rows) == 0:
                         rows = self.code_structure_db.select_by_name_and_path(name, file_path)
+                        rows = rows if rows is None else [rows]
                     if rows is None or len(rows) == 0:
                         rows = self.code_structure_db.select_by_name_and_parent(name, parent)
                     if rows is None or len(rows) == 0:
                         rows = self.code_structure_db.select_by_name(name)
                 elif file_path is not None:
                     rows = self.code_structure_db.select_by_name_and_path(name, file_path)
+                    rows = rows if rows is None else [rows]
                     if rows is None or len(rows) == 0:
                         rows = self.code_structure_db.select_by_name(name)
                 elif parent is not None:
