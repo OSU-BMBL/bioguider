@@ -83,22 +83,6 @@ class EvaluationManager:
         results, readme_files = task.evaluate()
         return results, readme_files
     
-    def evaluate_tutorial(self):
-        pass
-        # task = CollectionTask(
-        #     llm=self.llm,
-        #     step_callback=self.step_callback,
-        # )
-        # task.compile(
-        #     repo_path=self.rag.repo_dir,
-        #     gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-        #     db=self.summary_file_db,
-        #     goal_item=CollectionGoalItemEnum.Tutorial.name,
-        # )
-        # s = task.collect()
-        # if s is None or 'final_answer' not in s:
-        #     return None
-        
     def evaluate_installation(self):
         evaluation_task = EvaluationInstallationTask(
             llm=self.llm,
