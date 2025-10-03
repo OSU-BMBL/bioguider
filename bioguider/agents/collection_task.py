@@ -1,6 +1,7 @@
 
 import os
 import logging
+from pathlib import Path
 import re
 import json
 from pydantic import BaseModel, Field
@@ -23,7 +24,7 @@ from langchain.schema import (
 from langgraph.graph import StateGraph, START, END
 
 from bioguider.database.summarized_file_db import SummarizedFilesDb
-from bioguider.utils.file_utils import get_file_type
+from bioguider.utils.file_utils import flatten_files, get_file_type
 from bioguider.agents.agent_utils import read_directory, try_parse_json_object
 from bioguider.agents.collection_task_utils import (
     RELATED_FILE_GOAL_ITEM,
@@ -187,11 +188,15 @@ class CollectionTask(AgentTask):
             logger.error(f"Final answer is not a valid JSON: {result}")
             return None
         final_result = the_obj["final_answer"]
+        files = None
         if isinstance(final_result, str):
             final_result = final_result.strip()
-            return [final_result]
+            files = [final_result]
         elif isinstance(final_result, list):
-            return final_result
+            files = final_result
         else:
             logger.error(f"Final answer is not a valid JSON list or string: {result}")
             return None
+
+        files = flatten_files(self.repo_path, files)
+        return files

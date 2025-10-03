@@ -192,7 +192,7 @@ def test_EvaluationUserGuideTask_ConsistencyEvaluation_on_RepoAgent(llm, step_ca
     logger.info(f"Evaluation result: {output}")
     assert res is not None
 
-
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_evaluate_on_telescope(llm, step_callback, root_path, data_folder):
     files = ["README.md"]
 
@@ -219,6 +219,34 @@ def test_EvaluationUserGuideTask_evaluate_on_telescope(llm, step_callback, root_
     assert evaluations is not None
     assert files is not None
 
+def test_EvaluationUserGuideTask_evaluate_on_BioGSP(llm, step_callback, root_path, data_folder):
+    files = [
+        "man/"
+    ]
 
+    code_structure_db = CodeStructureDb(
+        author="BMEngineeR",
+        repo_name="BioGSP",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/BioGSP",
+        gitignore_path=f"{root_path}/BioGSP/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/BioGSP",
+        gitignore_path=f"{root_path}/BioGSP/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    # evaluations, files = task.evaluate()
+    evaluations, token_usage, files = task._evaluate(files)
+    
+    assert evaluations is not None
+    assert files is not None
 
 

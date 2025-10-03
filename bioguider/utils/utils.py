@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path
 import re
 import subprocess
 from typing import Optional
 from pydantic import BaseModel
 import tiktoken
+from bs4 import BeautifulSoup
 
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 logger = logging.getLogger(__name__)
@@ -102,3 +104,21 @@ def convert_to_serializable(obj):
         return [convert_to_serializable(item) for item in obj]
     else:
         return obj
+
+def convert_html_to_text(html_path: str | Path, exclude_tags: list[str] | None = None) -> str:
+    """
+    This function is used to convert html string to text, that is,
+    extract text from html content, including tables.
+    """
+    html_path = Path(html_path)
+    if not html_path.exists():
+        raise FileNotFoundError(f"File {html_path} does not exist")
+    with html_path.open("r", encoding="utf-8") as f:
+        html_content = f.read()
+    soup = BeautifulSoup(html_content, "html.parser")
+    if exclude_tags is not None:
+        for tag in exclude_tags:
+            for element in soup.find_all(tag):
+                element.decompose()
+    text = soup.get_text(separator="\n", strip=True)
+    return text

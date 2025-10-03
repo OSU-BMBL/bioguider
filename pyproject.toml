@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bioguider"
-version = "0.2.23"
+version = "0.2.24"
 description = "An AI-Powered package to help biomedical developers to generate clear documentation"
 authors = [
     "Cankun Wang <Cankun.Wang@osumc.edu>",
@@ -46,6 +46,8 @@ binaryornot = "^0.4.4"
 textstat = "^0.7.6"
 pyphen = "^0.17.2"
 markdownify = "^1.1.0"
+python-magic = "^0.4.27"
+beautifulsoup4 = "^4.13.3"
 
 
 [tool.poetry.group.dev.dependencies]

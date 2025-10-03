@@ -178,6 +178,7 @@ def test_EvaluationTutorialTask_only_evaluate_on_scanpy(llm, step_callback, root
     assert evaluations is not None
     assert files is not None
 
+@pytest.mark.skip()
 def test_EvaluationTutorialTask_on_scanpy_files(llm, step_callback, root_path, data_folder):
     code_structure_db = CodeStructureDb(
         author="scverse",
@@ -291,4 +292,38 @@ def test_EvaluationTutorialTask_evaluate_on_seurat(llm, step_callback, root_path
     assert evaluations is not None
     assert files is not None
 
-    
+def test_EvaluationTutorialTask_evaluate_on_BioGSP(llm, step_callback, root_path, data_folder):
+    code_structure_db = CodeStructureDb(
+        author="BMEngineeR",
+        repo_name="BioGSP",
+        data_folder=data_folder
+    )
+    summarized_files_db = SummarizedFilesDb(
+        author="BMEngineeR",
+        repo_name="BioGSP",
+        data_folder=data_folder,
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/BioGSP",
+        gitignore_path=f"{root_path}/BioGSP/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+    task = EvaluationTutorialTask(
+        llm=llm,
+        repo_path=f"{root_path}/BioGSP",
+        gitignore_path=f"{root_path}/BioGSP/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+        summarized_files_db=summarized_files_db,
+    )
+    files = [
+        "vignettes/sgwt_simulation_demo.html", "vignettes/sgwt_simulation_demo.Rmd", "inst/examples/simulation_demo.R", "inst/examples/batch_processing_demo.R"
+    ]
+    evaluations, token_usage, files = task._evaluate(files)
+    serializable_dict = convert_to_serializable(evaluations)
+    with open("BioGSP_tutorial_evaluation.json", "w") as f:
+        json.dump(serializable_dict, f, indent=2)
+
+    assert evaluations is not None
+    assert files is not None

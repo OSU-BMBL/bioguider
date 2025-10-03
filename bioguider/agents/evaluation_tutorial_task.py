@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Tuple
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
@@ -16,11 +16,14 @@ from bioguider.agents.collection_task import CollectionTask
 from bioguider.agents.evaluation_tutorial_task_prompts import INDIVIDUAL_TUTORIAL_EVALUATION_SYSTEM_PROMPT
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
+from bioguider.utils.file_utils import detect_file_type, flatten_files
 from bioguider.utils.notebook_utils import extract_markdown_from_notebook, strip_notebook_to_code_and_markdown
 from bioguider.utils.pyphen_utils import PyphenReadability
-from bioguider.utils.utils import increase_token_usage
+from bioguider.utils.utils import convert_html_to_text, increase_token_usage
 
 logger = logging.getLogger(__name__)
+
+MAX_FILE_SIZE = 1024 * 100 # 100K
 
 class TutorialEvaluationResult(BaseModel):
     overall_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
@@ -60,6 +63,40 @@ class EvaluationTutorialTask(EvaluationTask):
         self.evaluation_name = "Tutorial Evaluation"
         self.code_structure_db = code_structure_db
 
+    def _sanitize_files(self, files: list[str]) -> list[str]:
+        sanitized_files = []
+        for file in files:
+            file_path = Path(self.repo_path, file)
+            if not file_path.exists() or not file_path.is_file():
+                continue
+            if detect_file_type(file_path) == "binary":
+                continue
+            if file.endswith(".svg"):
+                continue
+            if not file.endswith(".ipynb") and file_path.stat().st_size > MAX_FILE_SIZE:
+                continue
+            sanitized_files.append(file)
+        return sanitized_files
+
+    def _sanitize_file_content(self, file: str) -> Tuple[str | None, str | None]:
+        content = read_file(Path(self.repo_path, file))
+        if content is None:
+            logger.error(f"Error in reading file {file} - {Path(self.repo_path, file).resolve()}")
+            return None, None
+
+        if file.endswith(".ipynb") or file.endswith(".html") or file.endswith(".htm"):
+            if file.endswith(".ipynb"):
+                readability_content = extract_markdown_from_notebook(Path(self.repo_path, file))
+                content = json.dumps(strip_notebook_to_code_and_markdown(Path(self.repo_path, file)))
+            else:
+                readability_content = convert_html_to_text(Path(self.repo_path, file))
+                content = readability_content
+
+            content = content.replace("{", "<<").replace("}", ">>")
+        else:
+            readability_content = content
+        return content, readability_content
+
     def _collect_files(self):
         task = CollectionTask(
             llm=self.llm,
@@ -72,6 +109,8 @@ class EvaluationTutorialTask(EvaluationTask):
             goal_item=CollectionGoalItemEnum.Tutorial.name,
         )
         files = task.collect()
+        files = flatten_files(self.repo_path, files)
+        files = self._sanitize_files(files)
         return files
 
     def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
@@ -100,17 +139,11 @@ class EvaluationTutorialTask(EvaluationTask):
         ), {**DEFAULT_TOKEN_USAGE}
 
     def _evaluate_individual_tutorial(self, file: str) -> tuple[IndividualTutorialEvaluationResult | None, dict]:
-        content = read_file(Path(self.repo_path, file))
-        if content is None:
-            logger.error(f"Error in reading file {file} - {Path(self.repo_path, file).resolve()}")
+        content, readability_content = self._sanitize_file_content(file)
+        if content is None or readability_content is None:
+            logger.error(f"Error in sanitizing file {file} - {Path(self.repo_path, file).resolve()}")
             return None, {**DEFAULT_TOKEN_USAGE}
-
-        if file.endswith(".ipynb"):
-            readability_content = extract_markdown_from_notebook(Path(self.repo_path, file))
-            content = json.dumps(strip_notebook_to_code_and_markdown(Path(self.repo_path, file)))
-            content = content.replace("{", "<<").replace("}", ">>")
-        else:
-            readability_content = content
+            
         readability = PyphenReadability()
         flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
                 _, _, _, _, _ = readability.readability_metrics(readability_content)
