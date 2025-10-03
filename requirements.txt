@@ -19,4 +19,6 @@ adalflow==1.0.4
 faiss-cpu==1.11.0
 binaryornot==0.4.4
 markdownify==1.1.0
+python-magic==0.4.27
+beautifulsoup4==4.13.3
 

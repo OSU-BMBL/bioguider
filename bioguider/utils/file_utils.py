@@ -3,6 +3,16 @@ from enum import Enum
 import json
 # from adalflow.utils import get_adalflow_default_root_path
 from pathlib import Path
+from typing import Union, List, Optional, Tuple
+
+import os
+import string
+
+try:
+    import magic  # optional: pip install python-magic
+    HAS_MAGIC = True
+except ImportError:
+    HAS_MAGIC = False
 
 class FileType(Enum):
     unknown = "u"
@@ -85,7 +95,7 @@ def extract_code_from_notebook(notebook_path: str) -> str:
     # Combine all code cells into a single string
     return '\n\n'.join(code_cells)
 
-def parse_repo_url(url: str) -> tuple[str | None, str | None]:
+def parse_repo_url(url: str) -> Tuple[Optional[str], Optional[str]]:
     """
     Parses a git repository URL to extract the author/organization and repository name.
 
@@ -122,7 +132,77 @@ def retrieve_data_root_path() -> Path:
     root_folder = Path(data_folder, ".adalflow")
     return root_folder.absolute()
     
+def detect_file_type(filepath, blocksize=2048, use_magic=True):
+    """
+    Detect if a file is text or binary.
 
+    Args:
+        filepath (str): Path to file.
+        blocksize (int): Number of bytes to read for inspection.
+        use_magic (bool): Use python-magic if available.
 
+    Returns:
+        str: "text" or "binary"
+    """
+    # Option 1: Use python-magic if available and requested
+    if use_magic and HAS_MAGIC:
+        try:
+            mime = magic.from_file(filepath, mime=True)
+            if mime and mime.startswith("text/"):
+                return "text"
+            return "binary"
+        except Exception:
+            pass  # fallback to heuristic
 
+    # Option 2: Heuristic detection
+    with open(filepath, "rb") as f:
+        chunk = f.read(blocksize)
+        if not chunk:  # empty file → treat as text
+            return "text"
+
+        # Null byte check
+        if b"\0" in chunk:
+            return "binary"
+
+        # Check ratio of non-printable characters
+        text_chars = bytearray(string.printable, "ascii")
+        nontext = chunk.translate(None, text_chars)
+        if float(len(nontext)) / len(chunk) > 0.30:
+            return "binary"
+
+    return "text"
+
+def flatten_files(repo_path: Union[str, Path], files: Optional[List[str]]) -> List[str]:
+    """
+    Flatten directories into individual files.
+    
+    Args:
+        repo_path (Union[str, Path]): The root path of the repository
+        files (Optional[List[str]]): List of file/directory paths to flatten
+        
+    Returns:
+        List[str]: List of individual file paths (directories are expanded to their contents)
+    """
+    if files is None:
+        return []
+    
+    flattened = []
+    repo_path = Path(repo_path)
+    
+    for file_path in files:
+        full_path = repo_path / file_path
+        
+        if full_path.is_dir():
+            # If it's a directory, recursively get all files in it
+            for item in full_path.rglob("*"):
+                if item.is_file():
+                    # Get relative path from repo_path
+                    rel_path = item.relative_to(repo_path)
+                    flattened.append(str(rel_path))
+        elif full_path.is_file():
+            # If it's already a file, just add it
+            flattened.append(file_path)
+        # Skip if path doesn't exist
+    
+    return flattened
 

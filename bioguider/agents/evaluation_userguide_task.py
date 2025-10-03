@@ -12,11 +12,12 @@ from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
 )
+from bioguider.utils.file_utils import detect_file_type, flatten_files
 from ..utils.pyphen_utils import PyphenReadability
 
 from .evaluation_task import EvaluationTask
 from .agent_utils import read_file
-from bioguider.utils.utils import increase_token_usage
+from bioguider.utils.utils import convert_html_to_text, increase_token_usage
 from .evaluation_userguide_prompts import INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
 
 
@@ -37,6 +38,9 @@ class IndividualUserGuideEvaluationResult(BaseModel):
 
 logger = logging.getLogger(__name__)
 
+MAX_FILE_SIZE = 1024 * 100 # 100K
+
+
 class EvaluationUserGuideTask(EvaluationTask):
     def __init__(
         self, 
@@ -51,6 +55,19 @@ class EvaluationUserGuideTask(EvaluationTask):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "User Guide Evaluation"
         self.code_structure_db = code_structure_db
+    
+    def sanitize_files(self, files: list[str]) -> list[str]:
+        sanitized_files = []
+        for file in files:
+            file_path = Path(self.repo_path, file)
+            if not file_path.exists() or not file_path.is_file():
+                continue
+            if detect_file_type(file_path) == "binary":
+                continue
+            if file_path.stat().st_size > MAX_FILE_SIZE:
+                continue
+            sanitized_files.append(file)
+        return sanitized_files
 
     def _collect_files(self):
         task = CollectionTask(
@@ -64,32 +81,43 @@ class EvaluationUserGuideTask(EvaluationTask):
             goal_item=CollectionGoalItemEnum.UserGuide.name,
         )
         files = task.collect()
+        files = flatten_files(self.repo_path, files)
+        files = self.sanitize_files(files)
         return files
 
-    def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
+    def _evaluate_consistency_on_content(self, content: str) -> ConsistencyEvaluationResult:
         consistency_evaluation_task = ConsistencyEvaluationTask(
             llm=self.llm,
             code_structure_db=self.code_structure_db,
             step_callback=self.step_callback,
         )
+        return consistency_evaluation_task.evaluate(
+            domain="user guide/API",
+            documentation=content,
+        ), {**DEFAULT_TOKEN_USAGE}
+
+    def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
         file = file.strip()
         with open(Path(self.repo_path, file), "r") as f:
             user_guide_api_documentation = f.read()
-        return consistency_evaluation_task.evaluate(
-            domain="user guide/API",
-            documentation=user_guide_api_documentation,
-        ), {**DEFAULT_TOKEN_USAGE}
+        return self._evaluate_consistency_on_content(user_guide_api_documentation)
 
     def _evaluate_individual_userguide(self, file: str) -> tuple[IndividualUserGuideEvaluationResult | None, dict]:
-        content = read_file(Path(self.repo_path, file))
-        
+        content = read_file(Path(self.repo_path, file))        
         if content is None:
             logger.error(f"Error in reading file {file}")
             return None, {**DEFAULT_TOKEN_USAGE}
 
+        if file.endswith(".html") or file.endswith(".htm"):
+            readability_content = convert_html_to_text(Path(self.repo_path, file))
+            content = readability_content
+            content = content.replace("{", "<<").replace("}", ">>")
+        else:
+            readability_content = content
+
         readability = PyphenReadability()
         flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(content)
+                _, _, _, _, _ = readability.readability_metrics(readability_content)
         system_prompt = ChatPromptTemplate.from_template(
             INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
         ).format(
@@ -97,7 +125,7 @@ class EvaluationUserGuideTask(EvaluationTask):
             flesch_kincaid_grade=flesch_kincaid_grade,
             gunning_fog_index=gunning_fog_index,
             smog_index=smog_index,
-            userguide_content=content,
+            userguide_content=readability_content,
         )
         agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
@@ -107,7 +135,7 @@ class EvaluationUserGuideTask(EvaluationTask):
         )
         res: UserGuideEvaluationResult = res
 
-        consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency(file)
+        consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the user guide/API documentation
             consistency_evaluation_result = ConsistencyEvaluationResult(
@@ -124,6 +152,7 @@ class EvaluationUserGuideTask(EvaluationTask):
     def _evaluate(self, files: list[str] | None = None) -> tuple[dict[str, IndividualUserGuideEvaluationResult] | None, dict, list[str]]:
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
         user_guide_evaluation_results = {}
+        files = flatten_files(self.repo_path, files)
         for file in files:
             if file.endswith(".py") or file.endswith(".R"):
                 continue

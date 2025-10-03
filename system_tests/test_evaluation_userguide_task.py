@@ -221,40 +221,7 @@ def test_EvaluationUserGuideTask_evaluate_on_telescope(llm, step_callback, root_
 
 def test_EvaluationUserGuideTask_evaluate_on_BioGSP(llm, step_callback, root_path, data_folder):
     files = [
-        "man/simulate_multiscale.Rd", 
-        "man/igft.Rd", 
-        "man/simulate_stripe_patterns.Rd", 
-        "man/visualize_multiscale.Rd", 
-        "man/BioGSP-package.Rd", 
-        "man/runSGWT.Rd", 
-        "man/sgwt_auto_scales.Rd", 
-        "man/simulate_checkerboard.Rd", 
-        "man/hello_sgwt.Rd", 
-        "man/plot_FM.Rd", 
-        "man/cosine_similarity.Rd", 
-        "man/initSGWT.Rd", 
-        "man/visualize_sgwt_kernels.Rd", 
-        "man/cal_laplacian.Rd", 
-        "man/FastDecompositionLap.Rd", 
-        "man/gft.Rd", 
-        "man/demo_sgwt.Rd", 
-        "man/plot_sgwt_decomposition.Rd", 
-        "man/print.SGWT.Rd", 
-        "man/visualize_similarity_xy.Rd", 
-        "man/find_knee_point.Rd", 
-        "man/sgwt_forward.Rd", 
-        "man/sgwt_inverse.Rd", 
-        "man/visualize_checkerboard.Rd", 
-        "man/install_and_load.Rd", 
-        "man/runSpecGraph.Rd", 
-        "man/compare_kernel_families.Rd", 
-        "man/codex_toy_data.Rd", 
-        "man/compute_sgwt_filters.Rd", 
-        "man/sgwt_energy_analysis.Rd", 
-        "man/visualize_stripe_patterns.Rd", 
-        "man/sgwt_get_kernels.Rd", 
-        "man/runSGCC.Rd", 
-        "man/sgwt-globals.Rd",
+        "man/"
     ]
 
     code_structure_db = CodeStructureDb(
