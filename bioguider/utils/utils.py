@@ -53,10 +53,14 @@ def run_command(command: list, cwd: str = None, timeout: int = None):
         return e.stdout or "", e.stderr or f"Command timed out after {timeout} seconds", -1
 
 def escape_braces(text: str) -> str:
-    # First replace single } not part of }} with }}
-    text = re.sub(r'(?<!})}(?!})', '}}', text)
-    # Then replace single { not part of {{
-    text = re.sub(r'(?<!{){(?!{)', '{{', text)
+    def fix_braces(m):
+        s = m.group(0)
+        # If odd number of braces, double the last one
+        if len(s) % 2 == 1:
+            return s + s[-1]
+        return s
+    # Handle both { and } sequences
+    text = re.sub(r'{+|}+', fix_braces, text)
     return text
 
 def increase_token_usage(
@@ -105,7 +109,7 @@ def convert_to_serializable(obj):
     else:
         return obj
 
-def convert_html_to_text(html_path: str | Path, exclude_tags: list[str] | None = None) -> str:
+def convert_html_to_text(html_path: str | Path, exclude_tags: list[str] = ["script", "style", "img", "svg", "meta", "link"]) -> str:
     """
     This function is used to convert html string to text, that is,
     extract text from html content, including tables.
