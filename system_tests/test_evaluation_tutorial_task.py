@@ -318,7 +318,11 @@ def test_EvaluationTutorialTask_evaluate_on_BioGSP(llm, step_callback, root_path
         summarized_files_db=summarized_files_db,
     )
     files = [
-        "vignettes/sgwt_simulation_demo.html", "vignettes/sgwt_simulation_demo.Rmd", "inst/examples/simulation_demo.R", "inst/examples/batch_processing_demo.R"
+        # "vignettes/sgwt_simulation_demo.html", "vignettes/sgwt_simulation_demo.Rmd", "inst/examples/simulation_demo.R", "inst/examples/batch_processing_demo.R"
+        # "vignettes/sgwt_simulation_demo.Rmd", 
+        "vignettes/sgwt_simulation_demo.html", 
+        "inst/examples/batch_processing_demo.R", 
+        "inst/examples/simulation_demo.R",
     ]
     evaluations, token_usage, files = task._evaluate(files)
     serializable_dict = convert_to_serializable(evaluations)
