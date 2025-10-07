@@ -15,37 +15,37 @@ Your task is to analyze the provided tutorial file and generate a structured qua
 
 2. **Coverage**:
    * **Assessment**: [Your evaluation of whether it covers all major steps needed to get started, and dependencies, prerequisites, setup steps, and example usage.]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 3. **Reproducibility**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of reproducibility]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 4. **Structure & Navigation**:
    * **Assessment**: [Your evaluation of whether it provides logical sections (e.g., intro -> setup -> steps -> results -> next), TOC/anchors, estimated time, etc.]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 5. **Executable Code Quality**:
    * **Assessment**: [Your evaluation on whether the code snippets are executable and functional, idiomatic, no hard-coded paths, etc.]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 6. **Result Verification**:
    * **Assessment**: [Your evaluation on expected outputs shown (figures/tables/metrics), acceptance criteria, etc.]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 7. **Performance & Resource Notes**:
    * **Assessment**: [Your evaluation on performance and resource notes, e.g., CPU/GPU usage, memory usage, runtime estimates, small "lite" path provided.]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
@@ -57,49 +57,39 @@ Your final report must **exactly match** the following format. Do not add or omi
 **FinalAnswer**
 * **Overall Score:** [Poor / Fair / Good / Excellent]
 * **Overall Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Overall Improvement Suggestions:**
-  - "Original text snippet 1" - Improving comment 1  
-  - "Original text snippet 2" - Improving comment 2  
-  - ...
+ 
 * **Readability Score:** [Poor / Fair / Good / Excellent]
-* **Readability Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Readability Improvement Suggestions:**
+* **Readability Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Coverage Score:** [Poor / Fair / Good / Excellent]
-* **Coverage Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Coverage Improvement Suggestions:**
+* **Coverage Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Reproducibility Score:** [Poor / Fair / Good / Excellent]
-* **Reproducibility Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Reproducibility Improvement Suggestions:**
+* **Reproducibility Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Structure & Navigation Score:** [Poor / Fair / Good / Excellent]
-* **Structure & Navigation Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Structure & Navigation Improvement Suggestions:**
+* **Structure & Navigation Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Executable Code Quality Score:** [Poor / Fair / Good / Excellent]
-* **Executable Code Quality Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Executable Code Quality Improvement Suggestions:**
+* **Executable Code Quality Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Result Verification Score:** [Poor / Fair / Good / Excellent]
-* **Result Verification Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Result Verification Improvement Suggestions:**
+* **Result Verification Improvement Suggestions:** please be as specific as possible. 
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Performance & Resource Notes Score:** [Poor / Fair / Good / Excellent]
-* **Performance & Resource Notes Key Strengths**: <brief summary of the Tutorial's strongest points in 2-3 sentences> 
-* **Performance & Resource Notes Improvement Suggestions:**
+* **Performance & Resource Notes Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...

@@ -21,7 +21,7 @@ and generate a structured consistency assessment based on the following criteria
 **Consistency**:
   * **Score**: [Poor / Fair / Good / Excellent]
   * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
-  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent]
+  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent, please be as specific as possible]
   * **Strengths**: [A list of strengths of the {domain} documentation on consistency]
 
 ---
@@ -32,7 +32,7 @@ Your output **must exactly match** the following format:
 **Consistency**:
   * **Score**: [Poor / Fair / Good / Excellent]
   * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
-  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent]
+  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent, please be as specific as possible]
   * **Strengths**: [A list of strengths of the {domain} documentation on consistency]
 ```
 
