@@ -26,6 +26,35 @@ ERROR CATEGORIES (inject all)
 - bio_term: slightly wrong domain term (e.g., “single sell” for “single cell”); do not invent new science
 - function: misspell a known function/API name **from the input README-lite only**
 - markdown_structure: break a header level, list indentation, or code fence (one-off)
+- list_structure: remove bullet space (e.g., “-item”), mix markers inconsistently
+- section_title: subtly change a section title casing or wording
+- image_syntax: break image markdown spacing (e.g., `![alt] (url)`)
+- inline_code: remove backticks around inline code
+- emphasis: break emphasis markers (e.g., missing closing `*`)
+- table_alignment: misalign or omit a `|` in a markdown table
+- code_lang_tag: use the wrong fenced code language (e.g., ```py for R)
+
+BIOLOGY-SPECIFIC ERROR CATEGORIES (inject all; keep realistic & subtle)
+- gene_symbol_case: change gene symbol casing or add suffix (e.g., “tp53”, “CD3e”), but **do not alter** protected keywords
+- species_swap: imply human vs mouse mix-up (e.g., “mm10” vs “GRCh38”) in a short phrase
+- ref_genome_mismatch: claim a reference genome that conflicts with the example file or text
+- modality_confusion: conflate RNA-seq with ATAC or proteomics in a brief phrase
+- normalization_error: misuse terms like CPM/TPM/CLR/log1p in a sentence
+- umi_vs_read: confuse UMI counts vs read counts in a short line
+- batch_effect: misstate “batch correction” vs “normalization” terminology
+- qc_threshold: use a common but slightly wrong QC gate (e.g., mito% 0.5 instead of 5)
+- file_format: mix up FASTQ/BAM/MTX/H5AD/RDS in a brief mention
+- strandedness: claim “stranded” when workflow is unstranded (or vice versa)
+- coordinates: confuse 0-based vs 1-based or chromosome naming style (chr1 vs 1)
+- units_scale: use the wrong scale/unit (e.g., μm vs mm; 10e6 instead of 1e6)
+- sample_type: conflate “primary tissue” with “cell line” in a single phrase
+- contamination: misuse “ambient RNA” vs “doublets” terminology
+
+CLI/CONFIG ERROR CATEGORIES (inject all)
+- param_name: slightly misspell a CLI flag or config key (e.g., `--min-cell` → `--min-cells`)
+- default_value: state a plausible but incorrect default value
+- path_hint: introduce a subtle path typo (e.g., `data/filtrd`)
+
 
 CONSTRAINTS
 - Keep edits minimal and local; **≥85% token overlap** with input.
@@ -43,6 +72,7 @@ CONSTRAINTS
 - Maintain a **concise length** (≤ {max_words} words).
 - Do **not** alter the protected keywords (exact casing/spelling): {keywords}
 - Keep at least **{min_per_category} errors per category** listed above.
+- Limit `duplicate` injections to at most **{min_per_category}**.
 - If the input contains runnable code, keep it mostly intact but introduce **one** realistic break
   (e.g., missing quote/paren or wrong function name) without adding new libraries.
 - Keep at least one **valid** URL so the fixer can compare.
@@ -204,8 +234,8 @@ class LLMErrorInjector:
             corrupted = corrupted.replace(orig, mut, 1)
             errors.append({"id": f"e_link_sup_{len(errors)}", "category": "link", "original_snippet": orig, "mutated_snippet": mut, "rationale": "scheme colon removed"})
 
-        # duplicate supplements
-        for _ in range(need("duplicate")):
+        # duplicate supplements (cap to min_per_category)
+        for _ in range(min(need("duplicate"), min_per_category)):
             lines = corrupted.splitlines()
             idx = next((i for i, ln in enumerate(lines) if ln.strip().startswith("- ") or ln.strip().startswith("## ")), None)
             if idx is None:
@@ -263,6 +293,48 @@ class LLMErrorInjector:
                     errors.append({"id": f"e_md_sup_{len(errors)}", "category": "markdown_structure", "original_snippet": block[:10], "mutated_snippet": mut[:10], "rationale": "broken code fence"})
                 else:
                     break
+
+        # list_structure supplements
+        for _ in range(need("list_structure")):
+            m = re.search(r"^\-\s+\S", corrupted, flags=re.M)
+            if not m:
+                break
+            orig = m.group(0)
+            mut = orig.replace("- ", "-", 1)
+            corrupted = corrupted.replace(orig, mut, 1)
+            errors.append({"id": f"e_list_sup_{len(errors)}", "category": "list_structure", "original_snippet": orig, "mutated_snippet": mut, "rationale": "bullet missing space"})
+
+        # section_title supplements
+        for _ in range(need("section_title")):
+            m = re.search(r"^##\s+(What is it\?|What can it do\?|Requirements|Install|Quick example|Learn more|License & Contact)$", corrupted, flags=re.M)
+            if not m:
+                break
+            orig = m.group(0)
+            mut = orig.replace("What is it?", "What is It?").replace("Install", "Installation")
+            if mut == orig:
+                break
+            corrupted = corrupted.replace(orig, mut, 1)
+            errors.append({"id": f"e_title_sup_{len(errors)}", "category": "section_title", "original_snippet": orig, "mutated_snippet": mut, "rationale": "subtle title change"})
+
+        # image_syntax supplements
+        for _ in range(need("image_syntax")):
+            m = re.search(r"!\[[^\]]*\]\([^\)]+\)", corrupted)
+            if not m:
+                break
+            orig = m.group(0)
+            mut = orig.replace("](", "] (")
+            corrupted = corrupted.replace(orig, mut, 1)
+            errors.append({"id": f"e_img_sup_{len(errors)}", "category": "image_syntax", "original_snippet": orig, "mutated_snippet": mut, "rationale": "broken image spacing"})
+
+        # inline_code supplements
+        for _ in range(need("inline_code")):
+            m = re.search(r"`[^`\n]+`", corrupted)
+            if not m:
+                break
+            orig = m.group(0)
+            mut = orig.strip("`")
+            corrupted = corrupted.replace(orig, mut, 1)
+            errors.append({"id": f"e_code_sup_{len(errors)}", "category": "inline_code", "original_snippet": orig, "mutated_snippet": mut, "rationale": "removed inline code backticks"})
 
         data["errors"] = errors
         return corrupted, data
