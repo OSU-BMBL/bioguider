@@ -15,31 +15,31 @@ Your task is to analyze the provided files related to user guide and generate a 
 
 2. **Arguments and Clarity**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of arguments and their usage]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 3. **Return Value and Clarity**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of return value and its meaning]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 4. **Context and Purpose**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of the context and purpose of the module]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 5. **Error Handling**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of error handling]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
 6. **Usage Examples**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of usage examples]
-   * **Improvement Suggestions**:
+   * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
 
@@ -54,43 +54,40 @@ Your final report must **exactly match** the following format. Do not add or omi
 **FinalAnswer**
 * **Overall Score:** [Poor / Fair / Good / Excellent]
 * **Overall Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Overall Improvement Suggestions:**
-  - "Original text snippet 1" - Improving comment 1  
-  - "Original text snippet 2" - Improving comment 2  
-  - ...
+
 * **Readability Analysis Score:** [Poor / Fair / Good / Excellent]
 * **Readability Analysis Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Readability Analysis Improvement Suggestions:**
+* **Readability Analysis Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Arguments and Clarity Score:** [Poor / Fair / Good / Excellent]
 * **Arguments and Clarity Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Arguments and Clarity Improvement Suggestions:**
+* **Arguments and Clarity Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Return Value and Clarity Score:** [Poor / Fair / Good / Excellent]
 * **Return Value and Clarity Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Return Value and Clarity Improvement Suggestions:**
+* **Return Value and Clarity Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Context and Purpose Score:** [Poor / Fair / Good / Excellent]
 * **Context and Purpose Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Context and Purpose Improvement Suggestions:**
+* **Context and Purpose Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Error Handling Score:** [Poor / Fair / Good / Excellent]
 * **Error Handling Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Error Handling Improvement Suggestions:**
+* **Error Handling Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
 * **Usage Examples Score:** [Poor / Fair / Good / Excellent]
 * **Usage Examples Key Strengths**: <brief summary of the User Guide's strongest points in 2-3 sentences> 
-* **Usage Examples Improvement Suggestions:**
+* **Usage Examples Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  
   - "Original text snippet 2" - Improving comment 2  
   - ...
@@ -105,58 +102,3 @@ Your final report must **exactly match** the following format. Do not add or omi
 
 """
 
-CONSISTENCY_EVAL_SYSTEM_PROMPT = """
-You are an expert in evaluating the consistency of user guide in software repositories.
-Your task is to analyze both:
-1. the provided file related to user guide/API documentation,
-2. the code definitions related to the user guide/API documentation
-and generate a structured consistency assessment based on the following criteria.
-
----
-
-### **Evaluation Criteria**
-
-**Consistency**:
-  * **Score**: [Poor / Fair / Good / Excellent]
-  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
-  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring]
-  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
-
-### **Output Format**
-Your output **must exactly match** the following format:
-```
-**Consistency**:
-  * **Score**: [Poor / Fair / Good / Excellent]
-  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
-  * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring]
-  * **Strengths**: [A list of strengths of the user guide/API documentation on consistency]
-```
-
-### **Output Example**
-
-```
-**Consistency**:
-  * **Assessment**: [Your evaluation of whether the user guide/API documentation is consistent with the code definitions]
-  * **Development**:
-    - Inconsistent function/class/method name 1
-    - Inconsistent docstring 1
-    - Inconsistent function/class/method name 2
-    - Inconsistent docstring 2
-    - ...
-  * **Strengths**: 
-    - Strengths 1
-    - Strengths 2
-    - ...
-```
-
----
-
-### **Input User Guide/API Documentation**
-{user_guide_api_documentation}
-
-### **Code Definitions**
-{code_definitions}
-
----
-
-"""

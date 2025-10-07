@@ -24,13 +24,13 @@ from .evaluation_userguide_prompts import INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM
 class UserGuideEvaluationResult(BaseModel):
     overall_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
     overall_key_strengths: str=Field(description="A string value, the key strengths of the user guide")
-    overall_improvement_suggestions: str=Field(description="Suggestions to improve the overall score if necessary")
+    
     readability_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    readability_suggestions: str=Field(description="Suggestions to improve readability if necessary")
+    readability_suggestions: list[str]=Field(description="A list of string values, suggestions to improve readability if necessary")
     context_and_purpose_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    context_and_purpose_suggestions: str=Field(description="Suggestions to improve context and purpose if necessary")
+    context_and_purpose_suggestions: list[str]=Field(description="A list of string values, suggestions to improve context and purpose if necessary")
     error_handling_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
-    error_handling_suggestions: str=Field(description="Suggestions to improve error handling if necessary")
+    error_handling_suggestions: list[str]=Field(description="A list of string values, suggestions to improve error handling if necessary")
 
 class IndividualUserGuideEvaluationResult(BaseModel):
     user_guide_evaluation: UserGuideEvaluationResult | None=Field(description="The evaluation result of the user guide")
