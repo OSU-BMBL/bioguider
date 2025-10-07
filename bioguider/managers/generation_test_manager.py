@@ -19,14 +19,14 @@ class GenerationTestManager:
         if self.step_output:
             self.step_output(step_name=name, step_output=out)
 
-    def run_quant_test(self, report_path: str, baseline_repo_path: str, tmp_repo_path: str) -> str:
+    def run_quant_test(self, report_path: str, baseline_repo_path: str, tmp_repo_path: str, min_per_category: int = 3) -> str:
         self.print_step("QuantTest:LoadBaseline", baseline_repo_path)
         baseline_readme_path = os.path.join(baseline_repo_path, "README.md")
         baseline = read_file(baseline_readme_path) or ""
 
         self.print_step("QuantTest:Inject")
         injector = LLMErrorInjector(self.llm)
-        corrupted, inj_manifest = injector.inject(baseline, min_per_category=3)
+        corrupted, inj_manifest = injector.inject(baseline, min_per_category=min_per_category)
 
         # write corrupted into tmp repo path
         os.makedirs(tmp_repo_path, exist_ok=True)
@@ -49,13 +49,38 @@ class GenerationTestManager:
         # write results
         with open(os.path.join(out_dir, "GEN_TEST_RESULTS.json"), "w", encoding="utf-8") as fobj:
             json.dump(results, fobj, indent=2)
-        # simple md report
-        lines = ["# Quantifiable Generation Test Report\n"]
-        lines.append("## Metrics by Category\n")
+        # slides-like markdown report
+        totals = results.get("summary", {}).get("totals", {})
+        success_rate = results.get("summary", {}).get("success_rate", 0.0)
+        lines = ["# 🔬 Quantifiable Testing Results\n",
+                 "\n## BioGuider Error Correction Performance Analysis\n",
+                 "\n---\n",
+                 "\n## 📊 Slide 1: Testing Results Overview\n",
+                 "\n### 🎯 Totals\n",
+                 f"- Total Errors: {totals.get('total_errors', 0)}\n",
+                 f"- Fixed to Baseline: {totals.get('fixed_to_baseline', 0)}\n",
+                 f"- Fixed to Valid: {totals.get('fixed_to_valid', 0)}\n",
+                 f"- Unchanged: {totals.get('unchanged', 0)}\n",
+                 f"- Success Rate: {success_rate}%\n",
+                 "\n### 📂 Per-Category Metrics\n"]
         for cat, m in results["per_category"].items():
-            lines.append(f"- {cat}: {m}")
-        lines.append("\n## Notes\n")
-        lines.append("- Three versions saved in this directory: README.original.md, README.corrupted.md, README.md (fixed).")
+            lines.append(f"- {cat}: total={m.get('total',0)}, fixed_to_baseline={m.get('fixed_to_baseline',0)}, fixed_to_valid={m.get('fixed_to_valid',0)}, unchanged={m.get('unchanged',0)}")
+        # Per-file change counts (simple heuristic from manifest artifacts)
+        try:
+            manifest_path = os.path.join(out_dir, "manifest.json")
+            with open(manifest_path, "r", encoding="utf-8") as mf:
+                mani = json.load(mf)
+            lines.append("\n### 🗂️ Per-File Changes\n")
+            for art in mani.get("artifacts", []):
+                rel = art.get("dest_rel_path")
+                stats = art.get("diff_stats", {})
+                added = stats.get("added_lines", 0)
+                status = "Revised" if added and added > 0 else "Copied"
+                lines.append(f"- {rel}: {status}, added_lines={added}")
+        except Exception:
+            pass
+        lines.append("\n---\n\n## 📝 Notes\n")
+        lines.append("- README versions saved: README.original.md, README.corrupted.md, README.md (fixed).\n")
         with open(os.path.join(out_dir, "GEN_TEST_REPORT.md"), "w", encoding="utf-8") as fobj:
             fobj.write("\n".join(lines))
         # Save versioned files into output dir
@@ -70,5 +95,13 @@ class GenerationTestManager:
             pass
         self.print_step("QuantTest:Done", out_dir)
         return out_dir
+
+    def run_quant_suite(self, report_path: str, baseline_repo_path: str, base_tmp_repo_path: str, levels: dict[str, int]) -> dict:
+        results = {}
+        for level, min_cnt in levels.items():
+            tmp_repo_path = f"{base_tmp_repo_path}_{level}"
+            out_dir = self.run_quant_test(report_path, baseline_repo_path, tmp_repo_path, min_per_category=min_cnt)
+            results[level] = out_dir
+        return results
 
 

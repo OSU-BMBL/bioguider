@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 
 from bioguider.generation import (
     EvaluationReportLoader,
@@ -49,12 +49,24 @@ class DocumentationGenerationManager:
 
         self.print_step(step_name="ReadRepoFiles", step_output=f"repo_path={repo_path}")
         reader = RepoReader(repo_path)
-        # Prefer report-listed files if available
+        # Prefer report-listed files if available; include all report-declared file lists
         target_files = []
-        if report.readme_files:
+        if getattr(report, "readme_files", None):
             target_files.extend(report.readme_files)
-        if report.installation_files:
+        if getattr(report, "installation_files", None):
             target_files.extend(report.installation_files)
+        # If userguide_files not explicitly provided, derive from userguide_evaluation keys
+        userguide_files: list[str] = []
+        if getattr(report, "userguide_files", None):
+            userguide_files.extend([p for p in report.userguide_files if isinstance(p, str)])
+        elif getattr(report, "userguide_evaluation", None) and isinstance(report.userguide_evaluation, dict):
+            for key in report.userguide_evaluation.keys():
+                if isinstance(key, str) and key.strip():
+                    userguide_files.append(key)
+        target_files.extend(userguide_files)
+        if getattr(report, "submission_requirements_files", None):
+            target_files.extend(report.submission_requirements_files)
+        target_files = [p for p in target_files if isinstance(p, str) and p.strip()]
         target_files = list(dict.fromkeys(target_files))  # de-dup
         files, missing = reader.read_files(target_files) if target_files else reader.read_default_targets()
 
@@ -118,7 +130,10 @@ class DocumentationGenerationManager:
 
         self.print_step(step_name="WriteOutputs", step_output=f"repo_key={out_repo_key}")
         out_dir = self.output.prepare_output_dir(out_repo_key)
-        artifacts = self.output.write_files(out_dir, revised, diff_stats_by_file=diff_stats)
+        # Ensure all files we read (even without edits) are written to outputs alongside revisions
+        all_files_to_write: Dict[str, str] = dict(files)
+        all_files_to_write.update(revised)
+        artifacts = self.output.write_files(out_dir, all_files_to_write, diff_stats_by_file=diff_stats)
 
         manifest = GenerationManifest(
             repo_url=report.repo_url,
@@ -131,14 +146,31 @@ class DocumentationGenerationManager:
         )
         self.output.write_manifest(out_dir, manifest)
         # Write human-readable generation report
-        gen_report_path = self._write_generation_report(out_dir, report.repo_url or str(self.repo_url_or_path or ""), plan, diff_stats, suggestions)
+        gen_report_path = self._write_generation_report(
+            out_dir,
+            report.repo_url or str(self.repo_url_or_path or ""),
+            plan,
+            diff_stats,
+            suggestions,
+            artifacts,
+            missing,
+        )
         self.print_step(step_name="Done", step_output=f"output_dir={out_dir}")
         return out_dir
 
-    def _write_generation_report(self, out_dir: str, repo_url: str, plan, diff_stats: Dict[str, dict], suggestions):
+    def _write_generation_report(
+        self,
+        out_dir: str,
+        repo_url: str,
+        plan,
+        diff_stats: Dict[str, dict],
+        suggestions,
+        artifacts,
+        skipped: List[str],
+    ):
         # Build a simple markdown report
         lines: list[str] = []
-        lines.append(f"# Documentation Generation Report\n")
+        lines.append(f"# Documentation Changelog\n")
         lines.append(f"Repo: {repo_url}\n")
         lines.append(f"Output: {out_dir}\n")
         lines.append("\n## Summary of Changes\n")
@@ -151,6 +183,20 @@ class DocumentationGenerationManager:
         lines.append("\n## Planned Edits\n")
         for e in plan.planned_edits:
             lines.append(f"- `{e.file_path}` -> {e.edit_type} -> {e.anchor.get('value','')}")
+        
+        # Summarize all files written with basic status
+        lines.append("\n## Files Written\n")
+        for art in artifacts:
+            stats = art.diff_stats or {}
+            added = stats.get("added_lines", 0)
+            status = "Revised" if added and added > 0 else "Copied"
+            lines.append(f"- {art.dest_rel_path} | status: {status} | added_lines: {added}")
+        
+        # Skipped or missing files
+        if skipped:
+            lines.append("\n## Skipped or Missing Files\n")
+            for rel in skipped:
+                lines.append(f"- {rel}")
         report_md = "\n".join(lines)
         dest = os.path.join(out_dir, "GENERATION_REPORT.md")
         with open(dest, "w", encoding="utf-8") as fobj:

@@ -14,6 +14,10 @@ class EvaluationReport(BaseModel):
     readme_evaluation: Optional[Dict[str, Any]] = None
     readme_files: Optional[List[str]] = None
 
+    # Optional: rich user guide evaluation content and any explicitly listed files
+    userguide_evaluation: Optional[Dict[str, Any]] = None
+    userguide_files: Optional[List[str]] = None
+
     submission_requirements_evaluation: Optional[Dict[str, Any]] = None
     submission_requirements_files: Optional[List[str]] = None
 
