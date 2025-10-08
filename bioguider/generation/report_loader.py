@@ -123,14 +123,17 @@ class EvaluationReportLoader:
         normalized = normalize(raw)
 
         # Special handling for stringified evaluation fields
-        inst_eval = normalized.get("installation_evaluation")
+        inst_eval = normalized.get("installation")
         if isinstance(inst_eval, str):
             normalized["installation_evaluation"] = {
-                "structured_evaluation": self._parse_structured_block(inst_eval, "structured_evaluation"),
+                "structured_evaluation": self._parse_structured_block(inst_eval["evaluation"], "structured_evaluation"),
             }
+        else:
+            normalized["installation_evaluation"] = inst_eval["evaluation"]
+            normalized["installation_files"] = inst_eval["files"]
 
-        readme_eval = normalized.get("readme_evaluation")
-        if isinstance(readme_eval, dict):
+        readme_eval = normalized.get("readme")
+        if isinstance(readme_eval["evaluations"], dict):
             fixed: Dict[str, Any] = {}
             for fname, val in readme_eval.items():
                 if isinstance(val, str):
@@ -140,10 +143,16 @@ class EvaluationReportLoader:
                 else:
                     fixed[fname] = val
             normalized["readme_evaluation"] = fixed
+            normalized["readme_files"] = readme_eval["files"]
 
-        submit_eval = normalized.get("submission_requirements_evaluation")
-        if isinstance(submit_eval, str):
-            normalized["submission_requirements_evaluation"] = self._parse_submission_eval_str(submit_eval)
+        userguide_eval = normalized.get("userguide")
+        if isinstance(userguide_eval["evaluation"], dict):
+            normalized["userguide_evaluation"] = userguide_eval["evaluation"]
+            normalized["userguide_files"] = userguide_eval["files"]
+
+        # userguide_eval = normalized.get("userguide")
+        # if isinstance(userguide_eval, str):
+        #     normalized["userguide_evaluation"] = self._parse_structured_block(userguide_eval["evaluation"], "structured_evaluation")
 
         report = EvaluationReport(**normalized)
         return report, report_path
