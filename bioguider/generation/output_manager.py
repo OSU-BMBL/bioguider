@@ -3,14 +3,14 @@ from __future__ import annotations
 import os
 import json
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .models import OutputArtifact, GenerationManifest, PlannedEdit
 
 
 class OutputManager:
-    def __init__(self, base_outputs_dir: str = "outputs"):
-        self.base_outputs_dir = base_outputs_dir
+    def __init__(self, base_outputs_dir: Optional[str] = None):
+        self.base_outputs_dir = base_outputs_dir or "outputs"
 
     def prepare_output_dir(self, repo_url_or_name: str) -> str:
         repo_name = self._extract_repo_name(repo_url_or_name)

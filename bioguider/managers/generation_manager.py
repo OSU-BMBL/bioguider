@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List
 
 from bioguider.generation import (
     EvaluationReportLoader,
@@ -20,7 +20,7 @@ from bioguider.utils.file_utils import parse_repo_url
 
 
 class DocumentationGenerationManager:
-    def __init__(self, llm, step_callback):
+    def __init__(self, llm, step_callback, output_dir: Optional[str] = None):
         self.llm = llm
         self.step_callback = step_callback
         self.repo_url_or_path: str | None = None
@@ -30,7 +30,7 @@ class DocumentationGenerationManager:
         self.style_analyzer = StyleAnalyzer()
         self.planner = ChangePlanner()
         self.renderer = DocumentRenderer()
-        self.output = OutputManager()
+        self.output = OutputManager(base_outputs_dir=output_dir)
         self.llm_gen = LLMContentGenerator(llm)
         self.llm_cleaner = LLMCleaner(llm)
 
