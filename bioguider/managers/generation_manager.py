@@ -354,9 +354,7 @@ class DocumentationGenerationManager:
                 priority_fixed += count
                 lines.append(f"- **{score} Priority:** {count} items → 100% addressed\n")
         
-        if priority_total > 0:
-            priority_rate = (priority_fixed/priority_total*100) if priority_total > 0 else 0
-            lines.append(f"- **Critical Issues:** {priority_rate:.1f}% success rate on high-priority items\n")
+        # Remove confusing "Critical Issues" bullet - success rate already shown above
         
         # Quality assurance note
         excellent_count = score_stats.get("Excellent", 0)

@@ -18,6 +18,10 @@ class EvaluationReport(BaseModel):
     userguide_evaluation: Optional[Dict[str, Any]] = None
     userguide_files: Optional[List[str]] = None
 
+    # Optional: tutorial evaluation content and any explicitly listed files
+    tutorial_evaluation: Optional[Dict[str, Any]] = None
+    tutorial_files: Optional[List[str]] = None
+
     submission_requirements_evaluation: Optional[Dict[str, Any]] = None
     submission_requirements_files: Optional[List[str]] = None
 

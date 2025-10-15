@@ -150,6 +150,12 @@ class EvaluationReportLoader:
             normalized["userguide_evaluation"] = userguide_eval["evaluation"]
             normalized["userguide_files"] = userguide_eval["files"]
 
+        # Tutorial evaluation handling
+        tutorial_eval = normalized.get("tutorial")
+        if tutorial_eval and isinstance(tutorial_eval.get("evaluation"), dict):
+            normalized["tutorial_evaluation"] = tutorial_eval["evaluation"]
+            normalized["tutorial_files"] = tutorial_eval["files"]
+
         # userguide_eval = normalized.get("userguide")
         # if isinstance(userguide_eval, str):
         #     normalized["userguide_evaluation"] = self._parse_structured_block(userguide_eval["evaluation"], "structured_evaluation")

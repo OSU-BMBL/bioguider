@@ -84,12 +84,12 @@ class SuggestionExtractor:
                         anchor_hint="Overview",
                         content_guidance="Rewrite the opening summary to be clear, neutral, and typo-free.",
                     ))
-                    # Dependency clarity - prioritize specific suggestions
+                    # Dependency clarity - prioritize specific suggestions (avoid duplicates)
                     dep_score = structured.get("dependency_score")
                     dep_sugg = structured.get("dependency_suggestions")
-                    if dep_sugg:  # Prioritize specific suggestions over score thresholds
+                    if dep_sugg and dep_score in ("Poor", "Fair"):  # Only if not already added above
                         suggestions.append(SuggestionItem(
-                            id=f"readme-dependencies-{file_name}",
+                            id=f"readme-dependencies-clarify-{file_name}",
                             category="readme.dependencies",
                             severity="should_fix",
                             source={"section": "readme", "field": "dependencies", "evidence": str(dep_sugg), "score": dep_score},
@@ -100,7 +100,7 @@ class SuggestionExtractor:
                         ))
                     elif dep_score in ("Poor", "Fair"):  # Fallback to score-based approach
                         suggestions.append(SuggestionItem(
-                            id=f"readme-dependencies-{file_name}",
+                            id=f"readme-dependencies-fallback-{file_name}",
                             category="readme.dependencies",
                             severity="should_fix",
                             source={"section": "readme", "field": "dependencies", "evidence": f"score={dep_score}", "score": dep_score},
@@ -110,12 +110,12 @@ class SuggestionExtractor:
                             content_guidance="List R library dependencies and provide installation guide.",
                         ))
 
-                    # Hardware/Software specs - prioritize specific suggestions
+                    # Hardware/Software specs - prioritize specific suggestions (avoid duplicates)
                     hw_score = structured.get("hardware_and_software_spec_score")
                     hw_sugg = structured.get("hardware_and_software_spec_suggestions")
-                    if hw_sugg:  # Prioritize specific suggestions over score thresholds
+                    if hw_sugg and hw_score in ("Poor", "Fair"):  # Only if not already added above
                         suggestions.append(SuggestionItem(
-                            id=f"readme-sysreq-{file_name}",
+                            id=f"readme-sysreq-clarify-{file_name}",
                             category="readme.system_requirements",
                             severity="should_fix",
                             source={"section": "readme", "field": "hardware_and_software", "evidence": str(hw_sugg), "score": hw_score},
@@ -126,7 +126,7 @@ class SuggestionExtractor:
                         ))
                     elif hw_score in ("Poor", "Fair"):  # Fallback to score-based approach
                         suggestions.append(SuggestionItem(
-                            id=f"readme-sysreq-{file_name}",
+                            id=f"readme-sysreq-fallback-{file_name}",
                             category="readme.system_requirements",
                             severity="should_fix",
                             source={"section": "readme", "field": "hardware_and_software", "evidence": f"score={hw_score}", "score": hw_score},
@@ -151,12 +151,12 @@ class SuggestionExtractor:
                             content_guidance=str(lic_sugg),
                         ))
 
-                    # Readability structuring - prioritize specific suggestions
+                    # Readability structuring - prioritize specific suggestions (avoid duplicates)
                     read_sugg = structured.get("readability_suggestions")
                     read_score = structured.get("readability_score")
-                    if read_sugg:  # Prioritize specific suggestions
+                    if read_sugg and read_score in ("Poor", "Fair"):  # Only if not already added above
                         suggestions.append(SuggestionItem(
-                            id=f"readme-structure-{file_name}",
+                            id=f"readme-structure-clarify-{file_name}",
                             category="readme.readability",
                             severity="should_fix",
                             source={"section": "readability", "field": "readability_suggestions", "evidence": str(read_sugg), "score": read_score},
@@ -167,7 +167,7 @@ class SuggestionExtractor:
                         ))
                     elif read_score in ("Poor", "Fair"):  # Fallback to score-based approach
                         suggestions.append(SuggestionItem(
-                            id=f"readme-structure-{file_name}",
+                            id=f"readme-structure-fallback-{file_name}",
                             category="readme.readability",
                             severity="should_fix",
                             source={"section": "readability", "field": "readability_score", "evidence": f"score={read_score}", "score": read_score},
