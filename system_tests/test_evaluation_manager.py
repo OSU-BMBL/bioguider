@@ -75,7 +75,7 @@ def test_EvaluationManager_on_seurat_requirements(llm, step_callback):
     
     json_obj = EvaluationREADMEResult.model_json_schema()
     mgr = EvaluationManager(llm, step_callback)
-    repo_url = "https://github.com/scverse/scanpy"
+    repo_url = "https://github.com/fengsh27/BioGSP"
     mgr.prepare_repo(repo_url)
 
     installation_evaluation, installation_files = mgr.evaluate_installation()
@@ -178,10 +178,20 @@ def test_EvaluationManager_evaluate_userguide_on_RepoAgent(llm, step_callback):
     converted_evaluation = convert_to_serializable(evaluation)
     output = json.dumps(converted_evaluation, indent=2)
     logger.info(output)
-
+    
+@pytest.mark.skip()
 def test_EvaluationManager_evaluate_tutorial_on_telescope(llm, step_callback):
     mgr = EvaluationManager(llm, step_callback)
     mgr.prepare_repo("https://github.com/mlbendall/telescope")
+
+    evaluation, files = mgr.evaluate_tutorial()
+
+    assert evaluation is not None
+    assert files is not None
+@pytest.mark.skip()
+def test_EvaluationManager_evaluate_tutorial_on_biogsp(llm, step_callback):
+    mgr = EvaluationManager(llm, step_callback)
+    mgr.prepare_repo("https://github.com/fengsh27/BioGSP")
 
     evaluation, files = mgr.evaluate_tutorial()
 

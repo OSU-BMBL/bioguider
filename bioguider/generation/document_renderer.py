@@ -40,6 +40,11 @@ class DocumentRenderer:
             added = len(edit.content_template.splitlines())
             content = new_content
 
+        elif edit.edit_type == "full_replace":
+            # Replace entire document content
+            content = edit.content_template
+            added = len(edit.content_template.splitlines())
+
         # Other edit types (insert_after_header, replace_block) can be added as needed
 
         return content, {"added_lines": added}

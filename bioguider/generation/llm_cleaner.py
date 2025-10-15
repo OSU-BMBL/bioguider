@@ -6,10 +6,10 @@ from bioguider.agents.common_conversation import CommonConversation
 
 
 CLEANUP_PROMPT = """
-You are “BioGuider,” a precise editor for biomedical/bioinformatics documentation.
+You are "BioGuider," a precise editor for biomedical/bioinformatics documentation.
 
 TASK
-Given a full README markdown, produce a corrected version that:
+Given a documentation file (README, RMarkdown, or other), produce a corrected version that:
 - Fixes typos, grammar, capitalization, and spacing
 - Corrects malformed markdown (headers, lists, links, code fences)
 - Repairs or normalizes link formatting; keep URLs absolute if present
@@ -17,14 +17,22 @@ Given a full README markdown, produce a corrected version that:
 - Preserves technical accuracy and biomedical domain terminology (do not invent features)
 - Keeps tone neutral and professional; avoid marketing language
 - Preserves all valid information; do not delete content unless it is a duplicate or malformed
+- For RMarkdown files (.Rmd): Preserve YAML frontmatter, R code chunks, and existing structure exactly
+
+CRITICAL REQUIREMENTS:
+- Do NOT wrap the entire document in markdown code fences (```markdown). Return pure content only.
+- If the document starts with ```markdown and ends with ```, remove these fences completely.
+- Do NOT modify YAML frontmatter in RMarkdown files
+- Do NOT modify R code chunks (```{r} blocks) in RMarkdown files
+- Do NOT change the overall structure or organization of the document
 
 INPUT
-<<README>>
-{readme}
-<</README>>
+<<DOCUMENT>>
+{doc}
+<</DOCUMENT>>
 
 OUTPUT
-Return ONLY the revised markdown (no commentary, no explanations).
+Return ONLY the revised content (no commentary, no explanations, no code fences).
 """
 
 
@@ -35,8 +43,8 @@ class LLMCleaner:
     def clean_readme(self, content: str) -> tuple[str, dict]:
         conv = CommonConversation(self.llm)
         output, token_usage = conv.generate(
-            system_prompt=CLEANUP_PROMPT.format(readme=content[:30000]),
-            instruction_prompt="Provide the corrected README markdown only.",
+            system_prompt=CLEANUP_PROMPT.format(doc=content[:30000]),
+            instruction_prompt="Provide the corrected documentation content only.",
         )
         return output.strip(), token_usage
 
