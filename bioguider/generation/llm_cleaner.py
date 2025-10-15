@@ -26,6 +26,22 @@ CRITICAL REQUIREMENTS:
 - Do NOT modify R code chunks (```{r} blocks) in RMarkdown files
 - Do NOT change the overall structure or organization of the document
 
+ABSOLUTELY FORBIDDEN - REMOVE THESE COMPLETELY:
+- Any summary sections, concluding statements, or notes at the end of documents
+- Phrases like "Happy analyzing!", "Ensure all dependencies are up-to-date", "This concludes", "For more information"
+- Any text that appears to be AI-generated summaries or conclusions
+- Sentences starting with "Note:", "Remember:", "Important:", "Tip:", "Warning:" at the end
+- Any text after the last substantive content section
+- Phrases like "Happy coding!", "Good luck!", "Enjoy!", "Have fun!"
+- Any concluding remarks, final thoughts, or wrap-up statements
+- Text that sounds like AI-generated advice or encouragement
+
+DOCUMENT ENDING RULES:
+- The document must end naturally with the last substantive content section
+- Do NOT add any concluding statements, summaries, or notes
+- If the original document had a natural ending, preserve it exactly
+- If AI-added content appears at the end, remove it completely
+
 INPUT
 <<DOCUMENT>>
 {doc}

@@ -186,13 +186,7 @@ class DocumentationGenerationManager:
                         if isinstance(cleaned, str) and cleaned.strip():
                             content = cleaned
                         
-                        # Additional post-processing: remove markdown code fences if present
-                        if content.startswith("```markdown") and content.endswith("```"):
-                            # Remove the opening and closing fences
-                            content = content[11:]  # Remove ```markdown
-                            if content.endswith("```"):
-                                content = content[:-3]  # Remove closing ```
-                            content = content.strip()
+                        # LLM cleaner now handles markdown fences and unwanted summaries
                             
                 except Exception:
                     pass
@@ -312,7 +306,7 @@ class DocumentationGenerationManager:
         
         # Calculate success rate based on processed suggestions only
         processed_suggestions_count = len([s for s in suggestions if s.source and s.source.get("score", "") in ("Fair", "Poor")])
-        fixed_suggestions = len(processed_suggestions)
+        fixed_suggestions = len([s for s in processed_suggestions if s in [sug.id for sug in suggestions if sug.source and sug.source.get("score", "") in ("Fair", "Poor")]])
         
         # Add professional summary and key metrics
         lines.append(f"\n## Summary\n")
@@ -383,27 +377,69 @@ class DocumentationGenerationManager:
                 section = e.anchor.get('value', 'General improvements')
                 
                 # Convert technical action names to user-friendly descriptions
-                action_desc = {
-                    'append_section': f'Added "{section}" section',
-                    'replace_intro_block': f'Improved "{section}" section',
-                    'full_replace': 'Comprehensive rewrite',
-                    'add_dependencies_section': 'Added dependencies information',
-                    'add_system_requirements_section': 'Added system requirements',
-                    'add_hardware_requirements': 'Added hardware requirements',
-                    'clarify_mandatory_vs_optional': 'Clarified dependencies',
-                    'improve_readability': f'Improved readability in "{section}"',
-                    'improve_setup': f'Enhanced setup instructions in "{section}"',
-                    'improve_reproducibility': f'Improved reproducibility in "{section}"',
-                    'improve_structure': f'Enhanced structure in "{section}"',
-                    'improve_code_quality': f'Improved code quality in "{section}"',
-                    'improve_verification': f'Enhanced result verification in "{section}"',
-                    'improve_performance': f'Added performance notes in "{section}"',
-                    'improve_clarity_and_error_handling': f'Improved clarity and error handling in "{section}"',
-                    'improve_consistency': f'Improved consistency in "{section}"',
-                    'improve_context': f'Enhanced context in "{section}"',
-                    'improve_error_handling': f'Improved error handling in "{section}"',
-                    'add_overview_section': f'Added "{section}" section'
-                }.get(e.edit_type, f'Improved {e.edit_type}')
+                # Use the suggestion action if available, otherwise fall back to edit type
+                action_key = sug.action if sug else e.edit_type
+                
+                # Generate category-based description for full_replace actions
+                if action_key == 'full_replace' and sug:
+                    category = sug.category or ""
+                    category_display = category.split('.')[-1].replace('_', ' ').title() if category else ""
+                    
+                    # Create specific descriptions based on category
+                    if 'readme' in category.lower():
+                        action_desc = 'Enhanced README documentation'
+                    elif 'tutorial' in category.lower():
+                        action_desc = 'Improved tutorial content'
+                    elif 'userguide' in category.lower():
+                        action_desc = 'Enhanced user guide documentation'
+                    elif 'installation' in category.lower():
+                        action_desc = 'Improved installation instructions'
+                    elif 'dependencies' in category.lower():
+                        action_desc = 'Enhanced dependency information'
+                    elif 'readability' in category.lower():
+                        action_desc = 'Improved readability and clarity'
+                    elif 'setup' in category.lower():
+                        action_desc = 'Enhanced setup and configuration'
+                    elif 'reproducibility' in category.lower():
+                        action_desc = 'Improved reproducibility'
+                    elif 'structure' in category.lower():
+                        action_desc = 'Enhanced document structure'
+                    elif 'code_quality' in category.lower():
+                        action_desc = 'Improved code quality'
+                    elif 'verification' in category.lower():
+                        action_desc = 'Enhanced result verification'
+                    elif 'performance' in category.lower():
+                        action_desc = 'Added performance considerations'
+                    elif 'context' in category.lower():
+                        action_desc = 'Enhanced context and purpose'
+                    elif 'error_handling' in category.lower():
+                        action_desc = 'Improved error handling'
+                    else:
+                        action_desc = f'Enhanced {category_display}' if category_display else 'Comprehensive rewrite'
+                else:
+                    # Use existing action descriptions for non-full_replace actions
+                    action_desc = {
+                        'append_section': f'Added "{section}" section',
+                        'insert_after_header': f'Enhanced content in "{section}"',
+                        'rmarkdown_integration': f'Integrated improvements in "{section}"',
+                        'replace_intro_block': f'Improved "{section}" section',
+                        'add_dependencies_section': 'Added dependencies information',
+                        'add_system_requirements_section': 'Added system requirements',
+                        'add_hardware_requirements': 'Added hardware requirements',
+                        'clarify_mandatory_vs_optional': 'Clarified dependencies',
+                        'improve_readability': f'Improved readability in "{section}"',
+                        'improve_setup': f'Enhanced setup instructions in "{section}"',
+                        'improve_reproducibility': f'Improved reproducibility in "{section}"',
+                        'improve_structure': f'Enhanced structure in "{section}"',
+                        'improve_code_quality': f'Improved code quality in "{section}"',
+                        'improve_verification': f'Enhanced result verification in "{section}"',
+                        'improve_performance': f'Added performance notes in "{section}"',
+                        'improve_clarity_and_error_handling': f'Improved clarity and error handling in "{section}"',
+                        'improve_consistency': f'Improved consistency in "{section}"',
+                        'improve_context': f'Enhanced context in "{section}"',
+                        'improve_error_handling': f'Improved error handling in "{section}"',
+                        'add_overview_section': f'Added "{section}" section'
+                    }.get(action_key, f'Improved {action_key}')
                 
                 lines.append(f"- **{action_desc}**")
                 

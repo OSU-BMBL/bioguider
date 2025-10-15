@@ -162,128 +162,15 @@ class ChangePlanner:
                         rationale=s.source.get("evidence", ""),
                         suggestion_id=s.id,
                     ))
-                elif s.action == "improve_readability":
-                    # Handle readability improvements
-                    header_key = (target, (s.anchor_hint or "Introduction").strip().lower())
-                    if header_key in seen_headers:
-                        continue
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Introduction"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                    seen_headers.add(header_key)
-                elif s.action == "improve_setup":
-                    # Handle setup improvements
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Setup"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "improve_reproducibility":
-                    # Handle reproducibility improvements
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Setup"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "improve_structure":
-                    # Handle structure improvements
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Introduction"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "improve_code_quality":
-                    # Handle code quality improvements
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Code Examples"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "improve_verification":
-                    # Handle verification improvements
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Results"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "improve_performance":
-                    # Handle performance improvements
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Performance"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "improve_context":
-                    # Handle context improvements for userguides
-                    header_key = (target, (s.anchor_hint or "Introduction").strip().lower())
-                    if header_key in seen_headers:
-                        continue
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Introduction"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                    seen_headers.add(header_key)
-                elif s.action == "improve_error_handling":
-                    # Handle error handling improvements for userguides
-                    header_key = (target, (s.anchor_hint or "Examples").strip().lower())
-                    if header_key in seen_headers:
-                        continue
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Examples"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                    seen_headers.add(header_key)
-                elif s.action == "add_overview_section":
-                    # Handle overview section for README
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="append_section",
-                        anchor={"type": "header", "value": s.anchor_hint or "Overview"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
-                elif s.action == "full_replace":
-                    # Handle full document replacement
-                    planned.append(PlannedEdit(
-                        file_path=target,
-                        edit_type="full_replace",
-                        anchor={"type": "document", "value": "full_document"},
-                        content_template="",  # Will be filled by LLM generation
-                        rationale=s.source.get("evidence", ""),
-                        suggestion_id=s.id,
-                    ))
+                # All actions now use full_replace mode
+                planned.append(PlannedEdit(
+                    file_path=target,
+                    edit_type="full_replace",
+                    anchor={"type": "document", "value": "full_document"},
+                    content_template="",  # Will be filled by LLM generation
+                    rationale=s.source.get("evidence", ""),
+                    suggestion_id=s.id,
+                ))
 
         # If a file is planned for full_replace, suppress other edits for that file to avoid redundancy
         by_file: Dict[str, List[PlannedEdit]] = {}

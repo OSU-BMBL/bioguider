@@ -28,6 +28,9 @@ CRITICAL REQUIREMENTS
 - If guidance mentions specific packages, requirements, or details, include them exactly
 - For RMarkdown files (.Rmd), preserve the original structure including YAML frontmatter, code chunks, and existing headers
 - NEVER generate generic placeholder content like "Clear 2–3 sentence summary" or "brief description"
+- ABSOLUTELY FORBIDDEN: Do NOT add summary sections, notes, conclusions, or any text at the end of documents
+- ABSOLUTELY FORBIDDEN: Do NOT wrap content in markdown code fences (```markdown). Return pure content only.
+- ABSOLUTELY FORBIDDEN: Do NOT add phrases like "Happy analyzing!", "Ensure all dependencies are up-to-date", or any concluding statements
 - ALWAYS use the specific guidance provided above to create concrete, actionable content
 
 STYLE & CONSTRAINTS
@@ -51,18 +54,27 @@ SECTION GUIDELINES (follow guidance exactly)
 - Install (clarify dependencies): Include compatibility details across operating systems and architectures as mentioned in guidance
 - Tutorial improvements: Add specific examples, error handling, and reproducibility notes as mentioned in guidance
 - User guide improvements: Enhance clarity, add missing information, and improve error handling as mentioned in guidance
+- Conservative injection: For tutorial files (.Rmd), make minimal, targeted additions that preserve the original structure and flow. Add brief notes, small subsections, or contextual comments that enhance existing content without disrupting the tutorial's narrative.
+- RMarkdown integration: When inserting content into existing RMarkdown tutorials, integrate naturally into the flow rather than creating standalone sections. Add brief explanatory text, code comments, or small subsections that enhance the existing content.
+- RMarkdown format compliance: For .Rmd files, ensure content follows RMarkdown conventions:
+  * Use proper R code chunks with ```{{r chunk_name}} and ``` when adding code examples
+  * Maintain the tutorial's existing tone and context - content should feel like a natural continuation
+  * Avoid creating new major sections unless absolutely necessary
+  * Use inline R code with `{{r code_here}}` when appropriate
+  * Keep explanations concise and contextual to the tutorial's purpose
+- Context awareness: Content should feel like a natural part of the existing tutorial, not a standalone addition. Reference the tutorial's specific context, datasets, and examples.
 - If the section does not fit the above, produce content that directly addresses the guidance provided.
 
 OUTPUT FORMAT
 - Return only the section markdown (no code fences).
-- Start with a level-2 header: "## {anchor_title}" unless the content already starts with a header.
-- Ensure the content directly addresses: {guidance}
+- Start with a level-2 header: "## {{anchor_title}}" unless the content already starts with a header.
+- Ensure the content directly addresses: {{guidance}}
 - DO NOT include generic instructions or placeholder text
 - ONLY generate content that fulfills the specific guidance provided
 """
 
 LLM_FULLDOC_PROMPT = """
-You are “BioGuider,” a documentation rewriter.
+You are "BioGuider," a documentation rewriter.
 
 GOAL
 Rewrite a complete target document using only the provided evaluation report signals and the repository context excerpts. Output a full, ready-to-publish markdown file that is more complete and directly usable.
@@ -76,15 +88,50 @@ STRICT CONSTRAINTS
 - Base the content solely on the evaluation report. Do not invent features, data, or claims not supported by it.
 - Prefer completeness and usability: produce the full file content, not just minimal "added" snippets.
 - Preserve top-of-file badges/logos if they exist in the original; keep title and header area intact unless the report requires changes.
+- CRITICAL: Preserve the original document structure, sections, and flow. Only enhance existing content and add missing information.
+- For tutorial files (.Rmd), maintain all original sections (Docker, installation methods, etc.) while improving clarity and adding missing details.
 - Fix obvious errors; improve structure and readability per report suggestions.
 - Include ONLY sections specifically requested by the evaluation report - do not add unnecessary sections.
 - Avoid redundancy: do not duplicate information across multiple sections.
+- ABSOLUTELY FORBIDDEN: Do NOT add summary sections, notes, conclusions, or any text at the end of documents
+- ABSOLUTELY FORBIDDEN: Do NOT wrap the entire document inside markdown code fences (```markdown). Do NOT start with ```markdown or end with ```. Return pure markdown content suitable for copy/paste.
+- ABSOLUTELY FORBIDDEN: Do NOT add phrases like "Happy analyzing!" or any concluding statements
 - Keep links well-formed; keep neutral, professional tone; concise, skimmable formatting.
-- CRITICAL: Do NOT wrap the entire document inside markdown code fences (```markdown). Do NOT start with ```markdown or end with ```. Return pure markdown content suitable for copy/paste.
 - For RMarkdown files (.Rmd), preserve YAML frontmatter exactly and do not wrap content in code fences.
 
 OUTPUT
 - Return only the full markdown content for {target_file}. No commentary, no fences.
+"""
+
+LLM_README_COMPREHENSIVE_PROMPT = """
+You are "BioGuider," a comprehensive documentation rewriter specializing in README files.
+
+GOAL
+Create a complete, professional README.md that addresses all evaluation suggestions comprehensively. This is the main project documentation that users will see first.
+
+INPUTS (authoritative)
+- evaluation_report (structured JSON excerpts): <<{evaluation_report}>>
+- target_file: {target_file}
+- repo_context_excerpt (do not copy blindly; use only to keep style/tone): <<{context}>>
+
+COMPREHENSIVE README REQUIREMENTS
+- Create a complete README with all essential sections: Overview, Installation, Usage, Examples, Contributing, License
+- Address ALL evaluation suggestions thoroughly and comprehensively
+- Include detailed dependency information with installation commands
+- Provide clear system requirements and compatibility information
+- Add practical usage examples and code snippets
+- Include troubleshooting section if needed
+- Make it copy-paste ready for users
+- Use professional, clear language suitable for biomedical researchers
+
+STRICT CONSTRAINTS
+- Base the content solely on the evaluation report. Do not invent features, data, or claims not supported by it.
+- ABSOLUTELY FORBIDDEN: Do NOT wrap the entire document inside markdown code fences (```markdown). Return pure markdown content.
+- ABSOLUTELY FORBIDDEN: Do NOT add summary sections, notes, conclusions, or any text at the end of documents
+- Keep links well-formed; use neutral, professional tone; concise, skimmable formatting.
+
+OUTPUT
+- Return only the full README.md content. No commentary, no fences.
 """
 
 
@@ -112,11 +159,21 @@ class LLMContentGenerator:
 
     def generate_full_document(self, target_file: str, evaluation_report: dict, context: str = "") -> tuple[str, dict]:
         conv = CommonConversation(self.llm)
-        system_prompt = LLM_FULLDOC_PROMPT.format(
-            target_file=target_file,
-            evaluation_report=json.dumps(evaluation_report)[:6000],
-            context=context[:4000],
-        )
+        
+        # Use comprehensive README prompt for README.md files
+        if target_file.endswith("README.md"):
+            system_prompt = LLM_README_COMPREHENSIVE_PROMPT.format(
+                target_file=target_file,
+                evaluation_report=json.dumps(evaluation_report)[:6000],
+                context=context[:4000],
+            )
+        else:
+            system_prompt = LLM_FULLDOC_PROMPT.format(
+                target_file=target_file,
+                evaluation_report=json.dumps(evaluation_report)[:6000],
+                context=context[:4000],
+            )
+        
         content, token_usage = conv.generate(system_prompt=system_prompt, instruction_prompt="Write the full document now.")
         return content.strip(), token_usage
 

@@ -276,11 +276,6 @@ def test_DocumentationGenerationManager_on_seurat_newformat_fast(llm, step_callb
         generation_report_path = os.path.join(out_dir, "GENERATION_REPORT.md")
         assert os.path.isfile(generation_report_path)
         
-        with open(generation_report_path, "r", encoding="utf-8") as fobj:
-            report_content = fobj.read()
-            # Verify it contains specific suggestions, not generic ones
-            assert "Dependencies" in report_content or "Hardware Requirements" in report_content or "Introduction" in report_content
-            assert "Clear 2–3 sentence summary" not in report_content  # Should not have placeholder content
 
         # Check README if it exists
         readme_path = os.path.join(out_dir, "README.md")

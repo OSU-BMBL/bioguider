@@ -53,7 +53,7 @@ class SuggestionExtractor:
                             severity="should_fix",
                             source={"section": "readme", "field": "project_purpose_suggestions", "evidence": purpose_suggestions, "score": purpose_score},
                             target_files=[file_name],
-                            action="add_overview_section",
+                            action="full_replace",
                             anchor_hint="Overview",
                             content_guidance=purpose_suggestions,
                         ))
@@ -68,7 +68,7 @@ class SuggestionExtractor:
                             severity="should_fix",
                             source={"section": "readme", "field": "readability_suggestions", "evidence": readability_suggestions, "score": readability_score},
                             target_files=[file_name],
-                            action="improve_readability",
+                            action="full_replace",
                             anchor_hint="Introduction",
                             content_guidance=readability_suggestions,
                         ))
@@ -195,12 +195,14 @@ class SuggestionExtractor:
             if isinstance(report.installation_evaluation, dict):
                 structured = report.installation_evaluation.get("structured_evaluation")
             if structured:
-                # If installation has deficits, full replace installation docs listed in installation_files
-                overall = structured.get("overall_score")
-                hw = structured.get("hardware_requirements")
-                compat = structured.get("compatible_os")
+                # Use full_replace mode for all installation files
                 dep_sugg = structured.get("dependency_suggestions")
-                if overall in ("Poor", "Fair") or hw is False or compat is False or dep_sugg:
+                hw_req = structured.get("hardware_requirements")
+                compat_os = structured.get("compatible_os")
+                overall = structured.get("overall_score")
+                
+                # Trigger full_replace for all installation files when needed
+                if overall in ("Poor", "Fair") or hw_req is False or compat_os is False or dep_sugg:
                     for target in report.installation_files or []:
                         suggestions.append(SuggestionItem(
                             id=f"install-full-replace-{target}",
@@ -210,33 +212,7 @@ class SuggestionExtractor:
                             target_files=[target],
                             action="full_replace",
                             anchor_hint=None,
-                            content_guidance="Rewrite installation doc based on evaluation (dependencies, OS, hardware).",
-                        ))
-                dep_sugg = structured.get("dependency_suggestions")
-                if dep_sugg:  # Prioritize specific suggestions
-                    for target in report.installation_files or []:
-                        suggestions.append(SuggestionItem(
-                            id=f"install-dep-clarify-{target}",
-                            category="installation.dependencies",
-                            severity="should_fix",
-                            source={"section": "installation", "field": "dependency_suggestions", "evidence": str(dep_sugg)},
-                            target_files=[target],
-                            action="clarify_mandatory_vs_optional",
-                            anchor_hint="Dependencies",
-                            content_guidance=str(dep_sugg),
-                        ))
-                hw_score = structured.get("hardware_requirements")
-                if hw_score is False:
-                    for target in report.installation_files or []:
-                        suggestions.append(SuggestionItem(
-                            id=f"install-hw-req-{target}",
-                            category="installation.hardware",
-                            severity="should_fix",
-                            source={"section": "installation", "field": "hardware_requirements", "score": "Poor", "evidence": "Hardware requirements not specified"},
-                            target_files=[target],
-                            action="add_hardware_requirements",
-                            anchor_hint="Hardware Requirements",
-                            content_guidance="Add concise RAM/CPU recommendation as per report guidance.",
+                            content_guidance="Comprehensive rewrite preserving original structure while adding improved dependencies, hardware requirements, and installation instructions.",
                         ))
 
         # Submission requirements could drive expected output/dataset sections; use only if in files list
@@ -261,7 +237,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "userguide", "field": "readability_suggestions", "evidence": suggestion, "score": readability_score},
                                     target_files=[file_name],
-                                    action="improve_readability",
+                                    action="full_replace",
                                     anchor_hint=f"Readability-{i+1}",
                                     content_guidance=suggestion,
                                 ))
@@ -278,7 +254,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "userguide", "field": "context_and_purpose_suggestions", "evidence": suggestion, "score": context_score},
                                     target_files=[file_name],
-                                    action="improve_context",
+                                    action="full_replace",
                                     anchor_hint=f"Context-{i+1}",
                                     content_guidance=suggestion,
                                 ))
@@ -295,7 +271,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "userguide", "field": "error_handling_suggestions", "evidence": suggestion, "score": error_score},
                                     target_files=[file_name],
-                                    action="improve_error_handling",
+                                    action="full_replace",
                                     anchor_hint=f"Error-Handling-{i+1}",
                                     content_guidance=suggestion,
                                 ))
@@ -310,7 +286,7 @@ class SuggestionExtractor:
                             severity="should_fix",
                             source={"section": "userguide", "field": "consistency", "evidence": f"score={score}"},
                             target_files=[file_name],
-                            action="improve_consistency",
+                            action="full_replace",
                             anchor_hint="Examples",
                             content_guidance="Improve consistency in examples, terminology, and formatting based on evaluation report.",
                         ))
@@ -335,7 +311,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "readability_suggestions", "evidence": suggestion, "score": readability_score},
                                     target_files=[file_name],
-                                    action="improve_readability",
+                                    action="full_replace",
                                     anchor_hint="Introduction",
                                     content_guidance=suggestion,
                                 ))
@@ -352,7 +328,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "setup_and_dependencies_suggestions", "evidence": suggestion, "score": setup_score},
                                     target_files=[file_name],
-                                    action="improve_setup",
+                                    action="full_replace",
                                     anchor_hint="Setup",
                                     content_guidance=suggestion,
                                 ))
@@ -369,7 +345,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "reproducibility_suggestions", "evidence": suggestion, "score": reproducibility_score},
                                     target_files=[file_name],
-                                    action="improve_reproducibility",
+                                    action="full_replace",
                                     anchor_hint="Setup",
                                     content_guidance=suggestion,
                                 ))
@@ -386,7 +362,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "structure_and_navigation_suggestions", "evidence": suggestion, "score": structure_score},
                                     target_files=[file_name],
-                                    action="improve_structure",
+                                    action="full_replace",
                                     anchor_hint="Introduction",
                                     content_guidance=suggestion,
                                 ))
@@ -403,7 +379,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "executable_code_quality_suggestions", "evidence": suggestion, "score": code_score},
                                     target_files=[file_name],
-                                    action="improve_code_quality",
+                                    action="full_replace",
                                     anchor_hint="Code Examples",
                                     content_guidance=suggestion,
                                 ))
@@ -420,7 +396,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "result_verification_suggestions", "evidence": suggestion, "score": verification_score},
                                     target_files=[file_name],
-                                    action="improve_verification",
+                                    action="full_replace",
                                     anchor_hint="Results",
                                     content_guidance=suggestion,
                                 ))
@@ -437,7 +413,7 @@ class SuggestionExtractor:
                                     severity="should_fix",
                                     source={"section": "tutorial", "field": "performance_and_resource_notes_suggestions", "evidence": suggestion, "score": performance_score},
                                     target_files=[file_name],
-                                    action="improve_performance",
+                                    action="full_replace",
                                     anchor_hint="Performance",
                                     content_guidance=suggestion,
                                 ))
