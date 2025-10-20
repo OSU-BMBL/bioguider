@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bioguider"
-version = "0.2.31"
+version = "0.2.32"
 description = "An AI-Powered package to help biomedical developers to generate clear documentation"
 authors = [
     "Cankun Wang <Cankun.Wang@osumc.edu>",
