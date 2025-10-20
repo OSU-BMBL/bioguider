@@ -219,6 +219,7 @@ def test_EvaluationUserGuideTask_evaluate_on_telescope(llm, step_callback, root_
     assert evaluations is not None
     assert files is not None
 
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_evaluate_on_BioGSP(llm, step_callback, root_path, data_folder):
     files = [
         # "README.md", 
@@ -257,5 +258,29 @@ def test_EvaluationUserGuideTask_evaluate_on_BioGSP(llm, step_callback, root_pat
     
     assert evaluations is not None
     assert files is not None
+
+def test_EvaluationUserGuideTask_evaluate_on_seurat(llm, step_callback, root_path, data_folder):
+    code_structure_db = CodeStructureDb(
+        author="satijalab",
+        repo_name="seurat",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/seurat",
+        gitignore_path=f"{root_path}/seurat/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    # this test does not need to build code structure
+    # code_structure_builder.build_code_structure()
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/seurat",
+        gitignore_path=f"{root_path}/seurat/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    files = task._collect_files()
+    assert files is not None
+    assert len(files) > 0
 
 

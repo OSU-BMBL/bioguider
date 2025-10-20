@@ -348,10 +348,12 @@ class RFileHandler:
             s = line.lstrip()
             if s.startswith("#'"):
                 buf.append(s[2:].lstrip())
-                line_idx -= 1
-                continue
-            # stop at first non-roxygen line (don’t cross blank + NULL padding blocks)
-            break
+            elif s.strip() == "":
+                pass
+            else:
+                # stop at first non-roxygen line (don’t cross blank + NULL padding blocks)
+                break
+            line_idx -= 1
         if not buf:
             return None
         buf.reverse()

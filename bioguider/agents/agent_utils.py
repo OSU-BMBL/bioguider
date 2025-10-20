@@ -27,6 +27,7 @@ from bioguider.utils.utils import clean_action_input
 from ..utils.gitignore_checker import GitignoreChecker
 from ..database.summarized_file_db import SummarizedFilesDb
 from bioguider.agents.common_conversation import CommonConversation
+from bioguider.rag.config import configs
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,9 @@ def read_directory(
         return None
     gitignore_checker = GitignoreChecker(
         directory=dir_path,
-        gitignore_path=gitignore_path
+        gitignore_path=gitignore_path,
+        exclude_dir_patterns=configs["file_filters"]["excluded_dirs"],
+        exclude_file_patterns=configs["file_filters"]["excluded_files"],
     )
     files = gitignore_checker.check_files_and_folders(level=level)
     return files

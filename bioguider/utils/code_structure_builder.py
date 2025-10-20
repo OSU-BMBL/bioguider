@@ -6,6 +6,7 @@ from bioguider.utils.r_file_handler import RFileHandler
 from .gitignore_checker import GitignoreChecker
 from .python_file_handler import PythonFileHandler
 from ..database.code_structure_db import CodeStructureDb
+from ..rag.config import configs
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,12 @@ class CodeStructureBuilder:
         code_structure_db: CodeStructureDb,
     ):
         self.repo_path = str(repo_path)
-        self.gitignore_checker = GitignoreChecker(repo_path, str(gitignore_path))
+        self.gitignore_checker = GitignoreChecker(
+            directory=repo_path,
+            gitignore_path=str(gitignore_path),
+            exclude_dir_patterns=configs["file_filters"]["excluded_dirs"],
+            exclude_file_patterns=configs["file_filters"]["excluded_files"],
+        )
         self.file_handler = PythonFileHandler(repo_path)
         self.code_structure_db = code_structure_db
 

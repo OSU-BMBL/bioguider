@@ -3,10 +3,8 @@ from pathlib import Path
 
 from bioguider.agents.evaluation_tutorial_task import EvaluationTutorialTask
 from bioguider.agents.evaluation_userguide_task import EvaluationUserGuideTask
-from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.database.code_structure_db import CodeStructureDb
 from bioguider.utils.constants import ProjectMetadata
-from bioguider.utils.gitignore_checker import GitignoreChecker
 
 from ..agents.identification_task import IdentificationTask
 from ..rag.rag import RAG

@@ -28,6 +28,7 @@ from bioguider.utils.constants import (
     EvaluationREADMEResult,
 )
 from bioguider.utils.utils import increase_token_usage
+from bioguider.rag.config import configs
 
 logger = logging.getLogger(__name__)
 
@@ -638,7 +639,9 @@ class EvaluationREADMETask(EvaluationTask):
         repo_path = self.repo_path
         gitignore_path = Path(repo_path, ".gitignore")
         gitignore_checker = GitignoreChecker(
-            directory=repo_path, gitignore_path=gitignore_path
+            directory=repo_path, gitignore_path=gitignore_path,
+            exclude_dir_patterns=configs["file_filters"]["excluded_dirs"],
+            exclude_file_patterns=configs["file_filters"]["excluded_files"],
         )
         found_readme_files = gitignore_checker.check_files_and_folders(
             check_file_cb=lambda root_dir, relative_path: Path(relative_path).name.lower() in possible_readme_files,
