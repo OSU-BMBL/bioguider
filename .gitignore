@@ -178,3 +178,5 @@ data/
 
 # test data
 tests/data/
+
+bioguider_debug/
