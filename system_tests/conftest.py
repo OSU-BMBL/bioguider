@@ -27,7 +27,7 @@ def get_azure_openai():
         model=os.environ.get("OPENAI_MODEL", None),
         max_retries=5,
         # temperature=0.0,
-        max_completion_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 4096)),
+        max_completion_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 16384)),  # Increased for tutorial generation
     )
 
 

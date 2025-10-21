@@ -34,6 +34,7 @@ class DocumentationGenerationManager:
         self.output = OutputManager(base_outputs_dir=output_dir)
         self.llm_gen = LLMContentGenerator(llm)
         self.llm_cleaner = LLMCleaner(llm)
+        
 
     def print_step(self, step_name: str | None = None, step_output: str | None = None):
         if self.step_callback is None:
@@ -143,54 +144,175 @@ class DocumentationGenerationManager:
             self.print_step(step_name="ProcessingFile", step_output=f"Processing {fpath} ({processed_files}/{total_files}) - {len(edits)} edits")
             
             original_content = files.get(fpath, "")
+            
+            # Group suggestions by file to avoid duplicate generation
+            file_suggestions = []
+            full_replace_edits = []
+            section_edits = []
+            
+            for e in edits:
+                suggestion = next((s for s in suggestions if s.id == e.suggestion_id), None) if e.suggestion_id else None
+                if suggestion:
+                    file_suggestions.append(suggestion)
+                    if e.edit_type == "full_replace":
+                        full_replace_edits.append(e)
+                    else:
+                        section_edits.append(e)
+            
+            # Debug: Save suggestion grouping info
+            import json
+            import os
+            from datetime import datetime
+            
+            debug_dir = "outputs/debug_generation"
+            os.makedirs(debug_dir, exist_ok=True)
+            safe_filename = fpath.replace("/", "_").replace(".", "_")
+            
+            grouping_info = {
+                "file_path": fpath,
+                "total_edits": len(edits),
+                "file_suggestions_count": len(file_suggestions),
+                "full_replace_edits_count": len(full_replace_edits),
+                "section_edits_count": len(section_edits),
+                "suggestions": [
+                    {
+                        "id": s.id,
+                        "category": s.category,
+                        "content_guidance": s.content_guidance[:200] + "..." if len(s.content_guidance or "") > 200 else s.content_guidance,
+                        "target_files": s.target_files
+                    } for s in file_suggestions
+                ],
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            grouping_file = os.path.join(debug_dir, f"{safe_filename}_grouping.json")
+            with open(grouping_file, 'w', encoding='utf-8') as f:
+                json.dump(grouping_info, f, indent=2, ensure_ascii=False)
+            
             content = original_content
             total_stats = {"added_lines": 0}
-            for e in edits:
-                context = original_content
-                if not e.content_template or e.content_template.strip() == "":
-                    # Generate LLM content - use full document generation for full_replace, section generation for others
-                    suggestion = next((s for s in suggestions if s.id == e.suggestion_id), None) if e.suggestion_id else None
-                    if suggestion:
-                        if e.edit_type == "full_replace":
-                            self.print_step(step_name="GeneratingContent", step_output=f"Generating full document for {e.suggestion_id} using LLM...")
+            
+            # CRITICAL: Generate content ONCE per file if there are full_replace edits
+            # All suggestions for this file are merged into a single evaluation report
+            # This prevents duplicate content generation
+            if full_replace_edits:
+                self.print_step(
+                    step_name="GeneratingContent", 
+                    step_output=f"🔄 Generating full document for {fpath} with {len(file_suggestions)} suggestions using LLM (SINGLE CALL)..."
+                )
+                
+                # Merge all suggestions for this file into a single evaluation report
+                # Format suggestions with clear numbering to help LLM understand they're separate improvements
+                suggestions_list = []
+                for idx, s in enumerate(file_suggestions, 1):
+                    suggestions_list.append({
+                        "suggestion_number": idx,
+                        "category": s.category if hasattr(s, 'category') else "general",
+                        "content_guidance": s.content_guidance,
+                        "evidence": s.source.get("evidence", "") if s.source else ""
+                    })
+                
+                merged_evaluation_report = {
+                    "total_suggestions": len(file_suggestions),
+                    "integration_instruction": f"Integrate ALL {len(file_suggestions)} suggestions below into ONE cohesive document. Do NOT create {len(file_suggestions)} separate versions.",
+                    "suggestions": suggestions_list
+                }
+                
+                # Debug: Save merged evaluation report
+                merged_report_file = os.path.join(debug_dir, f"{safe_filename}_merged_report.json")
+                with open(merged_report_file, 'w', encoding='utf-8') as f:
+                    json.dump(merged_evaluation_report, f, indent=2, ensure_ascii=False)
+                
+                # Debug: Log that we're about to make a single generation call
+                debug_log_file = os.path.join(debug_dir, f"{safe_filename}_generation_log.txt")
+                with open(debug_log_file, 'a', encoding='utf-8') as f:
+                    f.write(f"\n=== GENERATION CALL at {datetime.now().isoformat()} ===\n")
+                    f.write(f"File: {fpath}\n")
+                    f.write(f"Full replace edits: {len(full_replace_edits)}\n")
+                    f.write(f"Total suggestions: {len(file_suggestions)}\n")
+                    f.write(f"Merged into single call: YES\n")
+                    f.write(f"Suggestion IDs: {[s.id for s in file_suggestions]}\n\n")
+                
+                gen_content, gen_usage = self.llm_gen.generate_full_document(
+                    target_file=fpath,
+                    evaluation_report=merged_evaluation_report,
+                    context=original_content,
+                )
+                
+                # Debug: Log completion
+                with open(debug_log_file, 'a', encoding='utf-8') as f:
+                    f.write(f"Generation completed at {datetime.now().isoformat()}\n")
+                    f.write(f"Content length: {len(gen_content) if isinstance(gen_content, str) else 0} characters\n")
+                    f.write(f"Tokens used: {gen_usage.get('total_tokens', 0)}\n")
+                    f.write(f"SUCCESS: {isinstance(gen_content, str) and gen_content}\n\n")
+                
+                if isinstance(gen_content, str) and gen_content:
+                    self.print_step(step_name="LLMFullDoc", step_output=f"✓ Generated full document for {fpath} ({gen_usage.get('total_tokens', 0)} tokens)")
+                    # Apply the generated content to all full_replace edits
+                    for e in full_replace_edits:
+                        e.content_template = gen_content
+                    content = gen_content
+                else:
+                    # Fallback: try individual generation but only for the first edit to avoid duplicates
+                    if full_replace_edits:
+                        e = full_replace_edits[0]  # Only process the first edit
+                        suggestion = next((s for s in suggestions if s.id == e.suggestion_id), None) if e.suggestion_id else None
+                        if suggestion and (not e.content_template or e.content_template.strip() == ""):
+                            self.print_step(step_name="GeneratingContent", step_output=f"Fallback: Generating full document for {e.suggestion_id} using LLM...")
                             gen_content, gen_usage = self.llm_gen.generate_full_document(
                                 target_file=e.file_path,
                                 evaluation_report={"suggestion": suggestion.content_guidance, "evidence": suggestion.source.get("evidence", "") if suggestion.source else ""},
-                                context=context,
+                                context=original_content,
                             )
                             if isinstance(gen_content, str) and gen_content:
                                 self.print_step(step_name="LLMFullDoc", step_output=f"✓ Generated full document for {e.suggestion_id} ({gen_usage.get('total_tokens', 0)} tokens)")
-                                e.content_template = gen_content
-                        else:
-                            self.print_step(step_name="GeneratingContent", step_output=f"Generating section for {e.suggestion_id} using LLM...")
-                            gen_section, gen_usage = self.llm_gen.generate_section(
-                                suggestion=suggestion,
-                                style=plan.style_profile,
-                                context=context,
-                            )
-                            if isinstance(gen_section, str) and gen_section:
-                                self.print_step(step_name="LLMSection", step_output=f"✓ Generated section for {e.suggestion_id} ({gen_usage.get('total_tokens', 0)} tokens)")
-                                # Ensure header present
-                                if gen_section.lstrip().startswith("#"):
-                                    e.content_template = gen_section
-                                else:
-                                    title = e.anchor.get('value', '').strip() or ''
-                                    e.content_template = f"## {title}\n\n{gen_section}" if title else gen_section
-                content, stats = self.renderer.apply_edit(content, e)
-                # After applying full document or section changes, run a general cleaner pass for all text files
-                # to fix markdown/formatting issues without changing meaning.
-                try:
-                    if fpath.endswith((".md", ".rst", ".Rmd", ".Rd")) and content:
-                        self.print_step(step_name="CleaningContent", step_output=f"Cleaning formatting for {fpath}...")
-                        cleaned, _usage = self.llm_cleaner.clean_readme(content)
-                        if isinstance(cleaned, str) and cleaned.strip():
-                            content = cleaned
+                                # Apply the same content to all full_replace edits
+                                for edit in full_replace_edits:
+                                    edit.content_template = gen_content
+                                content = gen_content
+            else:
+                # Handle section edits individually
+                for e in section_edits:
+                    suggestion = next((s for s in suggestions if s.id == e.suggestion_id), None) if e.suggestion_id else None
+                    if suggestion and (not e.content_template or e.content_template.strip() == ""):
+                        self.print_step(step_name="GeneratingContent", step_output=f"Generating section for {e.suggestion_id} using LLM...")
+                        gen_section, gen_usage = self.llm_gen.generate_section(
+                            suggestion=suggestion,
+                            style=plan.style_profile,
+                            context=original_content,
+                        )
+                        if isinstance(gen_section, str) and gen_section:
+                            self.print_step(step_name="LLMSection", step_output=f"✓ Generated section for {e.suggestion_id} ({gen_usage.get('total_tokens', 0)} tokens)")
+                            # Ensure header present
+                            if gen_section.lstrip().startswith("#"):
+                                e.content_template = gen_section
+                            else:
+                                title = e.anchor.get('value', '').strip() or ''
+                                e.content_template = f"## {title}\n\n{gen_section}" if title else gen_section
+                    
+                    content, stats = self.renderer.apply_edit(content, e)
+                    total_stats["added_lines"] = total_stats.get("added_lines", 0) + stats.get("added_lines", 0)
+            
+            # Apply remaining edits that weren't full_replace
+            for e in edits:
+                if e.edit_type != "full_replace":
+                    content, stats = self.renderer.apply_edit(content, e)
+                    total_stats["added_lines"] = total_stats.get("added_lines", 0) + stats.get("added_lines", 0)
+            
+            # After applying full document or section changes, run a general cleaner pass for all text files
+            # to fix markdown/formatting issues without changing meaning.
+            try:
+                if fpath.endswith((".md", ".rst", ".Rmd", ".Rd")) and content:
+                    self.print_step(step_name="CleaningContent", step_output=f"Cleaning formatting for {fpath}...")
+                    cleaned, _usage = self.llm_cleaner.clean_readme(content)
+                    if isinstance(cleaned, str) and cleaned.strip():
+                        content = cleaned
+                    
+                    # LLM cleaner now handles markdown fences and unwanted summaries
                         
-                        # LLM cleaner now handles markdown fences and unwanted summaries
-                            
-                except Exception:
-                    pass
-                total_stats["added_lines"] = total_stats.get("added_lines", 0) + stats.get("added_lines", 0)
+            except Exception:
+                pass
+            
             revised[fpath] = content
             diff_stats[fpath] = total_stats
             self.print_step(step_name="RenderedFile", step_output=f"✓ Completed {fpath} - added {total_stats['added_lines']} lines")

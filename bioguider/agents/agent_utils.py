@@ -67,8 +67,9 @@ def get_llm(
     api_version: str=None,
     azure_deployment: str=None,
     temperature: float = 0.0,
-    max_tokens: int = 4096,
+    max_tokens: int = 16384,  # Set high by default - enough for any document type
 ):
+    
     if model_name.startswith("deepseek"):
         chat = ChatDeepSeek(
             api_key=api_key,
