@@ -69,6 +69,14 @@ def get_llm(
     temperature: float = 0.0,
     max_tokens: int = 16384,  # Set high by default - enough for any document type
 ):
+    """
+    Create an LLM instance with appropriate parameters based on model type and API version.
+    
+    Handles parameter compatibility across different models and API versions:
+    - DeepSeek models: Use max_tokens parameter
+    - GPT models (newer): Use max_completion_tokens parameter
+    - GPT-5+: Don't support custom temperature (uses default)
+    """
     
     if model_name.startswith("deepseek"):
         chat = ChatDeepSeek(
@@ -78,23 +86,38 @@ def get_llm(
             max_tokens=max_tokens,
         )
     elif model_name.startswith("gpt"):
-        chat = AzureChatOpenAI(
-            api_key=api_key,
-            azure_endpoint=azure_endpoint,
-            api_version=api_version,
-            azure_deployment=azure_deployment,
-            model=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        # Base parameters common to all GPT models
+        llm_params = {
+            "api_key": api_key,
+            "azure_endpoint": azure_endpoint,
+            "api_version": api_version,
+            "azure_deployment": azure_deployment,
+            "model": model_name,
+        }
+        
+        # Determine token limit parameter name based on API version
+        # Newer APIs (2024-08+) use max_completion_tokens instead of max_tokens
+        use_completion_tokens = api_version and api_version >= "2024-08-01-preview"
+        token_param = "max_completion_tokens" if use_completion_tokens else "max_tokens"
+        llm_params[token_param] = max_tokens
+        
+        # Handle temperature parameter based on model capabilities
+        # GPT-5+ models don't support custom temperature values
+        supports_temperature = not any(restricted in model_name for restricted in ["gpt-5", "o1", "o3"])
+        if supports_temperature:
+            llm_params["temperature"] = temperature
+            
+        chat = AzureChatOpenAI(**llm_params)
     else:
-        raise ValueError("Invalid model name")
-    # validate chat
+        raise ValueError(f"Unsupported model type: {model_name}")
+    
+    # Validate the LLM instance with a simple test
     try:
         chat.invoke("Hi")
     except Exception as e:
-        print(e)
+        logger.error(f"Failed to initialize LLM {model_name}: {e}")
         return None
+    
     return chat
 
 def pretty_print(message, printout = True):
