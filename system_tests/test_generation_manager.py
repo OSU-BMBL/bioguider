@@ -71,7 +71,7 @@ def test_DocumentationGenerationManager_on_BioGSP_report(llm, step_callback):
             content = fobj.read()
             assert len(content) > 0
 
-@pytest.mark.skip(reason="deprecated")
+
 def test_DocumentationGenerationManager_on_seurat_newformat(llm, step_callback):
     report_path = "logs/evaluation_report_github_satijalab_seurat.json"
     repo_path = "data/.adalflow/repos/satijalab_seurat"
@@ -194,7 +194,7 @@ def test_DocumentationGenerationManager_on_seurat_newformat_fast(llm, step_callb
                             if e.edit_type == "full_replace":
                                 gen_content, gen_usage = llm_gen.generate_full_document(
                                     target_file=fpath,
-                                    evaluation_report={"suggestion": suggestion.content_guidance, "evidence": suggestion.source.get("evidence", "") if suggestion.source else ""},
+                                    evaluation_report={"suggestion": suggestion.content_guidance},
                                     context=context,
                                 )
                                 if isinstance(gen_content, str) and gen_content:
@@ -290,6 +290,7 @@ def test_DocumentationGenerationManager_on_seurat_newformat_fast(llm, step_callb
     except Exception as e:
         print(f"Test failed with error: {e}")
         raise
+
 
 def test_DocumentationGenerationManager_tutorial_section_top10(llm, step_callback):
     """Test that processes only the top 10 RMarkdown (.Rmd) tutorial-related suggestions for quick validation"""
@@ -445,7 +446,7 @@ def test_DocumentationGenerationManager_tutorial_section_top10(llm, step_callbac
                     
                     # Merge all suggestions for this file into a single evaluation report
                     merged_evaluation_report = {
-                        "suggestions": [{"content_guidance": s.content_guidance, "evidence": s.source.get("evidence", "") if s.source else ""} for s in file_suggestions],
+                        "suggestions": [{"content_guidance": s.content_guidance} for s in file_suggestions],
                         "total_suggestions": len(file_suggestions)
                     }
                     
@@ -453,6 +454,7 @@ def test_DocumentationGenerationManager_tutorial_section_top10(llm, step_callbac
                         target_file=fpath,
                         evaluation_report=merged_evaluation_report,
                         context=original_content,
+                        original_content=original_content,
                     )
                     
                     if isinstance(gen_content, str) and gen_content:
@@ -470,8 +472,9 @@ def test_DocumentationGenerationManager_tutorial_section_top10(llm, step_callbac
                                 print(f"Fallback: Generating full document for {e.suggestion_id} using LLM...")
                                 gen_content, gen_usage = llm_gen.generate_full_document(
                                     target_file=e.file_path,
-                                    evaluation_report={"suggestion": suggestion.content_guidance, "evidence": suggestion.source.get("evidence", "") if suggestion.source else ""},
+                                    evaluation_report={"suggestion": suggestion.content_guidance},
                                     context=original_content,
+                                    original_content=original_content,
                                 )
                                 if isinstance(gen_content, str) and gen_content:
                                     print(f"✓ Generated full document for {e.suggestion_id} ({gen_usage.get('total_tokens', 0)} tokens)")

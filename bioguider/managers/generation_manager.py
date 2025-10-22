@@ -208,8 +208,7 @@ class DocumentationGenerationManager:
                     suggestions_list.append({
                         "suggestion_number": idx,
                         "category": s.category if hasattr(s, 'category') else "general",
-                        "content_guidance": s.content_guidance,
-                        "evidence": s.source.get("evidence", "") if s.source else ""
+                        "content_guidance": s.content_guidance
                     })
                 
                 merged_evaluation_report = {
@@ -233,11 +232,12 @@ class DocumentationGenerationManager:
                     f.write(f"Merged into single call: YES\n")
                     f.write(f"Suggestion IDs: {[s.id for s in file_suggestions]}\n\n")
                 
-                gen_content, gen_usage = self.llm_gen.generate_full_document(
-                    target_file=fpath,
-                    evaluation_report=merged_evaluation_report,
-                    context=original_content,
-                )
+                    gen_content, gen_usage = self.llm_gen.generate_full_document(
+                        target_file=fpath,
+                        evaluation_report=merged_evaluation_report,
+                        context=original_content,
+                        original_content=original_content,
+                    )
                 
                 # Debug: Log completion
                 with open(debug_log_file, 'a', encoding='utf-8') as f:
@@ -261,8 +261,9 @@ class DocumentationGenerationManager:
                             self.print_step(step_name="GeneratingContent", step_output=f"Fallback: Generating full document for {e.suggestion_id} using LLM...")
                             gen_content, gen_usage = self.llm_gen.generate_full_document(
                                 target_file=e.file_path,
-                                evaluation_report={"suggestion": suggestion.content_guidance, "evidence": suggestion.source.get("evidence", "") if suggestion.source else ""},
+                                evaluation_report={"suggestion": suggestion.content_guidance},
                                 context=original_content,
+                                original_content=original_content,
                             )
                             if isinstance(gen_content, str) and gen_content:
                                 self.print_step(step_name="LLMFullDoc", step_output=f"✓ Generated full document for {e.suggestion_id} ({gen_usage.get('total_tokens', 0)} tokens)")
@@ -495,7 +496,6 @@ class DocumentationGenerationManager:
             for e in edits:
                 sug = next((s for s in suggestions if s.id == e.suggestion_id), None)
                 guidance = sug.content_guidance if sug else ""
-                evidence = sug.source.get("evidence", "") if sug and sug.source else ""
                 section = e.anchor.get('value', 'General improvements')
                 
                 # Convert technical action names to user-friendly descriptions
@@ -567,61 +567,18 @@ class DocumentationGenerationManager:
                 
                 # Show evaluation reasoning that triggered this improvement
                 if sug and sug.source:
-                    evidence = sug.source.get("evidence", "")
                     score = sug.source.get("score", "")
                     category = sug.category or ""
                     
                     # Format category for display (e.g., "readme.dependencies" -> "Dependencies")
                     category_display = category.split('.')[-1].replace('_', ' ').title() if category else ""
                     
-                    if evidence:
-                        # Handle different evidence types
-                        if isinstance(evidence, dict):
-                            # Extract key information from dict evidence
-                            evidence_text = evidence.get("dependency_suggestions", "") or evidence.get("evidence", "")
-                            if not evidence_text:
-                                evidence_text = f"Installation evaluation: {evidence.get('overall_score', 'Unknown')} score"
-                        else:
-                            evidence_text = str(evidence)
-                            # Handle Python dict string evidence (from full_replace actions)
-                            if evidence_text.startswith("{") and evidence_text.endswith("}"):
-                                try:
-                                    import ast
-                                    evidence_dict = ast.literal_eval(evidence_text)
-                                    # Extract specific suggestions from the evaluation report
-                                    dep_sugg = evidence_dict.get("dependency_suggestions", "")
-                                    hw_req = evidence_dict.get("hardware_requirements", False)
-                                    compat_os = evidence_dict.get("compatible_os", True)
-                                    overall_score = evidence_dict.get("overall_score", "")
-                                    
-                                    # Build specific reason based on evaluation findings
-                                    reasons = []
-                                    if dep_sugg:
-                                        reasons.append(f"Dependencies: {dep_sugg}")
-                                    if hw_req is False:
-                                        reasons.append("Hardware requirements not specified")
-                                    if compat_os is False:
-                                        reasons.append("Operating system compatibility unclear")
-                                    if overall_score and overall_score not in ("Excellent", "Good"):
-                                        reasons.append(f"Overall score: {overall_score}")
-                                    
-                                    if reasons:
-                                        evidence_text = "; ".join(reasons)
-                                    else:
-                                        evidence_text = f"Installation evaluation score: {overall_score}"
-                                except:
-                                    evidence_text = "Installation documentation needs improvement"
-                        
-                        if score and category_display:
-                            lines.append(f"  - *Reason:* [{category_display} - {score}] {evidence_text}")
-                        elif score:
-                            lines.append(f"  - *Reason:* [{score}] {evidence_text}")
-                        elif category_display:
-                            lines.append(f"  - *Reason:* [{category_display}] {evidence_text}")
-                        else:
-                            lines.append(f"  - *Reason:* {evidence_text}")
+                    if score and category_display:
+                        lines.append(f"  - *Reason:* [{category_display} - {score}]")
                     elif score:
-                        lines.append(f"  - *Reason:* Evaluation score was '{score}' - needs improvement")
+                        lines.append(f"  - *Reason:* [{score}]")
+                    elif category_display:
+                        lines.append(f"  - *Reason:* [{category_display}]")
                 
                 # Show what was actually implemented (different from reason)
                 if guidance:

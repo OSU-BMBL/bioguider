@@ -115,13 +115,9 @@ class LLMErrorInjector:
             max_words=max_words,
         )
         output, _ = conv.generate(system_prompt=system_prompt, instruction_prompt="Return the JSON now.")
-        try:
-            data = json.loads(output)
-        except Exception:
-            # try to locate JSON block
-            start = output.find("{")
-            end = output.rfind("}")
-            data = json.loads(output[start:end+1]) if start != -1 and end != -1 else {"corrupted_markdown": readme_text, "errors": []}
+        
+        # Enhanced JSON parsing with better error handling
+        data = self._parse_json_output(output, readme_text)
         corrupted = data.get("corrupted_markdown", readme_text)
         # Validate output stays within original context; fallback to deterministic if invalid
         if not self._validate_corrupted(readme_text, corrupted, preserve_keywords):
@@ -132,6 +128,63 @@ class LLMErrorInjector:
             "errors": data.get("errors", []),
         }
         return corrupted, manifest
+
+    def _parse_json_output(self, output: str, fallback_text: str) -> Dict[str, Any]:
+        """Enhanced JSON parsing with multiple fallback strategies."""
+        import re
+        
+        # Strategy 1: Direct JSON parsing
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            pass
+        
+        # Strategy 2: Extract JSON block between ```json and ```
+        json_pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
+        match = re.search(json_pattern, output, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                pass
+        
+        # Strategy 3: Find first complete JSON object
+        start = output.find("{")
+        if start != -1:
+            # Find matching closing brace
+            brace_count = 0
+            end = start
+            for i, char in enumerate(output[start:], start):
+                if char == "{":
+                    brace_count += 1
+                elif char == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = i
+                        break
+            
+            if brace_count == 0:  # Found complete JSON object
+                try:
+                    json_str = output[start:end+1]
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    pass
+        
+        # Strategy 4: Try to fix common JSON issues
+        try:
+            # Remove markdown code fences
+            cleaned = re.sub(r'```(?:json)?\s*', '', output)
+            cleaned = re.sub(r'```\s*$', '', cleaned)
+            # Remove leading/trailing whitespace
+            cleaned = cleaned.strip()
+            # Try parsing again
+            return json.loads(cleaned)
+        except json.JSONDecodeError:
+            pass
+        
+        # Strategy 5: Fallback to deterministic injection
+        print(f"Warning: Failed to parse LLM JSON output, using fallback. Output preview: {output[:200]}...")
+        return {"corrupted_markdown": fallback_text, "errors": []}
 
     def _extract_preserve_keywords(self, text: str) -> List[str]:
         # Extract capitalized terms, domain hyphenations, and hostnames in links
