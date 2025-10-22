@@ -16,10 +16,10 @@ class ConsistencyQueryStep(CommonStep):
         functions_and_classes = state["functions_and_classes"]
         all_rows: list[any] = []
         for function_or_class in functions_and_classes:
-            function_or_class_name = function_or_class["name"]
-            function_or_class_file_path = function_or_class["file_path"]
-            function_or_class_parameters = function_or_class["parameters"]
-            function_or_class_parent = function_or_class["parent"]
+            function_or_class_name = function_or_class["name"] if "name" in function_or_class else "N/A"
+            function_or_class_file_path = function_or_class["file_path"] if "file_path" in function_or_class else "N/A"
+            function_or_class_parameters = function_or_class["parameters"] if "parameters" in function_or_class else "N/A"
+            function_or_class_parent = function_or_class["parent"] if "parent" in function_or_class else "N/A"
             self._print_step(state, step_output=(
                 f"Consistency Query Step: \n{function_or_class_name},\n"
                 f" {function_or_class_file_path},\n"
