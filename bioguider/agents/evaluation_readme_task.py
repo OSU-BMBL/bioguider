@@ -27,7 +27,7 @@ from bioguider.utils.constants import (
     FreeFolderLevelEvaluationREADMEResult,
     EvaluationREADMEResult,
 )
-from bioguider.utils.utils import increase_token_usage
+from bioguider.utils.utils import get_overall_score, increase_token_usage
 from bioguider.rag.config import configs
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,11 @@ If a LICENSE file is present in the repository, its content will also be provide
 2. **Readability**: Evaluate based on readability metrics such as Flesch-Kincaid Grade Level, SMOG Index, etc.
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
    * Suggest specific improvements if necessary
+   * **Grade Level**:
+     - **Execllent**: The README is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
+     - **Good**: The README is clear and easy to understand, with a natural flow and minimal jargon.
+     - **Fair**: The README is somewhat clear, but could benefit from more polish and consistency.
+     - **Poor**: The README is difficult to understand, with unclear language, jargon, or overly complex sentences.
 
 3. **Project Purpose**: Is the project's goal or function clearly stated?
    * Output: `Yes` or `No`
@@ -91,10 +96,20 @@ If a LICENSE file is present in the repository, its content will also be provide
 4. **Hardware and Software Requirements**: Are hardware/software specs and compatibility details included?
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
    * Suggest how to improve the section if needed
-
+   * **Grade Level**:
+     - **Execllent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
+     
 5. **Dependencies**: Are all necessary software libraries and dependencies clearly listed?
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
    * Suggest improvements if applicable
+   * **Grade Level**:
+     - **Execllent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
 
 6. **License Information**: Is license type clearly indicated?
    * Output: `Yes` or `No`
@@ -460,6 +475,17 @@ class EvaluationREADMETask(EvaluationTask):
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,
                 schema=StructuredEvaluationREADMEResult,
+            )
+            response.overall_score = get_overall_score(
+                [
+                    response.readability_score, 
+                    response.project_purpose_score, 
+                    response.hardware_and_software_spec_score, 
+                    response.dependency_score, 
+                    response.license_score, 
+                    response.contributor_author_score,
+                ],
+                [3, 3, 1, 1, 1, 1],
             )
             self.print_step(step_output=f"README: {readme_file} structured evaluation")
             self.print_step(step_output=reasoning_process)

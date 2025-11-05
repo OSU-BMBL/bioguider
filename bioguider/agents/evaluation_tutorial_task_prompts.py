@@ -12,43 +12,78 @@ Your task is to analyze the provided tutorial file and generate a structured qua
    * **Gunning Fog Index**: `{gunning_fog_index}` (A score above 12 is generally considered too hard for most people).
    * **SMOG Index**: `{smog_index}` (Estimates the years of education needed to understand the text).
    * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
+   * **Grade Level**:
+     - **Execllent**: The documentation is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
+     - **Good**: The documentation is clear and easy to understand, with a natural flow and minimal jargon.
+     - **Fair**: The documentation is somewhat clear, but could benefit from more polish and consistency.
+     - **Poor**: The documentation is difficult to understand, with unclear language, jargon, or overly complex sentences.
 
 2. **Coverage**:
    * **Assessment**: [Your evaluation of whether it covers all major steps needed to get started, and dependencies, prerequisites, setup steps, and example usage.]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The documentation covers all major steps needed to get started, and dependencies, prerequisites, setup steps, and example usage.
+     - **Good**: The documentation covers most of the major steps needed to get started, and dependencies, prerequisites, setup steps, and example usage.
+     - **Fair**: The documentation covers some of the major steps needed to get started, and dependencies, prerequisites, setup steps, and example usage.
+     - **Poor**: The documentation does not cover any of the major steps needed to get started, and dependencies, prerequisites, setup steps, and example usage.
 
 3. **Reproducibility**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of reproducibility]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The documentation provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The documentation provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The documentation provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The documentation does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
 
 4. **Structure & Navigation**:
    * **Assessment**: [Your evaluation of whether it provides logical sections (e.g., intro -> setup -> steps -> results -> next), TOC/anchors, estimated time, etc.]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The documentation provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The documentation provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The documentation provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The documentation does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
 
 5. **Executable Code Quality**:
    * **Assessment**: [Your evaluation on whether the code snippets are executable and functional, idiomatic, no hard-coded paths, etc.]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The documentation provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The documentation provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The documentation provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The documentation does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
 
 6. **Result Verification**:
    * **Assessment**: [Your evaluation on expected outputs shown (figures/tables/metrics), acceptance criteria, etc.]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
-
+   * **Grade Level**:
+     - **Execllent**: The documentation provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The documentation provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The documentation provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The documentation does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
+     
 7. **Performance & Resource Notes**:
    * **Assessment**: [Your evaluation on performance and resource notes, e.g., CPU/GPU usage, memory usage, runtime estimates, small "lite" path provided.]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the tutorial.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
-
+   * **Grade Level**:
+     - **Execllent**: The documentation provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Good**: The documentation provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **Fair**: The documentation provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **Poor**: The documentation does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
+     
 ---
 
 ### **Final Report Ouput**

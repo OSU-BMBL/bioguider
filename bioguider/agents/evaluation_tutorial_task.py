@@ -19,7 +19,7 @@ from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
 from bioguider.utils.file_utils import detect_file_type, flatten_files
 from bioguider.utils.notebook_utils import extract_markdown_from_notebook, strip_notebook_to_code_and_markdown
 from bioguider.utils.pyphen_utils import PyphenReadability
-from bioguider.utils.utils import convert_html_to_text, increase_token_usage
+from bioguider.utils.utils import convert_html_to_text, increase_token_usage, get_overall_score
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,18 @@ class EvaluationTutorialTask(EvaluationTask):
             schema=TutorialEvaluationResult,
         )
         res: TutorialEvaluationResult = res
-        
+        res.overall_score = get_overall_score(
+            [
+                res.readability_score, 
+                res.setup_and_dependencies_score, 
+                res.reproducibility_score, 
+                res.structure_and_navigation_score, 
+                res.executable_code_quality_score, 
+                res.result_verification_score, 
+                res.performance_and_resource_notes_score,
+            ],
+            [3, 3, 1, 1, 2, 1, 1],
+        )
         consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the tutorial

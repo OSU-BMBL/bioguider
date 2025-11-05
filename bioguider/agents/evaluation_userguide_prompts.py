@@ -12,37 +12,67 @@ Your task is to analyze the provided files related to user guide and generate a 
    * **Gunning Fog Index**: `{gunning_fog_index}` (A score above 12 is generally considered too hard for most people).
    * **SMOG Index**: `{smog_index}` (Estimates the years of education needed to understand the text).
    * **Assessment**: Based on these scores, evaluate the overall readability and technical complexity of the language used.
+   * **Grade Level**:
+     - **Execllent**: The user guide is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
+     - **Good**: The user guide is clear and easy to understand, with a natural flow and minimal jargon.
+     - **Fair**: The user guide is somewhat clear, but could benefit from more polish and consistency.
+     - **Poor**: The user guide is difficult to understand, with unclear language, jargon, or overly complex sentences.
 
 2. **Arguments and Clarity**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of arguments and their usage]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The user guide provides a clear and comprehensive guide to the user guide, with all necessary steps and information provided.
+     - **Good**: The user guide provides a clear and comprehensive guide to the user guide, with most necessary steps and information provided.
+     - **Fair**: The user guide provides a clear and comprehensive guide to the user guide, with some necessary steps and information provided.
+     - **Poor**: The user guide does not provide a clear and comprehensive guide to the user guide, with no necessary steps and information provided.
 
 3. **Return Value and Clarity**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of return value and its meaning]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The user guide provides a clear and comprehensive guide to the user guide, with all necessary steps and information provided.
+     - **Good**: The user guide provides a clear and comprehensive guide to the user guide, with most necessary steps and information provided.
+     - **Fair**: The user guide provides a clear and comprehensive guide to the user guide, with some necessary steps and information provided.
+     - **Poor**: The user guide does not provide a clear and comprehensive guide to the user guide, with no necessary steps and information provided.
 
 4. **Context and Purpose**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of the context and purpose of the module]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The user guide provides a clear and comprehensive guide to the user guide, with all necessary steps and information provided.
+     - **Good**: The user guide provides a clear and comprehensive guide to the user guide, with most necessary steps and information provided.
+     - **Fair**: The user guide provides a clear and comprehensive guide to the user guide, with some necessary steps and information provided.
+     - **Poor**: The user guide does not provide a clear and comprehensive guide to the user guide, with no necessary steps and information provided.
 
 5. **Error Handling**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of error handling]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
+   * **Grade Level**:
+     - **Execllent**: The user guide provides a clear and comprehensive guide to the user guide, with all necessary steps and information provided.
+     - **Good**: The user guide provides a clear and comprehensive guide to the user guide, with most necessary steps and information provided.
+     - **Fair**: The user guide provides a clear and comprehensive guide to the user guide, with some necessary steps and information provided.
+     - **Poor**: The user guide does not provide a clear and comprehensive guide to the user guide, with no necessary steps and information provided.
 
 6. **Usage Examples**:
    * **Assessment**: [Your evaluation of whether it provides a clear **description** of usage examples]
    * **Improvement Suggestions**: please be as specific as possible.
       * **Original text:** [Quote a specific line/section from the user guide.]
       * **Improving comments:** [Provide your suggestions to improve clarity.]
-
+   * **Grade Level**:
+     - **Execllent**: The user guide provides a clear and comprehensive guide to the user guide, with all necessary steps and information provided.
+     - **Good**: The user guide provides a clear and comprehensive guide to the user guide, with most necessary steps and information provided.
+     - **Fair**: The user guide provides a clear and comprehensive guide to the user guide, with some necessary steps and information provided.
+     - **Poor**: The user guide does not provide a clear and comprehensive guide to the user guide, with no necessary steps and information provided.
+     
 7. **Overall Score**: Give an overall quality rating of the User Guide information.
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
 
