@@ -17,7 +17,7 @@ from ..utils.pyphen_utils import PyphenReadability
 
 from .evaluation_task import EvaluationTask
 from .agent_utils import read_file
-from bioguider.utils.utils import convert_html_to_text, increase_token_usage
+from bioguider.utils.utils import convert_html_to_text, get_overall_score, increase_token_usage
 from .evaluation_userguide_prompts import INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
 
 
@@ -134,7 +134,14 @@ class EvaluationUserGuideTask(EvaluationTask):
             schema=UserGuideEvaluationResult,
         )
         res: UserGuideEvaluationResult = res
-
+        res.overall_score = get_overall_score(
+            [
+                res.readability_score, 
+                res.context_and_purpose_score, 
+                res.error_handling_score, 
+            ],
+            [1, 1, 1,],
+        )
         consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the user guide/API documentation

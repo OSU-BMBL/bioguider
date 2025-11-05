@@ -126,3 +126,45 @@ def convert_html_to_text(html_path: str | Path, exclude_tags: list[str] = ["scri
                 element.decompose()
     text = soup.get_text(separator="\n", strip=True)
     return text
+
+def get_overall_score(grade_levels: list[str], weights: list[int]) -> str:
+    def get_grade_level_score(grade_level: str | bool) -> int:
+        if isinstance(grade_level, bool):
+            if grade_level:
+                return 3
+            else:
+                return 0
+        grade_level = grade_level.strip().lower()
+        if grade_level == "poor":
+            return 0
+        elif grade_level == "fair":
+            return 1
+        elif grade_level == "good":
+            return 2
+        elif grade_level == "excellent":
+            return 3
+        elif grade_level == "n/a":
+            return 0
+        elif grade_level == "yes":
+            return 3
+        elif grade_level == "no":
+            return 0
+        else:
+            raise ValueError(f"Invalid grade level: {grade_level}")
+    if len(grade_levels) != len(weights):
+        raise ValueError("The length of grade_levels and weights must be the same")
+    score = round(sum(
+        get_grade_level_score(grade_level) * weight for grade_level, weight in zip(grade_levels, weights)
+    ) / sum(weight * 3.0 for weight in weights), 2)
+    if score > 0.8:
+        return "Excellent"
+    elif score > 0.6:
+        return "Good"
+    elif score > 0.4:
+        return "Fair"
+    else:
+        return "Poor"
+
+    
+
+

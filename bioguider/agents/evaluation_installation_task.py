@@ -19,7 +19,7 @@ from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
 
 from .evaluation_task import EvaluationTask
 from .agent_utils import read_file
-from bioguider.utils.utils import increase_token_usage
+from bioguider.utils.utils import get_overall_score, increase_token_usage
 
 
 logger = logging.getLogger(__name__)
@@ -201,6 +201,12 @@ class EvaluationInstallationTask(EvaluationTask):
             schema=StructuredEvaluationInstallationResult,
         )
         res: StructuredEvaluationInstallationResult = res
+        res.overall_score = get_overall_score([
+            res.install_available, 
+            res.install_tutorial, 
+            res.compatible_os, 
+            res.hardware_requirements,
+        ], [3, 3, 1, 1])
         res.dependency_number = 0 if res.dependency_number is None else res.dependency_number
         self.print_step(step_output=reasoning_process)
         self.print_step(token_usage=token_usage)
