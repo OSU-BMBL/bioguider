@@ -84,7 +84,7 @@ If a LICENSE file is present in the repository, its content will also be provide
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
    * Suggest specific improvements if necessary
    * **Grade Level**:
-     - **Execellent**: The README is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
+     - **Excellent**: The README is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
      - **Good**: The README is clear and easy to understand, with a natural flow and minimal jargon.
      - **Fair**: The README is somewhat clear, but could benefit from more polish and consistency.
      - **Poor**: The README is difficult to understand, with unclear language, jargon, or overly complex sentences.
@@ -97,7 +97,7 @@ If a LICENSE file is present in the repository, its content will also be provide
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
    * Suggest how to improve the section if needed
    * **Grade Level**:
-     - **Execellent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Excellent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
      - **Good**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
      - **Fair**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
      - **Poor**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
@@ -106,7 +106,7 @@ If a LICENSE file is present in the repository, its content will also be provide
    * Output: `Poor`, `Fair`, `Good`, or `Excellent`
    * Suggest improvements if applicable
    * **Grade Level**:
-     - **Execellent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **Excellent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
      - **Good**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
      - **Fair**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
      - **Poor**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
