@@ -173,10 +173,49 @@ class EvaluationManager:
             llm=self.llm,
             repo_path=refined_repo_path,
             gitignore_path=Path(refined_repo_path, ".gitignore"),
-            meta_data=self.project_metadata,
+            meta_data=self.refined_project_metadata,
             step_callback=self.step_callback,
-            summarized_files_db=self.summary_file_db,
+            summarized_files_db=self.refined_summary_file_db,
+            collected_files=readme_files,
         )
-        
-    
+        results, readme_files = task.evaluate()
+        return results, readme_files
 
+    def evaluation_refined_installation(self, refined_repo_path: str, installation_files: list[str]) -> tuple[dict, list[str]]:
+        task = EvaluationInstallationTask(
+            llm=self.llm,
+            repo_path=refined_repo_path,
+            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            meta_data=self.refined_project_metadata,
+            step_callback=self.step_callback,
+            summarized_files_db=self.refined_summary_file_db,
+            collected_files=installation_files,
+        )
+        results, installation_files = task.evaluate()
+        return results, installation_files
+
+    def evaluation_refined_tutorial(self, refined_repo_path: str, tutorial_files: list[str]) -> tuple[dict, list[str]]:
+        task = EvaluationTutorialTask(
+            llm=self.llm,
+            repo_path=refined_repo_path,
+            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            meta_data=self.refined_project_metadata,
+            step_callback=self.step_callback,
+            summarized_files_db=self.refined_summary_file_db,
+            collected_files=tutorial_files,
+        )
+        results, tutorial_files = task.evaluate()
+        return results, tutorial_files
+
+    def evaluation_refined_userguide(self, refined_repo_path: str, userguide_files: list[str]) -> tuple[dict, list[str]]:
+        task = EvaluationUserGuideTask(
+            llm=self.llm,
+            repo_path=refined_repo_path,
+            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            meta_data=self.refined_project_metadata,
+            step_callback=self.step_callback,
+            summarized_files_db=self.refined_summary_file_db,
+            collected_files=userguide_files,
+        )
+        results, userguide_files = task.evaluate()
+        return results, userguide_files
