@@ -51,11 +51,13 @@ class EvaluationUserGuideTask(EvaluationTask):
         step_callback = None,
         summarized_files_db = None,
         code_structure_db = None,
+        collected_files: list[str] | None = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "User Guide Evaluation"
         self.code_structure_db = code_structure_db
-    
+        self.collected_files = collected_files
+
     def sanitize_files(self, files: list[str]) -> list[str]:
         sanitized_files = []
         for file in files:
@@ -70,6 +72,9 @@ class EvaluationUserGuideTask(EvaluationTask):
         return sanitized_files
 
     def _collect_files(self):
+        if self.collected_files is not None:
+            return self.collected_files
+        
         task = CollectionTask(
             llm=self.llm,
             step_callback=self.step_callback,

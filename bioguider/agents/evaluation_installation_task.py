@@ -159,10 +159,11 @@ class EvaluationInstallationTask(EvaluationTask):
         meta_data = None, 
         step_callback = None,
         summarized_files_db = None,
+        collected_files: list[str] | None = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "Installation Evaluation"
-
+        self.collected_files = collected_files
 
     def _collect_install_files_content(self, files: list[str] | None=None) -> str:
         if files is None or len(files) == 0:
@@ -262,6 +263,9 @@ class EvaluationInstallationTask(EvaluationTask):
         return combined_evaluation, total_token_usage, files
 
     def _collect_files(self):
+        if self.collected_files is not None:
+            return self.collected_files
+        
         task = CollectionTask(
             llm=self.llm,
             step_callback=self.step_callback,

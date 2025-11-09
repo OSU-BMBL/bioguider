@@ -359,9 +359,11 @@ class EvaluationREADMETask(EvaluationTask):
         meta_data: ProjectMetadata | None = None,
         step_callback: Callable | None = None,
         summarized_files_db = None,
+        collected_files: list[str] | None = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "README Evaluation"
+        self.collected_files = collected_files
 
     def _project_level_evaluate(self, readme_files: list[str]) -> tuple[dict, dict]:
         """
@@ -656,6 +658,9 @@ class EvaluationREADMETask(EvaluationTask):
         """
         Search for a README file in the repository directory.
         """
+        if self.collected_files is not None:
+            return self.collected_files
+        
         possible_readme_files = [
             "readme.md",
             "readme.rst",
