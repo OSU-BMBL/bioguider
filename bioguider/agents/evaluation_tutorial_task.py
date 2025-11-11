@@ -26,22 +26,22 @@ logger = logging.getLogger(__name__)
 MAX_FILE_SIZE = 1024 * 100 # 100K
 
 class TutorialEvaluationResult(BaseModel):
-    overall_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    overall_score: int=Field(description="A number between 0 and 100 representing the overall quality rating.")
     overall_key_strengths: str=Field(description="A string value, the key strengths of the tutorial")
     # overall_improvement_suggestions: str=Field(description="Suggestions to improve the overall score if necessary")
-    readability_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    readability_score: int=Field(description="A number between 0 and 100 representing the readability quality rating.")
     readability_suggestions: list[str]=Field(description="A list of string values, suggestions to improve readability if necessary")
-    setup_and_dependencies_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    setup_and_dependencies_score: int=Field(description="A number between 0 and 100 representing the setup and dependencies quality rating.")
     setup_and_dependencies_suggestions: list[str]=Field(description="A list of string values, suggestions to improve setup and dependencies if necessary")
-    reproducibility_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    reproducibility_score: int=Field(description="A number between 0 and 100 representing the reproducibility quality rating.")
     reproducibility_suggestions: list[str]=Field(description="A list of string values, suggestions to improve reproducibility if necessary")
-    structure_and_navigation_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    structure_and_navigation_score: int=Field(description="A number between 0 and 100 representing the structure and navigation quality rating.")
     structure_and_navigation_suggestions: list[str]=Field(description="A list of string values, suggestions to improve structure and navigation if necessary")
-    executable_code_quality_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    executable_code_quality_score: int=Field(description="A number between 0 and 100 representing the executable code quality rating.")
     executable_code_quality_suggestions: list[str]=Field(description="A list of string values, suggestions to improve executable code quality if necessary")
-    result_verification_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    result_verification_score: int=Field(description="A number between 0 and 100 representing the result verification quality rating.")
     result_verification_suggestions: list[str]=Field(description="A list of string values, suggestions to improve result verification if necessary")
-    performance_and_resource_notes_score: str=Field(description="A string value, could be 'Poor', 'Fair', 'Good', or 'Excellent'")
+    performance_and_resource_notes_score: int=Field(description="A number between 0 and 100 representing the performance and resource notes quality rating.")
     performance_and_resource_notes_suggestions: list[str]=Field(description="A list of string values, suggestions to improve performance and resource notes if necessary")
     
 class IndividualTutorialEvaluationResult(BaseModel):
@@ -149,6 +149,7 @@ class EvaluationTutorialTask(EvaluationTask):
             logger.error(f"Error in sanitizing file {file} - {Path(self.repo_path, file).resolve()}")
             return None, {**DEFAULT_TOKEN_USAGE}
             
+        # evaluate general criteria
         readability = PyphenReadability()
         flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
                 _, _, _, _, _ = readability.readability_metrics(readability_content)
@@ -168,8 +169,22 @@ class EvaluationTutorialTask(EvaluationTask):
             schema=TutorialEvaluationResult,
         )
         res: TutorialEvaluationResult = res
+
+        # evaluate consistency
+        consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
+        if consistency_evaluation_result is None:
+            # No sufficient information to evaluate the consistency of the tutorial
+            consistency_evaluation_result = ConsistencyEvaluationResult(
+                consistency_score=0,
+                consistency_assessment="No sufficient information to evaluate the consistency of the tutorial",
+                consistency_development=[],
+                consistency_strengths=[],
+            )
+
+        # calculate overall score
         res.overall_score = get_overall_score(
             [
+                consistency_evaluation_result.score,
                 res.readability_score, 
                 res.setup_and_dependencies_score, 
                 res.reproducibility_score, 
@@ -178,17 +193,9 @@ class EvaluationTutorialTask(EvaluationTask):
                 res.result_verification_score, 
                 res.performance_and_resource_notes_score,
             ],
-            [3, 3, 1, 1, 2, 1, 1],
+            [3, 3, 3, 1, 1, 2, 1, 1],
         )
-        consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
-        if consistency_evaluation_result is None:
-            # No sufficient information to evaluate the consistency of the tutorial
-            consistency_evaluation_result = ConsistencyEvaluationResult(
-                consistency_score="N/A",
-                consistency_assessment="No sufficient information to evaluate the consistency of the tutorial",
-                consistency_development=[],
-                consistency_strengths=[],
-            )
+        
         return IndividualTutorialEvaluationResult(
             tutorial_evaluation=res,
             consistency_evaluation=consistency_evaluation_result,

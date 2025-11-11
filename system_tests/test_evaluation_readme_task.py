@@ -19,4 +19,4 @@ def test_EvaluationReadmeTask_RepoAgent(llm, step_callback, root_path):
     for file, evaluation in evaluations.items():
         assert evaluation is not None
         assert evaluation.structured_evaluation.overall_score is not None
-        assert evaluation.structured_evaluation.overall_score in ["Poor", "Fair", "Good", "Excellent"]
+        assert evaluation.structured_evaluation.overall_score > 60 and evaluation.structured_evaluation.overall_score <= 100

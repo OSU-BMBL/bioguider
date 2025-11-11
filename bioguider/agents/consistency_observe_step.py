@@ -19,7 +19,7 @@ and generate a structured consistency assessment based on the following criteria
 ### **Evaluation Criteria**
 
 **Consistency**:
-  * **Score**: [Poor / Fair / Good / Excellent]
+  * **Score**: [a number between 0 and 100 representing the consistency quality rating.]
   * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
   * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent, please be as specific as possible]
   * **Strengths**: [A list of strengths of the {domain} documentation on consistency]
@@ -30,7 +30,7 @@ and generate a structured consistency assessment based on the following criteria
 Your output **must exactly match** the following format:
 ```
 **Consistency**:
-  * **Score**: [Poor / Fair / Good / Excellent]
+  * **Score**: [a number between 0 and 100 representing the consistency quality rating.]
   * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
   * **Development**: [A list of inconsistent function/class/method name and inconsistent docstring, and describe how they are inconsistent, please be as specific as possible]
   * **Strengths**: [A list of strengths of the {domain} documentation on consistency]
@@ -40,6 +40,7 @@ Your output **must exactly match** the following format:
 
 ```
 **Consistency**:
+  * **Score**: [a number between 0 and 100 representing the consistency quality rating.]
   * **Assessment**: [Your evaluation of whether the {domain} documentation is consistent with the code definitions]
   * **Development**:
     - Inconsistent function/class/method name 1
@@ -65,7 +66,7 @@ Your output **must exactly match** the following format:
 """
 
 class ConsistencyEvaluationObserveResult(BaseModel):
-    consistency_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    consistency_score: int=Field(description="A number between 0 and 100 representing the consistency quality rating.")
     consistency_assessment: str=Field(description="Your evaluation of whether the documentation is consistent with the code definitions")
     consistency_development: list[str]=Field(description="A list of inconsistent function/class/method name and inconsistent docstring")
     consistency_strengths: list[str]=Field(description="A list of strengths of the documentation on consistency")

@@ -12,7 +12,7 @@ from .consistency_query_step import ConsistencyQueryStep
 from .consistency_observe_step import ConsistencyObserveStep
 
 class ConsistencyEvaluationResult(BaseModel):
-    score: str
+    score: int
     assessment: str
     development: list[str]
     strengths: list[str]
