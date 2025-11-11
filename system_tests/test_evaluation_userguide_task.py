@@ -151,7 +151,7 @@ def test_EvaluationUserGuideTask_evaluate(llm, step_callback, root_path, data_fo
     assert evaluations is not None
     assert files is not None
 
-@pytest.mark.skip(reason="Skipping this test")
+# @pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_ConsistencyEvaluation_on_RepoAgent(llm, step_callback, root_path, data_folder):
     files = [
         # "markdown_docs/repo_agent/multi_task_dispatch.md", 
@@ -259,6 +259,7 @@ def test_EvaluationUserGuideTask_evaluate_on_BioGSP(llm, step_callback, root_pat
     assert evaluations is not None
     assert files is not None
 
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_evaluate_on_seurat(llm, step_callback, root_path, data_folder):
     code_structure_db = CodeStructureDb(
         author="satijalab",

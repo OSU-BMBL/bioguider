@@ -22,14 +22,14 @@ from .evaluation_userguide_prompts import INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM
 
 
 class UserGuideEvaluationResult(BaseModel):
-    overall_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    overall_score: int=Field(description="A number between 0 and 100 representing the overall quality rating.")
     overall_key_strengths: str=Field(description="A string value, the key strengths of the user guide")
     
-    readability_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    readability_score: int=Field(description="A number between 0 and 100 representing the readability quality rating.")
     readability_suggestions: list[str]=Field(description="A list of string values, suggestions to improve readability if necessary")
-    context_and_purpose_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    context_and_purpose_score: int=Field(description="A number between 0 and 100 representing the context and purpose quality rating.")
     context_and_purpose_suggestions: list[str]=Field(description="A list of string values, suggestions to improve context and purpose if necessary")
-    error_handling_score: str=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    error_handling_score: int=Field(description="A number between 0 and 100 representing the error handling quality rating.")
     error_handling_suggestions: list[str]=Field(description="A list of string values, suggestions to improve error handling if necessary")
 
 class IndividualUserGuideEvaluationResult(BaseModel):
@@ -51,11 +51,13 @@ class EvaluationUserGuideTask(EvaluationTask):
         step_callback = None,
         summarized_files_db = None,
         code_structure_db = None,
+        collected_files: list[str] | None = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "User Guide Evaluation"
         self.code_structure_db = code_structure_db
-    
+        self.collected_files = collected_files
+
     def sanitize_files(self, files: list[str]) -> list[str]:
         sanitized_files = []
         for file in files:
@@ -70,6 +72,9 @@ class EvaluationUserGuideTask(EvaluationTask):
         return sanitized_files
 
     def _collect_files(self):
+        if self.collected_files is not None:
+            return self.collected_files
+        
         task = CollectionTask(
             llm=self.llm,
             step_callback=self.step_callback,
@@ -115,6 +120,7 @@ class EvaluationUserGuideTask(EvaluationTask):
         else:
             readability_content = content
 
+        # evaluate general criteria
         readability = PyphenReadability()
         flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
                 _, _, _, _, _ = readability.readability_metrics(readability_content)
@@ -134,14 +140,8 @@ class EvaluationUserGuideTask(EvaluationTask):
             schema=UserGuideEvaluationResult,
         )
         res: UserGuideEvaluationResult = res
-        res.overall_score = get_overall_score(
-            [
-                res.readability_score, 
-                res.context_and_purpose_score, 
-                res.error_handling_score, 
-            ],
-            [1, 1, 1,],
-        )
+
+        # evaluate consistency
         consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the user guide/API documentation
@@ -151,6 +151,18 @@ class EvaluationUserGuideTask(EvaluationTask):
                 consistency_development=[],
                 consistency_strengths=[],
             )
+
+        # calculate overall score
+        res.overall_score = get_overall_score(
+            [
+                consistency_evaluation_result.score,
+                res.readability_score, 
+                res.context_and_purpose_score, 
+                res.error_handling_score, 
+            ],
+            [2, 1, 1, 1],
+        )
+        
         return IndividualUserGuideEvaluationResult(
             user_guide_evaluation=res,
             consistency_evaluation=consistency_evaluation_result,

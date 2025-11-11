@@ -48,24 +48,12 @@ Your task is to analyze the provided files related to installation and generate 
    * Output: `Yes` or `No`
 
 6. **Overall Score**: Give an overall quality rating of the Installation information.
-   * Output: `Poor`, `Fair`, `Good`, or `Excellent`
-
----
-
-### **Final Report Ouput**
-Your final report must **exactly match** the following format. Do not add or omit any sections.
-
-**FinalAnswer**
-**Install Available:** [Yes / No]
-**Install Tutorial:** [Yes / No]
-**Dependency:**
-  * number: [Number]
-  * suggestions: <suggestion to improve **dependency information** like missing dependencies
-**Compatible Operating System:** [Yes / No]
-**Hardware Requirements:** [Yes / No]
-**Overall Score:** [Poor / Fair / Good / Excellent]
-
----
+   * Output: a number between 0 and 100 representing the overall quality rating.
+   * **Grade Level**:
+     - **85-100**: The installation information is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
+     - **65-84**: The installation information is clear and easy to understand, with a natural flow and minimal jargon.
+     - **45-64**: The installation information is somewhat clear, but could benefit from more polish and consistency.
+     - **0-44**: The installation information is difficult to understand, with unclear language, jargon, or overly complex sentences.
 
 ### Installation Files Provided:
 {installation_files_content}
@@ -159,10 +147,11 @@ class EvaluationInstallationTask(EvaluationTask):
         meta_data = None, 
         step_callback = None,
         summarized_files_db = None,
+        collected_files: list[str] | None = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "Installation Evaluation"
-
+        self.collected_files = collected_files
 
     def _collect_install_files_content(self, files: list[str] | None=None) -> str:
         if files is None or len(files) == 0:
@@ -262,6 +251,9 @@ class EvaluationInstallationTask(EvaluationTask):
         return combined_evaluation, total_token_usage, files
 
     def _collect_files(self):
+        if self.collected_files is not None:
+            return self.collected_files
+        
         task = CollectionTask(
             llm=self.llm,
             step_callback=self.step_callback,

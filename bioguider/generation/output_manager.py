@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from .models import OutputArtifact, GenerationManifest, PlannedEdit
@@ -18,6 +19,25 @@ class OutputManager:
         out_dir = os.path.join(self.base_outputs_dir, f"{repo_name}", timestamp)
         os.makedirs(out_dir, exist_ok=True)
         return out_dir
+
+    def get_latest_output_dir(self, repo_url_or_name: str) -> str:
+        repo_name = self._extract_repo_name(repo_url_or_name)
+        out_dir = Path(self.base_outputs_dir, f"{repo_name}")
+        latest_tm = datetime.min
+        if not out_dir.exists():
+            return None
+        for f in out_dir.iterdir():
+            if not f.is_dir():
+                continue
+            tm = f.name.split("/")[-1]
+            if not tm.isdigit():
+                continue
+            tm = datetime.strptime(tm, "%Y%m%d_%H%M%S")
+            if tm > latest_tm:
+                latest_tm = tm
+                latest_dir = f.name
+        
+        return latest_dir
 
     def _extract_repo_name(self, url_or_name: str) -> str:
         name = url_or_name.rstrip("/")

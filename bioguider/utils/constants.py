@@ -49,18 +49,18 @@ class ProjectLevelEvaluationREADMEResult(BaseModel):
 
 class StructuredEvaluationREADMEResult(BaseModel):
     available_score: Optional[bool]=Field(description="A boolean value, Is the README accessible and present?")
-    readability_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    readability_score: Optional[int]=Field(description="A number between 0 and 100 representing the readability quality rating.")
     readability_suggestions: Optional[str]=Field(description="Suggestions to improve readability if necessary")
     project_purpose_score: Optional[bool]=Field(description="A boolean value. Is the project's goal or function clearly stated?")
     project_purpose_suggestions: Optional[str]=Field(description="Suggestions if not clear")
-    hardware_and_software_spec_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    hardware_and_software_spec_score: Optional[int]=Field(description="A number between 0 and 100 representing the hardware and software spec and compatibility description quality rating.")
     hardware_and_software_spec_suggestions: Optional[str]=Field(description="Suggestions if not clear")
-    dependency_score: Optional[str]=Field(description="A string value, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    dependency_score: Optional[int]=Field(description="A number between 0 and 100 representing the dependencies quality rating.")
     dependency_suggestions: Optional[str]=Field(description="Suggestions if dependencies are not clearly stated")
     license_score: Optional[bool]=Field(description="A boolean value, Are contributor or maintainer details provided?")
     license_suggestions: Optional[str]=Field(description="Suggestions to improve license information")
     contributor_author_score: Optional[bool]=Field(description="A boolean value. are contributors or author included?")
-    overall_score: str=Field(description="A overall scroll for the README quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    overall_score: int=Field(description="A number between 0 and 100 representing the overall quality rating.")
 
 class FreeProjectLevelEvaluationREADMEResult(BaseModel):
     available: Optional[list[str]]=Field(description="markdown texts including newlines that contains detailed assessment and detailed suggestion for the availability of the README file")
@@ -91,7 +91,7 @@ class StructuredEvaluationInstallationResult(BaseModel):
     dependency_number: Optional[int]=Field(description="A number. It is the number of dependencies that are required to install.")
     dependency_suggestions: Optional[str]=Field(description="A string value. It is the specific improvements if necessary, such as missing dependencies")
     compatible_os: Optional[bool]=Field(description="A boolean value. Is compatible operating system described?")
-    overall_score: Optional[str]=Field(description="A overall scroll for the installation quality, could be `Poor`, `Fair`, `Good`, or `Excellent`")
+    overall_score: Optional[int]=Field(description="A number between 0 and 100 representing the overall quality rating.")
     hardware_requirements: Optional[bool]=Field(description="A boolean value. Is the hardware requirements described?")
 
 class FreeEvaluationInstallationResult(BaseModel):

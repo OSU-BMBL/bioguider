@@ -81,35 +81,35 @@ If a LICENSE file is present in the repository, its content will also be provide
    * Output: `Yes` or `No`
 
 2. **Readability**: Evaluate based on readability metrics such as Flesch-Kincaid Grade Level, SMOG Index, etc.
-   * Output: `Poor`, `Fair`, `Good`, or `Excellent`
+   * Output: a number between 0 and 100 representing the overall quality rating.
    * Suggest specific improvements if necessary
    * **Grade Level**:
-     - **Excellent**: The README is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
-     - **Good**: The README is clear and easy to understand, with a natural flow and minimal jargon.
-     - **Fair**: The README is somewhat clear, but could benefit from more polish and consistency.
-     - **Poor**: The README is difficult to understand, with unclear language, jargon, or overly complex sentences.
+     - **85-100**: The README is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
+     - **65-84**: The README is clear and easy to understand, with a natural flow and minimal jargon.
+     - **45-64**: The README is somewhat clear, but could benefit from more polish and consistency.
+     - **0-44**: The README is difficult to understand, with unclear language, jargon, or overly complex sentences.
 
 3. **Project Purpose**: Is the project's goal or function clearly stated?
    * Output: `Yes` or `No`
    * Provide suggestions if unclear
 
 4. **Hardware and Software Requirements**: Are hardware/software specs and compatibility details included?
-   * Output: `Poor`, `Fair`, `Good`, or `Excellent`
+   * Output: a number between 0 and 100 representing the overall quality rating.
    * Suggest how to improve the section if needed
    * **Grade Level**:
-     - **Excellent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
-     - **Good**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
-     - **Fair**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
-     - **Poor**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
+     - **85-100**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **65-84**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **45-64**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **0-44**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
      
 5. **Dependencies**: Are all necessary software libraries and dependencies clearly listed?
-   * Output: `Poor`, `Fair`, `Good`, or `Excellent`
+   * Output: a number between 0 and 100 representing the overall quality rating.
    * Suggest improvements if applicable
    * **Grade Level**:
-     - **Excellent**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
-     - **Good**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
-     - **Fair**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
-     - **Poor**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
+     - **85-100**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **65-84**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **45-64**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **0-44**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
 
 6. **License Information**: Is license type clearly indicated?
    * Output: `Yes` or `No`
@@ -120,7 +120,12 @@ If a LICENSE file is present in the repository, its content will also be provide
    * Suggest improvement if missing
 
 8. **Overall Score**: Give an overall quality rating of the README.
-   * Output: `Poor`, `Fair`, `Good`, or `Excellent`
+   * Output: a number between 0 and 100 representing the overall quality rating.
+   * **Grade Level**:
+     - **85-100**: The README provides a clear and comprehensive guide to the tutorial, with all necessary steps and information provided.
+     - **65-84**: The README provides a clear and comprehensive guide to the tutorial, with most necessary steps and information provided.
+     - **45-64**: The README provides a clear and comprehensive guide to the tutorial, with some necessary steps and information provided.
+     - **0-44**: The README does not provide a clear and comprehensive guide to the tutorial, with no necessary steps and information provided.
 
 ---
 
@@ -138,23 +143,23 @@ Your final report must **exactly match** the following format. Do not add or omi
 **FinalAnswer**
 **Available:** [Yes / No]
 **Readability:** 
-  * score: [Poor / Fair / Good / Excellent]
+  * score: a number between 0 and 100 representing the overall quality rating.
   * suggestions: <suggestions to improve README readability>
 **Project Purpose:** 
   * score: [Yes / No]
   * suggestions: <suggestions to improve project purpose.>
 **Hardware and software spec and compatibility description:**
-  * score: [Poor / Fair / Good / Excellent]
+  * score: a number between 0 and 100 representing the overall quality rating.
   * suggestions: <suggestions to improve **hardware and software** description>
 **Dependencies clearly stated:** 
-  * score: [Poor / Fair / Good / Excellent]
+  * score: a number between 0 and 100 representing the overall quality rating.
   * suggestions: <suggestions to improve **Dependencies** description>
 **License Information Included:** 
   * score: [Yes / No]
   * suggestions: <suggestions to improve **License Information**>
 ** Code contributor / Author information included
   * score: [Yes / No]
-**Overall Score:** [Poor / Fair / Good / Excellent]
+**Overall Score:** a number between 0 and 100 representing the overall quality rating.
 
 ---
 
@@ -359,9 +364,11 @@ class EvaluationREADMETask(EvaluationTask):
         meta_data: ProjectMetadata | None = None,
         step_callback: Callable | None = None,
         summarized_files_db = None,
+        collected_files: list[str] | None = None,
     ):
         super().__init__(llm, repo_path, gitignore_path, meta_data, step_callback, summarized_files_db)
         self.evaluation_name = "README Evaluation"
+        self.collected_files = collected_files
 
     def _project_level_evaluate(self, readme_files: list[str]) -> tuple[dict, dict]:
         """
@@ -439,18 +446,18 @@ class EvaluationREADMETask(EvaluationTask):
                 structured_readme_evaluations[readme_file] = {
                     "evaluation": StructuredEvaluationREADMEResult(
                         available_score=False,
-                        readability_score="Poor",
+                        readability_score=0,
                         readability_suggestions="No readability provided",
                         project_purpose_score=False,
                         project_purpose_suggestions="No project purpose provided",
-                        hardware_and_software_spec_score="Poor",
+                        hardware_and_software_spec_score=0,
                         hardware_and_software_spec_suggestions="No hardware and software spec provided",
-                        dependency_score="Poor",
+                        dependency_score=0,
                         dependency_suggestions="No dependency provided",
                         license_score=False,
                         license_suggestions="No license information",
                         contributor_author_score=False,
-                        overall_score="Poor",
+                        overall_score=0,
                     ),
                     "reasoning_process": f"{readme_file} is an empty file.",
                 }
@@ -656,6 +663,9 @@ class EvaluationREADMETask(EvaluationTask):
         """
         Search for a README file in the repository directory.
         """
+        if self.collected_files is not None:
+            return self.collected_files
+        
         possible_readme_files = [
             "readme.md",
             "readme.rst",

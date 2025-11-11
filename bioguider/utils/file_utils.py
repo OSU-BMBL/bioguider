@@ -127,6 +127,13 @@ def parse_repo_url(url: str) -> Tuple[Optional[str], Optional[str]]:
     except Exception:
         return None, None
 
+def parse_refined_repo_path(refined_repo_path: str) -> Tuple[Optional[str], Optional[str]]:
+    repo_path = refined_repo_path.split("/")[-1]
+    arr = repo_path.split("_")
+    repo_name = arr[-1] if len(arr) > 1 else repo_path
+    author = arr[0] if len(arr) > 1 else ""
+    return author, repo_name
+
 def retrieve_data_root_path() -> Path:
     data_folder = os.environ.get("DATA_FOLDER", "./data")
     root_folder = Path(data_folder, ".adalflow")
