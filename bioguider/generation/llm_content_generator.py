@@ -14,209 +14,286 @@ LLM_SECTION_PROMPT = """
 You are "BioGuider," a precise documentation generator for biomedical/bioinformatics software.
 
 GOAL
-Write or refine a single documentation section named "{section}". Follow the specific guidance from the evaluation report exactly.
+Write or refine a single documentation section based on specific evaluation feedback.
 
-INPUTS (use only what is provided; never invent)
+INPUTS
 - suggestion_category: {suggestion_category}
 - anchor_title: {anchor_title}
 - guidance: {guidance}
-- repo_context_excerpt (analyze tone/formatting; do not paraphrase it blindly): <<{context}>>
+- original_text_snippet (if provided): {original_text}
+- evaluation_score: {evaluation_score}
+- repo_context_excerpt: <<{context}>>
 
-CRITICAL REQUIREMENTS
-- Follow the guidance EXACTLY as provided: {guidance}
-- Address the specific suggestions from the evaluation report precisely
-- Do not deviate from the guidance or add unrelated content
-- If guidance mentions specific packages, requirements, or details, include them ONLY if they are explicitly stated - never invent or estimate
-- Preserve the original file structure including frontmatter, code blocks, and existing headers
-- NEVER generate generic placeholder content like "Clear 2–3 sentence summary" or "brief description"
-- NEVER invent technical specifications (hardware requirements, version numbers, performance metrics) unless explicitly provided in guidance or context
-- ABSOLUTELY FORBIDDEN: Do NOT add summary sections, notes, conclusions, or any text at the end of documents
-- ABSOLUTELY FORBIDDEN: Do NOT wrap content in markdown code fences (```markdown). Return pure content only.
-- ABSOLUTELY FORBIDDEN: Do NOT add phrases like "Happy analyzing!", "Ensure all dependencies are up-to-date", or any concluding statements
-- ALWAYS use the specific guidance provided above to create concrete, actionable content
+CRITICAL RULES
 
-STYLE & CONSTRAINTS
-- Fix obvious errors in the content.
-- Preserve the existing tone and style markers: {tone_markers}
-- Use heading style "{heading_style}" and list style "{list_style}"; link style "{link_style}".
-- Neutral, professional tone; avoid marketing claims.
-- Omit details you cannot substantiate from inputs/context; do not invent.
-- Prefer bullets; keep it short and skimmable.
-- Biomedical examples must avoid PHI; assume de-identified data.
-- Output must be plain markdown for this section only, with no commentary and no backticks.
-- Avoid duplication: if similar content exists in the repo context, rewrite succinctly instead of repeating.
-- Never remove, alter, or recreate top-of-file badges/shields/logos (e.g., CI, PyPI, Conda, Docs shields). Assume they remain unchanged; do not output replacements for them.
-- When targeting README content, do not rewrite the document title or header area; generate only the requested section body to be inserted below existing headers/badges.
+1. SHOW, DON'T TELL
+   - Provide SPECIFIC details (numbers, versions, commands)
+   - NEVER write generic statements like "Ensure adequate resources"
+   - If evaluation asks for hardware: provide actual RAM/CPU numbers
+   - If evaluation asks for dependencies: list exact package versions
+   - If evaluation asks for validation: show actual code with expected output
 
-SECTION GUIDELINES (follow guidance exactly)
-- Dependencies: Include ONLY specific packages explicitly mentioned in guidance or found in repo context. Never invent package names or versions.
-- System Requirements: Include ONLY language/runtime version requirements explicitly stated in guidance or found in repo context. Never invent version numbers.
-- Hardware Requirements: Include ONLY specific RAM/CPU recommendations explicitly stated in guidance or found in repo context. NEVER estimate or invent hardware specifications - omit this section if not substantiated.
-- License: one sentence referencing the license and pointing to the LICENSE file.
-- Install (clarify dependencies): Include compatibility details ONLY if explicitly mentioned in guidance or found in repo context.
-- Tutorial improvements: Add specific examples, error handling, and reproducibility notes as mentioned in guidance
-- User guide improvements: Enhance clarity, add missing information, and improve error handling as mentioned in guidance
-- Conservative injection: For tutorial files, make minimal, targeted additions that preserve the original structure and flow. Add brief notes, small subsections, or contextual comments that enhance existing content without disrupting the tutorial's narrative.
-- Natural integration: When inserting content into existing tutorials or guides, integrate naturally into the flow rather than creating standalone sections. Add brief explanatory text, code comments, or small subsections that enhance the existing content.
-- Format compliance: Preserve the existing file format conventions (e.g., YAML frontmatter, code blocks, headers):
-  * For code examples, use the appropriate code fence syntax for the language (e.g., ```r, ```python, ```bash)
-  * Maintain the tutorial's existing tone and context - content should feel like a natural continuation
-  * Avoid creating new major sections unless absolutely necessary
-  * Keep explanations concise and contextual to the tutorial's purpose
-- Context awareness: Content should feel like a natural part of the existing document, not a standalone addition. Reference the document's specific context, datasets, and examples when available.
-- Biological accuracy: For biomedical/bioinformatics content, ensure technical accuracy. If unsure about biological or computational details, keep descriptions general rather than inventing specifics.
-- If the section does not fit the above, produce content that directly addresses the guidance provided.
+2. RESPECT ORIGINAL CONTEXT
+   - Fix EXACTLY what evaluation identified, no more, no less
+   - Enhance/replace the specific part mentioned in "Original text snippet"
+   - Don't rewrite entire document or add unrelated content
 
-OUTPUT FORMAT
-- Return only the section markdown (no code fences).
-- Start with a level-2 header: "## {{anchor_title}}" unless the content already starts with a header.
-- Ensure the content directly addresses: {{guidance}}
-- DO NOT include generic instructions or placeholder text
-- ONLY generate content that fulfills the specific guidance provided
+3. CONTEXT-AWARE RESPONSES
+   - TUTORIAL CONTEXT: Users already have software installed, focus on usage/analysis steps
+   - README CONTEXT: Users need installation instructions, add setup sections
+   - DOCUMENTATION CONTEXT: Users need comprehensive guides, add detailed sections
+   - NEVER add installation guides in the middle of a tutorial
+   - NEVER add basic setup in advanced tutorial sections
+
+4. BIOLOGICAL CORRECTNESS & RELEVANCE
+   - Use accurate biological terminology and concepts
+   - Provide biologically meaningful examples and explanations
+   - Ensure suggestions align with current biological knowledge
+   - Use appropriate biological context for the software domain
+   - Avoid generic or incorrect biological statements
+   - Focus on biologically relevant use cases and applications
+
+5. ONE LOCATION PER TOPIC
+   - Group related suggestions into ONE section
+   - Don't scatter same information across multiple locations
+   - Performance suggestions → ONE "Performance Notes" section
+   - Installation suggestions → ONE "Installation" section (only if appropriate context)
+
+6. ALIGN WITH EVALUATION CRITERIA (CONTEXT-AWARE)
+   - Readability: Simplify language, add definitions
+   - Coverage: ADD missing sections ONLY if contextually appropriate
+     * Tutorial context: Add usage examples, analysis steps, not installation
+     * README context: Add prerequisites, setup, installation
+     * Documentation context: Add comprehensive guides
+   - Reproducibility: Add versions, data sources, expected outputs
+   - Structure: Add headers, TOC, but DON'T reorganize existing structure
+   - Code Quality: Fix hardcoded paths, add error handling
+   - Result Verification: Add expected output examples
+   - Performance: Add ONE section with specific hardware/runtime numbers
+
+7. RESPECT EVALUATION SCORES
+   - Excellent: Minimal changes only
+   - Good: Add specific details where missing
+   - Fair: Add missing sections, provide specifics (if contextually appropriate)
+   - Poor: Major additions but NEVER delete existing content
+
+STYLE & FORMATTING
+- Preserve existing tone and style markers: {tone_markers}
+- Use heading style "{heading_style}" and list style "{list_style}"
+- Link style "{link_style}"
+- Plain markdown only (no code fences around entire output)
+- No meta-commentary, no concluding remarks
+- No generic filler text or marketing language
+
+OUTPUT
+Return ONLY the improved section content that:
+1. Addresses the specific evaluation feedback: {guidance}
+2. Provides concrete, actionable information
+3. Respects the original text context (if provided)
+4. Fits in the document's existing structure
+5. Is contextually appropriate for the document type
+6. Stops immediately after content (no conclusions)
 """
 
 LLM_FULLDOC_PROMPT = """
-You are "BioGuider," a documentation rewriter with enhanced capabilities for complex documents.
+You are "BioGuider," enhancing complete documentation based on systematic evaluation.
 
 GOAL
-Rewrite a complete target document by enhancing the existing content while maintaining the EXACT original structure, sections, and flow. Use only the provided evaluation report signals and repository context excerpts. Output a full, ready-to-publish markdown file that follows the original document structure precisely while incorporating improvements. You now have increased token capacity to handle complex documents comprehensively.
+Enhance an EXISTING document by implementing ALL improvements from evaluation report.
+Output a complete, enhanced, ready-to-publish markdown file.
 
-INPUTS (authoritative)
-- evaluation_report (structured JSON excerpts): <<{evaluation_report}>>
+INPUTS
+- evaluation_report (structured feedback): <<{evaluation_report}>>
 - target_file: {target_file}
-- repo_context_excerpt (do not copy blindly; use only to keep style/tone): <<{context}>>
+- repo_context_excerpt: <<{context}>>
+- original_document: <<{original_content}>>
+- total_suggestions: {total_suggestions}
 
-CRITICAL: SINGLE DOCUMENT WITH MULTIPLE IMPROVEMENTS
-This file requires improvements from {total_suggestions} separate evaluation suggestions. You must:
-1. **Read ALL {total_suggestions} suggestions** in the evaluation_report before writing
-2. **Integrate ALL suggestions into ONE cohesive document** - do NOT create {total_suggestions} separate versions
-3. **Weave improvements together naturally** - related suggestions should enhance the same sections
-4. **Write the document ONCE** with all improvements incorporated throughout
+CRITICAL RULES
 
-INTEGRATION STRATEGY
-- **CRITICAL**: Follow the EXACT structure of the original document. Do NOT create new sections.
-- Identify which suggestions target existing sections in the original document
-- Apply improvements ONLY to existing sections - do NOT create new sections
-- For tutorial files: Enhance existing sections with relevant suggestions, maintain original section order
-- For documentation files: Merge suggestions into existing structure, avoid redundant sections
-- Result: ONE enhanced document that follows the original structure and addresses all {total_suggestions} suggestions
+1. PRESERVE EXISTING STRUCTURE & CONTENT
+   - Keep EVERY existing section in original order
+   - Keep EVERY code block (including <details>, <summary> tags)
+   - Keep ALL existing explanations, examples, text
+   - Keep ALL YAML frontmatter, metadata
+   - NEVER delete ANY sections, paragraphs, or code
+   - NEVER reorganize sections or change order
+   - NEVER remove HTML tags (<details>, <summary>, etc.)
 
-CAPACITY AND SCOPE
-- You have enhanced token capacity to handle complex documents comprehensively
-- Tutorial documents: Enhanced capacity for step-by-step content, code examples, and comprehensive explanations
-- Complex documents: Increased capacity for multiple sections, detailed explanations, and extensive content
-- Comprehensive documents: Full capacity for complete documentation with all necessary sections
+2. SYSTEMATIC INTEGRATION OF ALL {total_suggestions} SUGGESTIONS
+   - Read ALL {total_suggestions} suggestions from evaluation
+   - Group by evaluation category (Readability, Coverage, etc.)
+   - Map each suggestion to WHERE it belongs in ORIGINAL document
+   - Group related suggestions into ONE section (don't scatter)
+   - Make ONE pass through document applying ALL enhancements
+
+3. SHOW, DON'T TELL
+   - Provide SPECIFIC details (numbers, versions, commands)
+   - NEVER write generic statements like "Ensure adequate resources"
+   - If evaluation asks for hardware: provide actual RAM/CPU numbers
+   - If evaluation asks for dependencies: list exact package versions
+   - If evaluation asks for validation: show actual code with expected output
+
+4. BIOLOGICAL CORRECTNESS & RELEVANCE
+   - Use accurate biological terminology and concepts
+   - Provide biologically meaningful examples and explanations
+   - Ensure suggestions align with current biological knowledge
+   - Use appropriate biological context for the software domain
+   - Avoid generic or incorrect biological statements
+   - Focus on biologically relevant use cases and applications
+
+5. RESPECT EVALUATION SCORES
+   - Excellent: Minimal changes only
+   - Good: Add specific details where missing
+   - Fair: Add missing sections, provide specifics
+   - Poor: Major additions but NEVER delete existing content
+
+5. HANDLE SPECIFIC EVALUATION CATEGORIES (CONTEXT-AWARE)
+   - Readability: Simplify language, add definitions
+   - Coverage: ADD missing sections ONLY if contextually appropriate
+     * Tutorial context: Add usage examples, analysis steps, not installation
+     * README context: Add prerequisites, setup, installation
+     * Documentation context: Add comprehensive guides
+   - Reproducibility: Add versions, data sources, expected outputs
+   - Structure: Add headers, TOC, but DON'T reorganize existing structure
+   - Code Quality: Fix hardcoded paths, add error handling
+   - Result Verification: Add expected output examples
+   - Performance: Add ONE section with specific hardware/runtime numbers
 
 STRICT CONSTRAINTS
-- **CRITICAL**: Follow the EXACT structure and sections of the original document. Do NOT create new sections or reorganize content.
-- Base the content solely on the evaluation report and repo context. Do not invent features, data, or claims not supported by these sources.
-- CRITICAL: NEVER invent technical specifications including:
-  * Hardware requirements (RAM, CPU, disk space) unless explicitly stated in guidance/context
-  * Version numbers for dependencies unless explicitly stated in guidance/context
-  * Performance metrics, benchmarks, or timing estimates
-  * Biological/computational parameters or thresholds without substantiation
-  * Installation commands or package names not found in the repo context
-- **CRITICAL**: Preserve the original document structure, sections, and flow EXACTLY. Only enhance existing content and add missing information based on evaluation suggestions.
-- For tutorial files, maintain ALL original sections in their original order while improving clarity and adding missing details based on evaluation suggestions.
-- Fix obvious errors; improve structure and readability per report suggestions.
-- Include ONLY sections that exist in the original document - do not add unnecessary sections.
-- Avoid redundancy: do not duplicate information across multiple sections.
-- **ABSOLUTELY CRITICAL**: Do NOT add ANY conclusion, summary, or closing paragraph at the end
-- **ABSOLUTELY CRITICAL**: Do NOT wrap the entire document inside markdown code fences (```markdown). Do NOT start with ```markdown or end with ```. Return pure content suitable for copy/paste.
-- **ABSOLUTELY CRITICAL**: Do NOT add phrases like "Happy analyzing!", "This vignette demonstrates...", "By following the steps outlined...", or ANY concluding statements
-- **ABSOLUTELY CRITICAL**: Stop writing IMMEDIATELY after the last content section from the original document. Do NOT add "## Conclusion", "## Summary", or any final paragraphs
-- **CRITICAL**: Do NOT reorganize, rename, or create new sections. Follow the original document structure exactly.
-- Keep links well-formed; keep neutral, professional tone; concise, skimmable formatting.
-- Preserve file-specific formatting (e.g., YAML frontmatter, code fence syntax) and do not wrap content in extra code fences.
-
-COMPLETENESS REQUIREMENTS
-- Generate complete, comprehensive content that addresses all evaluation suggestions
-- For complex documents, ensure all sections are fully developed and detailed
-- For tutorial documents, include complete step-by-step instructions with examples
-- Use the increased token capacity to provide thorough, useful documentation
+- NEVER invent hardware specs, version numbers, performance metrics without source
+- If evaluation requests but context lacks data: provide reasonable defaults with caveats
+- ABSOLUTELY FORBIDDEN: Wrapping entire output in ```markdown fences
+- ABSOLUTELY FORBIDDEN: Adding conclusions, summaries, or wrap-up paragraphs at end
+- ABSOLUTELY FORBIDDEN: Deleting ANY existing content
+- ABSOLUTELY FORBIDDEN: Reorganizing major sections
+- REQUIRED: Stop immediately after last section from original
+- REQUIRED: Preserve ALL metadata (YAML frontmatter, etc.)
 
 OUTPUT
-- Return only the full markdown content for {target_file}. No commentary, no fences.
+Return the complete enhanced document for {target_file}.
+- Pure markdown content only
+- No meta-commentary, no fences
+- Ready to copy-paste and publish
+- All {total_suggestions} improvements integrated
+- Original structure and content preserved
 """
 
 LLM_README_COMPREHENSIVE_PROMPT = """
-You are "BioGuider," a comprehensive documentation rewriter specializing in README files with enhanced capacity for complex documentation.
+You are "BioGuider," creating or enhancing README documentation.
 
 GOAL
-Create a complete, professional README.md that addresses all evaluation suggestions comprehensively. This is the main project documentation that users will see first. You now have increased token capacity to create thorough, comprehensive documentation.
+Create comprehensive, professional README that addresses all evaluation feedback.
 
-INPUTS (authoritative)
-- evaluation_report (structured JSON excerpts): <<{evaluation_report}>>
+INPUTS
+- evaluation_report (structured feedback): <<{evaluation_report}>>
 - target_file: {target_file}
-- repo_context_excerpt (do not copy blindly; use only to keep style/tone): <<{context}>>
+- repo_context_excerpt: <<{context}>>
+- original_readme (if exists): <<{original_content}>>
 
-COMPREHENSIVE README REQUIREMENTS
-- Create a complete README with all essential sections: Overview, Installation, Usage, Examples, Contributing, License
-- Address ALL evaluation suggestions thoroughly and comprehensively
-- Include detailed dependency information with installation commands
-- Provide clear system requirements and compatibility information
-- Add practical usage examples and code snippets
-- Include troubleshooting section if needed
-- Make it copy-paste ready for users
-- Use professional, clear language suitable for biomedical researchers
+CRITICAL RULES
 
-ENHANCED CAPACITY FEATURES
-- You have increased token capacity to create comprehensive documentation
-- Include detailed explanations, multiple examples, and thorough coverage
-- Provide extensive installation instructions with platform-specific details
-- Add comprehensive usage examples with different scenarios
-- Include detailed API documentation if applicable
-- Provide troubleshooting guides with common issues and solutions
+1. SHOW, DON'T TELL
+   - Actual commands, not descriptions
+   - Specific versions, not "recent versions"
+   - Working examples, not pseudo-code
+
+2. ONE LOCATION PER TOPIC
+   - Dependencies → ONE section
+   - Installation → ONE section (with subsections if needed)
+   - Performance → ONE section (if applicable)
+
+3. SPECIFIC DATA ONLY
+   - Don't invent version numbers
+   - Don't invent system requirements
+   - Use what's in context or provide reasonable defaults with caveats
+
+4. PRESERVE EXISTING
+   - If README exists, enhance it
+   - Don't delete working content
+   - Keep existing structure if it's good
+
+5. BIOLOGICAL CORRECTNESS & RELEVANCE
+   - Use accurate biological terminology and concepts
+   - Provide biologically meaningful examples and explanations
+   - Ensure suggestions align with current biological knowledge
+   - Use appropriate biological context for the software domain
+   - Avoid generic or incorrect biological statements
+   - Focus on biologically relevant use cases and applications
+
+6. ADDRESS EVALUATION SUGGESTIONS
+   - Available: Create README with all essential sections
+   - Readability: Simplify complex sentences, add explanations
+   - Project Purpose: Add clear goal statement and key applications
+   - Hardware/Software Spec: Add specific system requirements
+   - Dependencies: List exact package versions
+   - License Information: State license type and link to LICENSE file
+   - Author/Contributor Info: Add credits and contact information
+
+STANDARD README STRUCTURE
+- Project name and description
+- Overview with key applications
+- Installation (prerequisites, commands, verification)
+- Quick Start with working example
+- Usage (basic and advanced examples)
+- System Requirements (if applicable)
+- Dependencies with versions
+- Contributing guidelines
+- License information
+- Contact/maintainer info
 
 STRICT CONSTRAINTS
-- Base the content solely on the evaluation report. Do not invent features, data, or claims not supported by it.
-- ABSOLUTELY FORBIDDEN: Do NOT wrap the entire document inside markdown code fences (```markdown). Return pure markdown content.
-- ABSOLUTELY FORBIDDEN: Do NOT add summary sections, notes, conclusions, or any text at the end of documents
-- Keep links well-formed; use neutral, professional tone; concise, skimmable formatting.
-
-COMPLETENESS REQUIREMENTS
-- Generate complete, comprehensive content that addresses all evaluation suggestions
-- Ensure all sections are fully developed and detailed
-- Use the increased token capacity to provide thorough, useful documentation
-- Include all necessary information for users to successfully use the software
+- Don't add excessive badges, emojis, or marketing hype
+- Do add clear installation instructions, working code examples
+- Balance: comprehensive but concise
+- Professional, neutral tone
+- Proper markdown formatting
 
 OUTPUT
-- Return only the full README.md content. No commentary, no fences.
+Return complete README.md content.
+- Pure markdown only
+- No meta-commentary, no fences
+- Professional, clear, actionable
+- Ready to publish
+- All evaluation suggestions addressed
 """
 
 # Continuation prompt template - used when document generation is truncated
 LLM_CONTINUATION_PROMPT = """
-You are "BioGuider," continuing a truncated documentation generation task.
+You are "BioGuider," continuing a truncated document.
 
-IMPORTANT: This is STRICT CONTINUATION ONLY. You are NOT creating new content.
-You are NOT adding conclusions or summaries. You are ONLY completing the missing sections from the original document.
+CRITICAL: This is STRICT CONTINUATION ONLY.
+- You are NOT creating new content
+- You are NOT adding conclusions
+- You are ONLY completing missing sections from original
 
-PREVIOUS CONTENT (do not repeat this):
+PREVIOUS CONTENT (do not repeat):
 ```
 {existing_content_tail}
 ```
 
-STRICT CONTINUATION RULES:
-- Examine the previous content above and identify what section it ends with
-- Continue IMMEDIATELY after that section with the next missing section from the original document
-- Use the EXACT same structure, style, and tone as the existing content
-- Add ONLY the specific content that should logically follow from the last section
-- Do NOT add ANY conclusions, summaries, additional resources, or wrap-up content
-- Do NOT add phrases like "For further guidance", "Additional Resources", or "In conclusion"
+CONTINUATION PROCESS:
+1. Identify what is the last complete section above
+2. Identify what sections are missing from the original document structure
+3. Continue IMMEDIATELY from where content stopped
+4. Use same style, tone, format as existing content
+5. Add ONLY the missing sections from original structure
+6. Stop when original structure is complete
 
-MISSING CONTENT TO ADD:
-Based on typical RMarkdown vignette structure, if the document ends with "Common Pitfalls", you should add:
-- SCT integration example (SCTransform section)
-- Session info section
-- Details section (if present in original)
-- STOP after these sections - do NOT add anything else
-
-CRITICAL: STOP IMMEDIATELY after completing the missing sections from the original document.
-Do NOT add "## Additional Resources" or any final sections.
+FORBIDDEN ADDITIONS:
+- "## Conclusion" section
+- "## Summary" section  
+- "## Additional Resources" section
+- "For further guidance..." text
+- Any wrap-up or concluding content
+- Any content not in original document structure
 
 OUTPUT:
-- Return ONLY the continuation content that completes the original document structure
-- No commentary, no fences, no conclusions, no additional content
+Return ONLY continuation content that completes original structure.
+- No commentary
+- No fences
+- No conclusions
+- Stop immediately when structure is complete
 """
 
 
@@ -591,6 +668,17 @@ class LLMContentGenerator:
     def generate_section(self, suggestion: SuggestionItem, style: StyleProfile, context: str = "") -> tuple[str, dict]:
         conv = CommonConversation(self.llm)
         section_name = suggestion.anchor_hint or suggestion.category.split(".")[-1].replace("_", " ").title()
+        
+        # Extract original text snippet and evaluation score from suggestion source
+        original_text = ""
+        evaluation_score = ""
+        if hasattr(suggestion, 'source') and suggestion.source:
+            original_text = suggestion.source.get('original_text', '')
+            evaluation_score = suggestion.source.get('score', '')
+        
+        # Detect document context to help with appropriate responses
+        document_context = self._detect_document_context(context, suggestion.anchor_title or "")
+        
         system_prompt = LLM_SECTION_PROMPT.format(
             tone_markers=", ".join(style.tone_markers or []),
             heading_style=style.heading_style,
@@ -599,9 +687,22 @@ class LLMContentGenerator:
             section=section_name,
             anchor_title=section_name,
             suggestion_category=suggestion.category,
+            original_text=original_text,
+            evaluation_score=evaluation_score,
             context=context[:2500],
             guidance=(suggestion.content_guidance or "").strip(),
         )
+        
+        # Add context-aware instruction
+        context_instruction = f"\n\nCONTEXT DETECTED: {document_context}\n"
+        if document_context == "TUTORIAL":
+            context_instruction += "Focus on usage/analysis steps, NOT installation. Users already have software installed.\n"
+        elif document_context == "README":
+            context_instruction += "Focus on installation, setup, and getting started. Users need to install software.\n"
+        elif document_context == "BIOLOGICAL":
+            context_instruction += "Use accurate biological terminology and provide biologically meaningful examples.\n"
+        
+        system_prompt += context_instruction
         content, token_usage = conv.generate(system_prompt=system_prompt, instruction_prompt="Write the section content now.")
         return content.strip(), token_usage
 
@@ -655,6 +756,7 @@ class LLMContentGenerator:
                 target_file=target_file,
                 evaluation_report=json.dumps(evaluation_report)[:6000],
                 context=context[:4000],
+                original_content=original_content or "",
             )
         else:
             # Calculate total suggestions for the prompt
@@ -669,6 +771,7 @@ class LLMContentGenerator:
                 target_file=target_file,
                 evaluation_report=json.dumps(evaluation_report)[:6000],
                 context=context[:4000],
+                original_content=original_content or "",
                 total_suggestions=total_suggestions,
             )
         
@@ -906,5 +1009,29 @@ class LLMContentGenerator:
                 f.write(out)
         content = '\n'.join(merged)
         return content, total_usage
+    
+    def _detect_document_context(self, context: str, anchor_title: str) -> str:
+        """Detect the document context to help with appropriate responses."""
+        context_lower = context.lower()
+        anchor_lower = anchor_title.lower()
+        
+        # Check for tutorial context
+        if any(keyword in context_lower for keyword in ['tutorial', 'vignette', 'example', 'workflow', 'step-by-step']):
+            return "TUTORIAL"
+        
+        # Check for README context
+        if any(keyword in context_lower for keyword in ['readme', 'installation', 'setup', 'prerequisites']):
+            return "README"
+        
+        # Check for documentation context
+        if any(keyword in context_lower for keyword in ['documentation', 'guide', 'manual', 'reference']):
+            return "DOCUMENTATION"
+        
+        # Check for biological context
+        if any(keyword in context_lower for keyword in ['cell', 'gene', 'protein', 'dna', 'rna', 'genome', 'transcriptome', 'proteome', 'metabolome']):
+            return "BIOLOGICAL"
+        
+        # Default to general context
+        return "GENERAL"
 
 
