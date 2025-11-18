@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
@@ -30,7 +30,9 @@ class TutorialEvaluationResult(BaseModel):
     overall_key_strengths: str=Field(description="A string value, the key strengths of the tutorial")
     # overall_improvement_suggestions: str=Field(description="Suggestions to improve the overall score if necessary")
     readability_score: int=Field(description="A number between 0 and 100 representing the readability quality rating.")
-    readability_suggestions: list[str]=Field(description="A list of string values, suggestions to improve readability if necessary")
+    readability_error_count: Optional[int]=Field(default=0, description="Total number of ERROR INSTANCES found (count every occurrence, not types)")
+    readability_errors_found: list[str]=Field(default_factory=list, description="List of ALL individual error instances with format: 'ERROR_TYPE: original → corrected - location'")
+    readability_suggestions: list[str]=Field(default_factory=list, description="General readability improvement suggestions (non-error related)")
     setup_and_dependencies_score: int=Field(description="A number between 0 and 100 representing the setup and dependencies quality rating.")
     setup_and_dependencies_suggestions: list[str]=Field(description="A list of string values, suggestions to improve setup and dependencies if necessary")
     reproducibility_score: int=Field(description="A number between 0 and 100 representing the reproducibility quality rating.")
@@ -119,6 +121,10 @@ class EvaluationTutorialTask(EvaluationTask):
         return files
 
     def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
+        # Skip consistency evaluation if no code structure database is available
+        if self.code_structure_db is None:
+            return None
+        
         consistency_evaluation_task = ConsistencyEvaluationTask(
             llm=self.llm,
             code_structure_db=self.code_structure_db,
@@ -133,6 +139,10 @@ class EvaluationTutorialTask(EvaluationTask):
         )
 
     def _evaluate_consistency_on_content(self, content: str) -> ConsistencyEvaluationResult:
+        # Skip consistency evaluation if no code structure database is available
+        if self.code_structure_db is None:
+            return None, {**DEFAULT_TOKEN_USAGE}
+        
         consistency_evaluation_task = ConsistencyEvaluationTask(
             llm=self.llm,
             code_structure_db=self.code_structure_db,
@@ -162,7 +172,25 @@ class EvaluationTutorialTask(EvaluationTask):
             smog_index=smog_index,
             tutorial_file_content=readability_content,
         )
-        agent = CommonAgentTwoSteps(llm=self.llm)
+        # Increase token limit to ensure LLM can list ALL error instances
+        from langchain_openai import AzureChatOpenAI, ChatOpenAI
+        llm_with_more_tokens = self.llm
+        try:
+            if isinstance(self.llm, AzureChatOpenAI):
+                llm_with_more_tokens = AzureChatOpenAI(
+                    **self.llm.dict(),
+                    max_completion_tokens=8192  # 2x increase for comprehensive error reporting
+                )
+            elif isinstance(self.llm, ChatOpenAI):
+                llm_with_more_tokens = ChatOpenAI(
+                    **self.llm.dict(),
+                    max_tokens=8192  # 2x increase for comprehensive error reporting
+                )
+        except Exception as e:
+            logger.warning(f"Could not increase token limit: {e}, using default LLM")
+            llm_with_more_tokens = self.llm
+        
+        agent = CommonAgentTwoSteps(llm=llm_with_more_tokens)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the tutorial evaluation.",
@@ -175,10 +203,10 @@ class EvaluationTutorialTask(EvaluationTask):
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the tutorial
             consistency_evaluation_result = ConsistencyEvaluationResult(
-                consistency_score=0,
-                consistency_assessment="No sufficient information to evaluate the consistency of the tutorial",
-                consistency_development=[],
-                consistency_strengths=[],
+                score=0,
+                assessment="No sufficient information to evaluate the consistency of the tutorial",
+                development=[],
+                strengths=[],
             )
 
         # calculate overall score

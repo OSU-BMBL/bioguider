@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Callable
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.gitignore_checker import GitignoreChecker
@@ -80,14 +81,45 @@ If a LICENSE file is present in the repository, its content will also be provide
 1. **Available**: Is the README accessible and present?
    * Output: `Yes` or `No`
 
-2. **Readability**: Evaluate based on readability metrics such as Flesch-Kincaid Grade Level, SMOG Index, etc.
+2. **Readability**: Evaluate based on readability metrics AND identify specific errors/issues in the text.
    * Output: a number between 0 and 100 representing the overall quality rating.
-   * Suggest specific improvements if necessary
+   * **IMPORTANT**: You MUST identify and list ALL errors and anomalies found in the text, including but not limited to:
+     - **Typos and spelling errors**: Misspelled words (e.g., "succesfully" → "successfully", "maintaine" → "maintained", "analysi" → "analysis")
+     - **Malformed links**: URLs with missing or incorrect syntax (e.g., "https//example.com" missing colon ":", "](https//..." missing ":")
+     - **Markdown syntax errors**: 
+       * Headers without spaces (e.g., "#Header" should be "# Header")
+       * Lists without spaces (e.g., "-item" should be "- item")
+       * Code fence syntax issues, blockquote errors, etc.
+     - **Image syntax errors**: 
+       * Extra space between brackets and parentheses: "![alt] (url)" should be "![alt](url)" - NO SPACE between ] and (
+       * Missing exclamation mark: "[alt](url)" should be "![alt](url)" for images
+       * Check EVERY image tag carefully for spacing errors
+     - **Domain-specific term errors**: Incorrect biological/technical terms (e.g., "single sell" → "single cell", "genomis" → "genomics", "spacial" → "spatial")
+     - **Grammar and punctuation issues**: Missing punctuation, incorrect word forms
+     - **Inconsistencies**: Version numbers, dates, names that don't match
+     - **Formatting issues**: Misaligned tables, broken formatting, inconsistent styling
+     - **ANY OTHER ANOMALIES**: Use your judgment to identify anything that looks wrong, unusual, or inconsistent
+       * Look for patterns that seem off (e.g., repeated characters, truncated words)
+       * Identify structural problems (e.g., duplicate sections, missing sections)
+       * Note any content that seems corrupted or malformed
+       * If something looks suspicious or incorrect, report it even if it doesn't fit a specific category
+   * For EACH error found, you must provide:
+     - The exact text snippet containing the error
+     - The type of error (typo/link/markdown/image_syntax/bio_term/grammar/inconsistency/formatting/other)
+     - The suggested correction
+     - If the error doesn't fit a standard category, use "other" and describe the issue
+   * **COMPREHENSIVE SCANNING APPROACH**:
+     - **Image syntax**: Scan the entire README for image tags "![...](...)" - check if there's a space between "]" and "("
+     - **Links**: Check ALL URLs for missing colons, broken syntax, or malformed markdown
+     - **Markdown structure**: Verify headers, lists, code blocks, tables for proper syntax
+     - **Word-level**: Look for truncated words (missing last letters), unusual character patterns
+     - **Context awareness**: If something doesn't make sense in context, it might be an error
+     - **Trust your judgment**: Report anything that looks suspicious, even if you're not 100% sure of the category
    * **Grade Level**:
-     - **85-100**: The README is exceptionally clear, polished, and engaging. It reads smoothly, with minimal effort required from the reader.
-     - **65-84**: The README is clear and easy to understand, with a natural flow and minimal jargon.
-     - **45-64**: The README is somewhat clear, but could benefit from more polish and consistency.
-     - **0-44**: The README is difficult to understand, with unclear language, jargon, or overly complex sentences.
+     - **85-100**: The README is exceptionally clear, polished, and engaging with NO errors. It reads smoothly, with minimal effort required from the reader.
+     - **65-84**: The README is clear and easy to understand, with minor errors (1-3 small typos or issues).
+     - **45-64**: The README has noticeable errors (4-10 typos, link issues, or markdown problems) that impact readability.
+     - **0-44**: The README has numerous errors (10+ typos, broken links, markdown issues) making it difficult to read and unprofessional.
 
 3. **Project Purpose**: Is the project's goal or function clearly stated?
    * Output: `Yes` or `No`
@@ -144,7 +176,11 @@ Your final report must **exactly match** the following format. Do not add or omi
 **Available:** [Yes / No]
 **Readability:** 
   * score: a number between 0 and 100 representing the overall quality rating.
-  * suggestions: <suggestions to improve README readability>
+  * error_count: <total number of ALL errors found (typos + links + markdown + bio_terms + grammar + image_syntax + inconsistencies + formatting + other)>
+  * errors_found: <list ALL errors with format: "ERROR_TYPE | original text snippet | suggested fix | explanation">
+  * suggestions: <general suggestions to improve README readability>
+  
+Note: Be thorough and comprehensive. Report EVERY issue you find, even if you're uncertain about its category. Use "other" category for unusual or ambiguous errors.
 **Project Purpose:** 
   * score: [Yes / No]
   * suggestions: <suggestions to improve project purpose.>
@@ -199,7 +235,7 @@ Your output must **exactly match** the following format. Do not add or omit any 
 **Available:**
   <Your assessment and suggestion here>
 **Readability:** 
-  <Your assessment and suggestion here>
+  <Your assessment and suggestion here - MUST include ALL specific errors found>
 **Project Purpose:** 
   <Your assessment and suggestion here>
 **Hardware and software spec and compatibility description:**
@@ -219,8 +255,15 @@ Your output must **exactly match** the following format. Do not add or omit any 
 2. Focus on the explanation of assessment in structured evaluation and how to improve the README file based on the structured evaluation and its reasoning process.
    * For each suggestion to improve the README file, you **must provide some examples** of the original text snippet and the improving comments.
 3. For each item in the structured evaluation, provide a detailed assessment followed by specific, actionable comments for improvement.
-4. Your improvement suggestions must also include the original text snippet and the improving comments.
-5. Your improvement suggestions must also include suggestions to improve readability.
+4. **CRITICAL for Readability section**: You MUST report ALL specific errors found in the structured evaluation:
+   * List EVERY error of ANY type - typos, links, markdown, images, bio terms, inconsistencies, formatting issues, or any other anomaly
+   * DO NOT limit yourself to just 3-4 examples - report ALL errors found
+   * Use the format: "Line X: 'original text' → 'corrected text' (ERROR_TYPE)"
+   * Group errors by type for clarity (typos, links, markdown, image_syntax, bio terms, inconsistencies, formatting, other)
+   * **EXTENSIBILITY**: If you find an error that doesn't fit the standard categories, still report it under "Other Errors" with a clear description
+   * **COMPREHENSIVE REVIEW**: Read through the entire README carefully, looking for anything unusual, incorrect, or inconsistent
+   * Trust your language understanding to identify problems even if they're not explicitly listed in the categories
+5. Your improvement suggestions must also include the original text snippet and the improving comments.
 6. In the **FinalAnswer** of output, in each section output, please first give a detailed explanation of the assessment, and then provide the detailed suggestion for improvement. If you think the it is good enough, you can say so.
   The following is an example of the output format:
   **FinalAnswer**
@@ -229,12 +272,47 @@ Your output must **exactly match** the following format. Do not add or omit any 
     Detailed suggestion for improvement. Such as: Add a brief introductory section summarizing the project and its main purpose would help orient readers.
   **Readability:**
     Detailed explanation of the assessment. Such as: The README is relatively easy to read for someone around the sixth-grade level. While the technical details provided are moderately easy to understand for those familiar with programming and command-line tools, newbies or non-technical users might face challenges due to jargon and lack of introductory explanations.
-    Detailed suggestion for improvement. Such as: 
+    
+    **ERRORS FOUND** (list ALL errors from structured evaluation):
+    Typos and Spelling Errors:
+    - Line 1: "succesfully" → "successfully" (typo)
+    - Line 2: "maintaine" → "maintained" (typo)
+    - ... (list ALL typos found)
+    
+    Malformed Links:
+    - Line 1: "](https//www.example.com)" → "](https://www.example.com)" (missing colon)
+    - ... (list ALL link errors found)
+    
+    Markdown Syntax Errors:
+    - Line 5: "#Seurat" → "# Seurat" (missing space after #)
+    - ... (list ALL markdown errors found)
+    
+    Image Syntax Errors:
+    - Line 1: "[![Badge] (url)" → "[![Badge](url)" (extra space between ] and ()
+    - Line 2: "![Alt] (url)" → "![Alt](url)" (extra space between ] and ()
+    - ... (list ALL image syntax errors found - check EVERY image tag)
+    
+    Bio Term Errors:
+    - Line 7: "single sell" → "single cell" (incorrect bio term)
+    - ... (list ALL bio term errors found)
+    
+    Inconsistencies:
+    - Line X: "version 5.0" vs "version 5.1" elsewhere → inconsistent version numbers
+    - ... (list ALL inconsistencies found)
+    
+    Formatting Issues:
+    - Line X: Table columns misaligned
+    - ... (list ALL formatting issues found)
+    
+    Other Errors/Anomalies:
+    - Line X: "text text..." → appears truncated or corrupted
+    - Line Y: Duplicate section heading
+    - ... (list ANY other suspicious issues you notice)
+    
+    General Suggestions:
     - Add a brief introductory section summarizing the project and its main purpose would help orient readers.
-    - <original text snippet> - <improving comments>
-    - <original text snippet> - <improving comments>
-    - ...
     - Break down long instructions into smaller bullet points.
+    - Proofread for typos and grammar errors before publishing.
   **Project Purpose:**
     Detailed explanation of the assessment. Such as: The README indirectly describes project activities like benchmarking and assessing functionalities using LLMs and tools like Poetry. However, it lacks a direct statement that defines the overarching project goals or explains who the intended audience is.
     Detailed suggestion for improvement. Such as: 
@@ -447,6 +525,8 @@ class EvaluationREADMETask(EvaluationTask):
                     "evaluation": StructuredEvaluationREADMEResult(
                         available_score=False,
                         readability_score=0,
+                        readability_error_count=0,
+                        readability_errors_found=[],
                         readability_suggestions="No readability provided",
                         project_purpose_score=False,
                         project_purpose_suggestions="No project purpose provided",
@@ -477,7 +557,33 @@ class EvaluationREADMETask(EvaluationTask):
                 gunning_fog_index=gunning_fog_index,
                 smog_index=smog_index,
             )
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
+            # Increase max tokens to allow reporting all errors (not just 3-4)
+            # Create a new LLM instance with increased token limit to avoid conflicts
+            llm_with_longer_output = self.llm
+            try:
+                # Try to create a new instance with higher token limit
+                if isinstance(self.llm, AzureChatOpenAI):
+                    # For Azure, use max_completion_tokens
+                    llm_with_longer_output = AzureChatOpenAI(
+                        api_key=self.llm.api_key,
+                        azure_endpoint=self.llm.azure_endpoint,
+                        api_version=self.llm.openai_api_version,
+                        deployment_name=self.llm.deployment_name,
+                        max_completion_tokens=4096,
+                    )
+                elif isinstance(self.llm, ChatOpenAI):
+                    # For OpenAI, use max_tokens
+                    llm_with_longer_output = ChatOpenAI(
+                        api_key=self.llm.api_key,
+                        model=self.llm.model_name,
+                        max_tokens=4096,
+                    )
+            except Exception as e:
+                # If we can't create a new instance, use the original
+                logger.warning(f"Could not increase token limit: {e}. Using original LLM.")
+                llm_with_longer_output = self.llm
+            
+            agent = CommonAgentTwoChainSteps(llm=llm_with_longer_output)
             response, _, token_usage, reasoning_process = agent.go(
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,

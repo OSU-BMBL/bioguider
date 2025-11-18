@@ -50,7 +50,9 @@ class ProjectLevelEvaluationREADMEResult(BaseModel):
 class StructuredEvaluationREADMEResult(BaseModel):
     available_score: Optional[bool]=Field(description="A boolean value, Is the README accessible and present?")
     readability_score: Optional[int]=Field(description="A number between 0 and 100 representing the readability quality rating.")
-    readability_suggestions: Optional[str]=Field(description="Suggestions to improve readability if necessary")
+    readability_error_count: Optional[int]=Field(default=0, description="Total number of errors found (typos + links + markdown + bio_terms + grammar)")
+    readability_errors_found: Optional[list[str]]=Field(default_factory=list, description="List of ALL errors found with format: 'ERROR_TYPE | original text snippet | suggested fix'")
+    readability_suggestions: Optional[str]=Field(description="General suggestions to improve readability if necessary")
     project_purpose_score: Optional[bool]=Field(description="A boolean value. Is the project's goal or function clearly stated?")
     project_purpose_suggestions: Optional[str]=Field(description="Suggestions if not clear")
     hardware_and_software_spec_score: Optional[int]=Field(description="A number between 0 and 100 representing the hardware and software spec and compatibility description quality rating.")
