@@ -35,6 +35,7 @@ Your task is to analyze the provided tutorial file and generate a structured qua
      - Do NOT group similar errors - LIST EACH ONE SEPARATELY
      - **NEVER use phrases like**: "multiple occurrences", "and elsewhere", "several instances"
      - **INSTEAD**: List each occurrence as a separate numbered error
+     - **DO not** make up errors - only report errors that are actually present in the text
    * **Grade Level** (based on TOTAL error instances, not types):
      - **85-100**: The documentation is exceptionally clear, polished, engaging, and ERROR-FREE (0 errors).
      - **65-84**: The documentation is clear with only minor errors (1-5 total error instances).
@@ -144,6 +145,7 @@ Your final report must **exactly match** the following format. Do not add or omi
   
   **Remember**: Each error instance = one separate entry in Readability Errors Found list
 * **Readability Suggestions:** [General non-error readability improvements like sentence structure, clarity, etc.]
+
 * **Coverage Score:** [a number between 0 and 100 representing the overall quality rating.]
 * **Coverage Improvement Suggestions:** please be as specific as possible.
   - "Original text snippet 1" - Improving comment 1  

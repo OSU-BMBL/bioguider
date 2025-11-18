@@ -1,6 +1,7 @@
 
 from pathlib import Path
 import logging
+from typing import Optional
 from langchain.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
@@ -26,6 +27,8 @@ class UserGuideEvaluationResult(BaseModel):
     overall_key_strengths: str=Field(description="A string value, the key strengths of the user guide")
     
     readability_score: int=Field(description="A number between 0 and 100 representing the readability quality rating.")
+    readability_error_count: Optional[int]=Field(default=0, description="Total number of ERROR INSTANCES found (count every occurrence, not types)")
+    readability_errors_found: list[str]=Field(default_factory=list, description="List of ALL individual error instances with format: 'ERROR_TYPE: original → corrected - location'")
     readability_suggestions: list[str]=Field(description="A list of string values, suggestions to improve readability if necessary")
     context_and_purpose_score: int=Field(description="A number between 0 and 100 representing the context and purpose quality rating.")
     context_and_purpose_suggestions: list[str]=Field(description="A list of string values, suggestions to improve context and purpose if necessary")

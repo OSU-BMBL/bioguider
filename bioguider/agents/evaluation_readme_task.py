@@ -103,6 +103,7 @@ If a LICENSE file is present in the repository, its content will also be provide
        * Identify structural problems (e.g., duplicate sections, missing sections)
        * Note any content that seems corrupted or malformed
        * If something looks suspicious or incorrect, report it even if it doesn't fit a specific category
+     - **Do not** make up errors - only report errors that are actually present in the text
    * For EACH error found, you must provide:
      - The exact text snippet containing the error
      - The type of error (typo/link/markdown/image_syntax/bio_term/grammar/inconsistency/formatting/other)
@@ -557,33 +558,8 @@ class EvaluationREADMETask(EvaluationTask):
                 gunning_fog_index=gunning_fog_index,
                 smog_index=smog_index,
             )
-            # Increase max tokens to allow reporting all errors (not just 3-4)
-            # Create a new LLM instance with increased token limit to avoid conflicts
-            llm_with_longer_output = self.llm
-            try:
-                # Try to create a new instance with higher token limit
-                if isinstance(self.llm, AzureChatOpenAI):
-                    # For Azure, use max_completion_tokens
-                    llm_with_longer_output = AzureChatOpenAI(
-                        api_key=self.llm.api_key,
-                        azure_endpoint=self.llm.azure_endpoint,
-                        api_version=self.llm.openai_api_version,
-                        deployment_name=self.llm.deployment_name,
-                        max_completion_tokens=4096,
-                    )
-                elif isinstance(self.llm, ChatOpenAI):
-                    # For OpenAI, use max_tokens
-                    llm_with_longer_output = ChatOpenAI(
-                        api_key=self.llm.api_key,
-                        model=self.llm.model_name,
-                        max_tokens=4096,
-                    )
-            except Exception as e:
-                # If we can't create a new instance, use the original
-                logger.warning(f"Could not increase token limit: {e}. Using original LLM.")
-                llm_with_longer_output = self.llm
-            
-            agent = CommonAgentTwoChainSteps(llm=llm_with_longer_output)
+                        
+            agent = CommonAgentTwoChainSteps(llm=self.llm)
             response, _, token_usage, reasoning_process = agent.go(
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,

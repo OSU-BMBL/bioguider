@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import re
 from typing import List, Optional, Tuple, Union
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.utils.interactive_env import is_interactive_env
 from langchain_core.messages.base import get_msg_title_repr
@@ -86,28 +86,31 @@ def get_llm(
             max_tokens=max_tokens,
         )
     elif model_name.startswith("gpt"):
-        # Base parameters common to all GPT models
         llm_params = {
             "api_key": api_key,
-            "azure_endpoint": azure_endpoint,
-            "api_version": api_version,
-            "azure_deployment": azure_deployment,
             "model": model_name,
         }
-        
-        # Determine token limit parameter name based on API version
-        # Newer APIs (2024-08+) use max_completion_tokens instead of max_tokens
-        use_completion_tokens = api_version and api_version >= "2024-08-01-preview"
-        token_param = "max_completion_tokens" if use_completion_tokens else "max_tokens"
-        llm_params[token_param] = max_tokens
-        
         # Handle temperature parameter based on model capabilities
         # GPT-5+ models don't support custom temperature values
         supports_temperature = not any(restricted in model_name for restricted in ["gpt-5", "o1", "o3"])
         if supports_temperature:
             llm_params["temperature"] = temperature
-            
-        chat = AzureChatOpenAI(**llm_params)
+
+        if azure_endpoint is None: 
+            # OpenAI
+            llm_params["max_tokens"] = max_tokens
+            chat = ChatOpenAI(**llm_params)
+        else:
+            # Azure OpenAI
+            llm_params["azure_endpoint"] = azure_endpoint
+            llm_params["api_version"] = api_version
+            llm_params["deployment_name"] = azure_deployment
+            # Determine token limit parameter name based on API version
+            # Newer APIs (2024-08+) use max_completion_tokens instead of max_tokens
+            use_completion_tokens = api_version and api_version >= "2024-08-01-preview"
+            token_param = "max_completion_tokens" if use_completion_tokens else "max_tokens"
+            llm_params[token_param] = max_tokens
+            chat = AzureChatOpenAI(**llm_params)
     else:
         raise ValueError(f"Unsupported model type: {model_name}")
     
