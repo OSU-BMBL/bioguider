@@ -104,7 +104,7 @@ class IdentificationTask(AgentTask):
                 description=tool_rf.__class__.__doc__,
             ),
         ]
-        self.custom_tools.append(CustomPythonAstREPLTool())
+        # self.custom_tools.append(CustomPythonAstREPLTool())
 
     def _initialize(self):        
         if not os.path.exists(self.repo_path):
