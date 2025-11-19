@@ -87,6 +87,7 @@ class EvaluationManager:
             gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
             summary_file_db=self.summary_file_db,
         )
+        self.project_metadata.url = self.repo_url
         return self.project_metadata
     
     def evaluate_readme(self) -> tuple[any, list[str]]:
