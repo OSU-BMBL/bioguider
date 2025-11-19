@@ -172,25 +172,8 @@ class EvaluationTutorialTask(EvaluationTask):
             smog_index=smog_index,
             tutorial_file_content=readability_content,
         )
-        # Increase token limit to ensure LLM can list ALL error instances
-        from langchain_openai import AzureChatOpenAI, ChatOpenAI
-        llm_with_more_tokens = self.llm
-        try:
-            if isinstance(self.llm, AzureChatOpenAI):
-                llm_with_more_tokens = AzureChatOpenAI(
-                    **self.llm.dict(),
-                    max_completion_tokens=8192  # 2x increase for comprehensive error reporting
-                )
-            elif isinstance(self.llm, ChatOpenAI):
-                llm_with_more_tokens = ChatOpenAI(
-                    **self.llm.dict(),
-                    max_tokens=8192  # 2x increase for comprehensive error reporting
-                )
-        except Exception as e:
-            logger.warning(f"Could not increase token limit: {e}, using default LLM")
-            llm_with_more_tokens = self.llm
-        
-        agent = CommonAgentTwoSteps(llm=llm_with_more_tokens)
+                
+        agent = CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the tutorial evaluation.",
