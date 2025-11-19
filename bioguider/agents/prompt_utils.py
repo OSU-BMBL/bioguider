@@ -137,13 +137,14 @@ If **any one** of these is present, the document should be classified as a User 
  - You can include directory names if all files in the directory are relevant to the goal item.
 **Important instructions**:
  - **Do not** use **read_file_tool, summarize_file_tool, check_file_related_tool** on the python/R notebook files **(.ipynb, .Rmd)**, as they are too big to read.
+ - **Do not** classify the document as a Tutorial if it is source code or a script (*.py, *.R) that is not intended for end-user interaction.
 """,
         "plan_important_instructions": """ - **Do not** use **read_file_tool, summarize_file_tool, check_file_related_tool** on the python/R notebook files **(.ipynb, .Rmd)**, as they are too big to read.
   - For python/R notebook files **(.ipynb, .Rmd)**, **only infer** if it is the tutorial/vignette from the file name and avoid reading the content of the file.
 """,
         "observe_important_instructions": """ - **Do not** use **read_file_tool, summarize_file_tool, check_file_related_tool** on the python/R notebook files **(.ipynb, .Rmd)**, as they are too big to read.
   - For python/R notebook files **(.ipynb, .Rmd)**, **only infer** if it is the tutorial/vignette from the file name and avoid reading the content of the file.
-  - **Do not** include any binary files (e.g., `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`) in the final answer.s
+  - **Do not** include any binary files (e.g., `.png`, `.jpg`, `.jpeg`, `.gif`, `.svg`) in the final answer.
 """,
     },
     "DockerGeneration": {
