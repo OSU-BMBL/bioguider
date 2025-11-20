@@ -599,11 +599,14 @@ class EvaluationREADMETask(EvaluationTask):
             return None, {**DEFAULT_TOKEN_USAGE}, f"Error in reading file {readme_file}"
         if readme_content.strip() == "":
             return FreeProjectLevelEvaluationREADMEResult(
-                available=False,
-                readability="Poor",
-                project_purpose="Poor",
-                hardware_and_software_spec="Poor",
-                dependency="Poor",
+                available=["Poor"],
+                readability=["Poor"],
+                project_purpose=["Poor"],
+                hardware_and_software_spec=["Poor"],
+                dependency=["Poor"],
+                license=["Poor"],
+                contributor_author=["Poor"],
+                overall_score=["Poor"],
             ), {**DEFAULT_TOKEN_USAGE}, f"{readme_file} is an empty file."
         
         system_prompt = ChatPromptTemplate.from_template(
@@ -634,8 +637,8 @@ class EvaluationREADMETask(EvaluationTask):
             return None, {**DEFAULT_TOKEN_USAGE}, f"Error in reading file {readme_file}"
         if readme_content.strip() == "":
             return FreeFolderLevelEvaluationREADMEResult(
-                score="Poor",
-                key_strengths=f"{readme_file} is an empty file.",
+                score=["Poor"],
+                key_strengths=[f"{readme_file} is an empty file."],
                 overall_improvement_suggestions=[f"{readme_file} is an empty file."],
             ), {**DEFAULT_TOKEN_USAGE}, f"{readme_file} is an empty file."
         
