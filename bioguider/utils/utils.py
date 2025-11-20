@@ -127,16 +127,22 @@ def convert_html_to_text(html_path: str | Path, exclude_tags: list[str] = ["scri
     text = soup.get_text(separator="\n", strip=True)
     return text
 
-def get_overall_score(grade_levels: list[int | bool], weights: list[int]) -> int:
+def get_overall_score(grade_levels: list[int | bool | float | str | None], weights: list[int]) -> int:
     max_score = 100
     min_score = 0
-    def get_grade_level_score(grade_level: int | bool) -> int:
+    def get_grade_level_score(grade_level: int | bool | float | str | None) -> int:
+        if grade_level is None:
+            return 0
         if isinstance(grade_level, bool):
             if grade_level:
                 return max_score
             else:
                 return min_score
-        return grade_level
+        try:
+            return int(float(grade_level))
+        except Exception:
+            logger.warning(f"Failed to convert grade level {grade_level} to int")
+            return 0
     if len(grade_levels) != len(weights):
         raise ValueError("The length of grade_levels and weights must be the same")
     score = round(sum(
