@@ -39,7 +39,11 @@ class CodeStructureBuilder:
                 file_handler = PythonFileHandler(Path(self.repo_path) / file)
             else:
                 file_handler = RFileHandler(Path(self.repo_path) / file)
-            functions_and_classes = file_handler.get_functions_and_classes()
+            try:
+                functions_and_classes = file_handler.get_functions_and_classes()
+            except Exception as e:
+                logger.error(f"Error getting functions and classes for {file}: {e}")
+                continue
             # fixme: currently, we don't extract reference graph for each function or class
             for function_or_class in functions_and_classes:
                 self.code_structure_db.insert_code_structure(
