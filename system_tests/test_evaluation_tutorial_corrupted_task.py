@@ -10,7 +10,8 @@ def generate_tutorial_evaluation_report(
     corrupted_dir: Path,
     injected_errors: list,
     evaluations: dict,
-    tutorial_file: str
+    tutorial_file: str,
+    gen_test_results: dict = None
 ):
     """
     Generate a comprehensive markdown report comparing injected errors with tutorial evaluation results.
@@ -49,6 +50,72 @@ def generate_tutorial_evaluation_report(
         report_lines.append(f"- **Rationale**: {error.get('rationale', 'N/A')}\n")
     
     report_lines.append("\n---\n")
+
+    # Section 1.5: Unfixed Errors Analysis (New Section)
+    if gen_test_results:
+        report_lines.append("\n## 🔧 Unfixed Errors Analysis\n")
+        
+        # Find file in results
+        file_results = None
+        # Try to match the tutorial file in the results
+        # tutorial_file is like "vignettes/de_vignette.corrupted.Rmd"
+        # results keys are like "vignettes/de_vignette.Rmd" (original path)
+        target_base = tutorial_file.replace(".corrupted", "").replace("vignettes/", "")
+        
+        for filepath, data in gen_test_results.get("per_file", {}).items():
+            if target_base in filepath:
+                file_results = data
+                break
+        
+        if file_results:
+            errors = file_results.get("errors", [])
+            total_errs = len(errors)
+            fixed_errs = sum(1 for e in errors if e.get("status") == "fixed")
+            unfixed_errs = sum(1 for e in errors if e.get("status") == "unchanged")
+            
+            if total_errs > 0:
+                fix_rate = fixed_errs / total_errs * 100
+                report_lines.append(f"\n**Fix Rate**: {fixed_errs}/{total_errs} ({fix_rate:.1f}%)\n")
+            else:
+                report_lines.append(f"\n**Fix Rate**: {fixed_errs}/{total_errs} (N/A - no errors found)\n")
+            report_lines.append(f"**Unfixed**: {unfixed_errs} errors\n")
+            
+            # Group unfixed by category
+            unfixed_by_cat = {}
+            for e in errors:
+                if e.get("status") == "unchanged":
+                    cat = e.get("category", "unknown")
+                    if cat not in unfixed_by_cat:
+                        unfixed_by_cat[cat] = []
+                    unfixed_by_cat[cat].append(e)
+            
+            if unfixed_by_cat:
+                report_lines.append("\n### Unfixed Errors by Category\n")
+                for cat, errs in sorted(unfixed_by_cat.items(), key=lambda x: len(x[1]), reverse=True):
+                    # Add explanation based on category
+                    explanation = ""
+                    if cat == "inline_code":
+                        explanation = " (By design - BioGuider does not modify inline code)"
+                    elif cat == "markdown_structure":
+                        explanation = " (Technical limitation - LLM struggles with structure)"
+                    elif cat == "duplicate":
+                        explanation = " (Complex - requires context to resolve)"
+                    elif cat == "function":
+                        explanation = " (Edge cases - context ambiguous)"
+                        
+                    report_lines.append(f"\n#### {cat.upper()} - {len(errs)} unfixed{explanation}\n")
+                    
+                    # List up to 5 examples
+                    for i, err in enumerate(errs[:5], 1):
+                        report_lines.append(f"{i}. `{err.get('original_snippet', 'N/A')}` -> `{err.get('mutated_snippet', 'N/A')}`\n")
+                    if len(errs) > 5:
+                        report_lines.append(f"... and {len(errs)-5} more\n")
+            else:
+                report_lines.append("\n✅ **All errors were fixed!**\n")
+        else:
+            report_lines.append("\n⚠️ Could not find detailed fix results for this file.\n")
+            
+        report_lines.append("\n---\n")
     
     # Section 2: Evaluation Results
     report_lines.append("\n## 🔍 Tutorial Evaluation Results\n")
@@ -342,13 +409,28 @@ def test_EvaluationTutorialCorruptedTask_DeVignette_Low(llm, step_callback):
     that the tutorial evaluation can detect typos, link issues, markdown problems, etc.
     """
     # Path to the corrupted tutorial test data
-    corrupted_dir = Path("outputs/_tmp_satijalab_seurat_low/20251104_133314/vignettes")
+    # Path to the corrupted tutorial test data
+    base_dir = Path("outputs/_tmp_satijalab_seurat_low")
+    # Find latest timestamp dir
+    dirs = sorted([d for d in base_dir.iterdir() if d.is_dir() and d.name[0].isdigit()])
+    if not dirs:
+        pytest.skip("No output directory found")
+    corrupted_dir = dirs[-1] / "vignettes"
+    print(f"Using output directory: {corrupted_dir}")
+    
     corrupted_tutorial = "de_vignette.corrupted.Rmd"
-    manifest_path = Path("outputs/_tmp_satijalab_seurat_low/20251104_133314/INJECTION_MANIFEST.json")
+    manifest_path = dirs[-1] / "INJECTION_MANIFEST.json"
+    results_path = dirs[-1] / "GEN_TEST_RESULTS.json"
     
     # Load the injection manifest
     with open(manifest_path, 'r') as f:
         injection_manifest = json.load(f)
+        
+    # Load results if available
+    gen_test_results = None
+    if results_path.exists():
+        with open(results_path, 'r') as f:
+            gen_test_results = json.load(f)
     
     # Get errors for de_vignette.Rmd
     tutorial_errors = []
@@ -405,7 +487,8 @@ def test_EvaluationTutorialCorruptedTask_DeVignette_Low(llm, step_callback):
         corrupted_dir=corrupted_dir.parent,
         injected_errors=tutorial_errors,
         evaluations=evaluations,
-        tutorial_file=eval_key
+        tutorial_file=eval_key,
+        gen_test_results=gen_test_results
     )
     
     print(f"\n📄 Comprehensive tutorial report generated: {report_path}")
@@ -421,7 +504,12 @@ def test_EvaluationTutorialCorruptedTask_Compare_Original(llm, step_callback):
     Compare evaluation scores between original and corrupted tutorial.
     The corrupted version should have lower scores.
     """
-    corrupted_dir = Path("outputs/_tmp_satijalab_seurat_low/20251104_133314/vignettes")
+    base_dir = Path("outputs/_tmp_satijalab_seurat_low")
+    # Find latest timestamp dir
+    dirs = sorted([d for d in base_dir.iterdir() if d.is_dir() and d.name[0].isdigit()])
+    if not dirs:
+        pytest.skip("No output directory found")
+    corrupted_dir = dirs[-1] / "vignettes"
     
     # Evaluate original tutorial
     task_original = EvaluationTutorialTask(
