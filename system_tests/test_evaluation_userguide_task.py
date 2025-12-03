@@ -151,7 +151,7 @@ def test_EvaluationUserGuideTask_evaluate(llm, step_callback, root_path, data_fo
     assert evaluations is not None
     assert files is not None
 
-# @pytest.mark.skip(reason="Skipping this test")
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_ConsistencyEvaluation_on_RepoAgent(llm, step_callback, root_path, data_folder):
     files = [
         # "markdown_docs/repo_agent/multi_task_dispatch.md", 
@@ -285,3 +285,25 @@ def test_EvaluationUserGuideTask_evaluate_on_seurat(llm, step_callback, root_pat
     assert len(files) > 0
 
 
+def test_EvaluationUserGuideTask_evaluate_on_CellTrek(llm, step_callback, root_path, data_folder):
+    code_structure_db = CodeStructureDb(
+        author="CellTrek",
+        repo_name="CellTrek",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/CellTrek",
+        gitignore_path=f"{root_path}/CellTrek/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/CellTrek",
+        gitignore_path=f"{root_path}/CellTrek/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    evaluations, files = task.evaluate()
+    assert evaluations is not None
+    assert files is not None
