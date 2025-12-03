@@ -52,3 +52,23 @@ def test_EvaluationReadmeTask_GraphST(llm, step_callback, root_path):
         assert evaluation.structured_evaluation.overall_score is not None
         assert evaluation.structured_evaluation.overall_score > 60 and evaluation.structured_evaluation.overall_score <= 100
         assert evaluation.free_evaluation.overall_score is not None
+
+
+def test_EvaluationReadmeTask_RepoAgent_with_custom_instructions(llm, step_callback, root_path):
+    files = ["README.md"]
+
+    task = EvaluationREADMETask(
+        llm=llm,
+        repo_path=f"{root_path}/souporcell",
+        gitignore_path=f"{root_path}/souporcell/.gitignore",
+        step_callback=step_callback,
+    )
+    evaluations, token_usage, files = task._evaluate(files)
+
+    assert evaluations is not None
+    assert files is not None and len(files) > 0
+
+    for file, evaluation in evaluations.items():
+        assert evaluation is not None
+        assert evaluation.structured_evaluation.overall_score is not None
+        assert evaluation.structured_evaluation.overall_score > 60 and evaluation.structured_evaluation.overall_score <= 100

@@ -48,6 +48,10 @@ pyphen = "^0.17.2"
 markdownify = "^1.1.0"
 python-magic = "^0.4.27"
 beautifulsoup4 = "^4.13.3"
+azure-identity = "^1.25.1"
+azure-core = "^1.36.0"
+azure-ai-formrecognizer = "^3.3.3"
+azure-ai-textanalytics = "^5.3.0"
 
 
 [tool.poetry.group.dev.dependencies]
