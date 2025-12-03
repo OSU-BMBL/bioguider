@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import subprocess
 from typing import Optional
+from enum import Enum
 from pydantic import BaseModel
 import tiktoken
 from bs4 import BeautifulSoup
@@ -100,12 +101,18 @@ def convert_to_serializable(obj):
         return obj.model_dump()
     elif hasattr(obj, 'model_dump'):
         return obj.model_dump()
+    elif isinstance(obj, Enum):
+        return obj.value
     elif isinstance(obj, dict):
         return {k: convert_to_serializable(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [convert_to_serializable(item) for item in obj]
     elif isinstance(obj, tuple):
         return [convert_to_serializable(item) for item in obj]
+    elif hasattr(obj, '__dict__') and not isinstance(obj, (str, int, float, bool, type(None))):
+        # Handle regular class instances by converting their __dict__ to a dictionary
+        # Exclude built-in types that might have __dict__ but shouldn't be converted
+        return {k: convert_to_serializable(v) for k, v in vars(obj).items()}
     else:
         return obj
 
