@@ -403,6 +403,7 @@ def try_parse_json_object(json_obj: str) -> dict | None:
         logger.error(e)
 
     # Second, let's handle some common errors
+    # 1. handle the case that the json object is not wrapped in { and }
     if not json_obj.startswith("{") and not json_obj.endswith("}") and ":" in json_obj:
         json_obj = "{" + json_obj + "}"
     if json_obj.startswith("{{"):
@@ -433,6 +434,42 @@ def try_parse_with_llm(llm: BaseChatOpenAI, input_text: str, schema: any):
         schema=schema,
     )
     return res, token_usage
+
+def parse_final_answer(final_answer: str | None) -> dict | None:
+    if final_answer is None:
+        return None
+    final_answer = final_answer.strip()
+    the_obj = try_parse_json_object(final_answer)
+    if the_obj is not None and "final_answer" in the_obj:
+        return the_obj
+    
+    final_answer_cases = [
+        "**FinalAnswer:**",
+        "FinalAnswer:",
+        "**FinalAnswer**",
+        "FinalAnswer",
+        "**FinalAnswer**:",
+        "**Final Answer:**",
+        "**Final Answer**:",
+        "Final Answer:",
+        "Final Answer",
+        "**final_answer**:",
+        "**final_answer:**",
+        "final_answer:",
+        "**final_answer**",
+        "final_answer",
+        "**final answer**:",
+        "**final answer:**",
+        "final answer:",
+        "final answer",
+    ]
+    for case in final_answer_cases:
+        if case in final_answer:
+            splitted_answer = final_answer.split(case)[-1].strip().strip(":")
+            the_obj = try_parse_json_object(splitted_answer)
+            if the_obj is not None and "final_answer" in the_obj:
+                return the_obj
+    return None
 
 def read_license_file(repo_path: str) -> tuple[str | None, str|None]:
     # find hardcoded license file

@@ -1,37 +1,20 @@
 
 import os
 import logging
-from pathlib import Path
-import re
-import json
-from pydantic import BaseModel, Field
-from typing import Callable, List, Optional, TypedDict, Union
-from langchain_core.prompts import ChatPromptTemplate, StringPromptTemplate
-from langchain_core.messages import SystemMessage, HumanMessage
+from typing import Callable
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain.tools import StructuredTool, Tool, tool, BaseTool
-from langchain.agents import (
-    initialize_agent, 
-    AgentType, 
-    AgentOutputParser,
-    create_react_agent,
-    AgentExecutor,
-)
-from langchain.schema import (
-    AgentFinish,
-    AgentAction,
-)
+from langchain.tools import StructuredTool, Tool
 from langgraph.graph import StateGraph, START, END
 
 from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import flatten_files, get_file_type
-from bioguider.agents.agent_utils import read_directory, try_parse_json_object
+from bioguider.agents.agent_utils import parse_final_answer, read_directory
 from bioguider.agents.collection_task_utils import (
     RELATED_FILE_GOAL_ITEM,
     CollectionWorkflowState, 
     check_file_related_tool,
 )
-from bioguider.agents.common_agent import CommonAgent
 from bioguider.agents.agent_tools import (
     read_directory_tool, 
     summarize_file_tool, 
@@ -39,7 +22,6 @@ from bioguider.agents.agent_tools import (
 )
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import COLLECTION_PROMPTS
-from bioguider.agents.python_ast_repl_tool import CustomPythonAstREPLTool
 from bioguider.agents.agent_task import AgentTask
 from bioguider.agents.collection_plan_step import CollectionPlanStep
 from bioguider.agents.collection_execute_step import CollectionExecuteStep
@@ -183,7 +165,7 @@ class CollectionTask(AgentTask):
         if s["final_answer"] is None:
             return None
         result = s["final_answer"].strip()
-        the_obj = try_parse_json_object(result)
+        the_obj = parse_final_answer(result)
         if the_obj is None or "final_answer" not in the_obj:
             logger.error(f"Final answer is not a valid JSON: {result}")
             return None
