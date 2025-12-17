@@ -18,6 +18,7 @@ from bioguider.agents.common_agent_2step import (
     CommonAgentTwoChainSteps, 
     CommonAgentTwoSteps,
 )
+from bioguider.agents.common_agent import CommonAgent
 from bioguider.agents.evaluation_task import EvaluationTask
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
@@ -74,6 +75,7 @@ STRUCTURED_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
 Your task is to analyze the provided README file and generate a structured quality assessment based on the following criteria.
 If a LICENSE file is present in the repository, its content will also be provided to support your evaluation of license-related criteria.
+You **must** provide the evaluation score in your response.
 ---
 
 ### **Evaluation Criteria**

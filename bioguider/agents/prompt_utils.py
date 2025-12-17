@@ -81,8 +81,8 @@ IDENTIFICATION_GOAL_META_DATA = """Identify the following meta data of the repos
 **Notes**: If the above meta data can't be identified, please return 'unknown' or 'N/A'.
 """
 
-COT_USER_INSTRUCTION = "Do not give the answer immediately. First, explain your reasoning process step by step, then provide the answer."
-EVALUATION_INSTRUCTION="Before arriving at the conclusion, clearly explain your reasoning step by step. Now, let's begin the evaluation."
+COT_USER_INSTRUCTION = "First, explain your reasoning process step by step, then provide the answer."
+EVALUATION_INSTRUCTION="Please also clearly explain your reasoning step by step. Now, let's begin the evaluation."
 
 class CollectionGoalItemEnum(Enum):
     UserGuide = "User Guide"
