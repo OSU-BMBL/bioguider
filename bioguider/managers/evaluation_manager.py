@@ -213,6 +213,7 @@ class EvaluationManager:
             step_callback=self.step_callback,
             summarized_files_db=self.refined_summary_file_db,
             collected_files=tutorial_files,
+            code_structure_db=self.refined_code_structure_db,
         )
         results, tutorial_files = task.evaluate()
         return results, tutorial_files
@@ -226,6 +227,7 @@ class EvaluationManager:
             step_callback=self.step_callback,
             summarized_files_db=self.refined_summary_file_db,
             collected_files=userguide_files,
+            code_structure_db=self.refined_code_structure_db,
         )
         results, userguide_files = task.evaluate()
         return results, userguide_files
