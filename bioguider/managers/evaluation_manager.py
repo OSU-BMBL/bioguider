@@ -24,21 +24,27 @@ class EvaluationManager:
         self.repo_url: str | None = None
         self.project_metadata: ProjectMetadata | None = None
 
-    def prepare_refined_repo(self, refined_repo_path: str):
-        self.refined_repo_path = refined_repo_path
+    def prepare_refined_repo(self, refined_repo_url: str):
+        self.prepare_repo(refined_repo_url)
+        self.refined_repo_path = refined_repo_url
         self.refined_rag = RAG()
         self.refined_rag.initialize_db_manager()
-        self.refined_rag.initialize_repo(repo_url_or_path=refined_repo_path)
+        self.refined_rag.initialize_repo(repo_url_or_path=refined_repo_url)
 
-        author, repo_name = parse_refined_repo_path(refined_repo_path)
+        author, repo_name = parse_refined_repo_path(refined_repo_url)
         self.refined_summary_file_db = SummarizedFilesDb(author, repo_name)
-        self.refined_code_structure_db = CodeStructureDb(author, repo_name)
-        code_structure_builder = CodeStructureBuilder(
-            repo_path=self.refined_rag.repo_dir, 
-            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"), 
-            code_structure_db=self.refined_code_structure_db
-        )
-        code_structure_builder.build_code_structure()
+        if self.code_structure_db is not None:
+            self.refined_code_structure_db = self.code_structure_db
+        elif self.rag is not None and self.rag.repo_dir is not None:
+            self.refined_code_structure_db = CodeStructureDb(author, repo_name)
+            code_structure_builder = CodeStructureBuilder(
+                repo_path=self.rag.repo_dir, 
+                gitignore_path=Path(self.rag.repo_dir, ".gitignore"), 
+                code_structure_db=self.refined_code_structure_db
+            )
+            code_structure_builder.build_code_structure()
+        else:
+            raise ValueError("Code structure database is not prepared")
 
     def prepare_repo(self, repo_url: str):
         self.repo_url = repo_url
@@ -161,19 +167,22 @@ class EvaluationManager:
         evaluation, files = evaluation_task.evaluate()
         return evaluation, files
 
-    def identify_refined_project(self) -> ProjectMetadata:
-        self.refined_project_metadata = self._identify_project(
-            repo_path=self.refined_rag.repo_dir,
-            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
-            summary_file_db=self.summary_file_db,
-        )
+    def identify_refined_project(self, metadata: dict | None = None) -> ProjectMetadata:
+        if metadata is not None:
+            self.refined_project_metadata = ProjectMetadata(**metadata)
+        else:
+            self.refined_project_metadata = self._identify_project(
+                repo_path=self.refined_rag.repo_dir,
+                gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
+                summary_file_db=self.refined_summary_file_db,
+            )
         return self.refined_project_metadata
 
-    def evaluation_refined_readme(self, refined_repo_path: str, readme_files: list[str]) -> tuple[dict, list[str]]:
+    def evaluate_refined_readme(self, readme_files: list[str]) -> tuple[dict, list[str]]:
         task = EvaluationREADMETask(
             llm=self.llm,
-            repo_path=refined_repo_path,
-            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            repo_path=self.refined_rag.repo_dir,
+            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
             meta_data=self.refined_project_metadata,
             step_callback=self.step_callback,
             summarized_files_db=self.refined_summary_file_db,
@@ -182,11 +191,11 @@ class EvaluationManager:
         results, readme_files = task.evaluate()
         return results, readme_files
 
-    def evaluation_refined_installation(self, refined_repo_path: str, installation_files: list[str]) -> tuple[dict, list[str]]:
+    def evaluate_refined_installation(self, installation_files: list[str]) -> tuple[dict, list[str]]:
         task = EvaluationInstallationTask(
             llm=self.llm,
-            repo_path=refined_repo_path,
-            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            repo_path=self.refined_rag.repo_dir,
+            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
             meta_data=self.refined_project_metadata,
             step_callback=self.step_callback,
             summarized_files_db=self.refined_summary_file_db,
@@ -195,11 +204,11 @@ class EvaluationManager:
         results, installation_files = task.evaluate()
         return results, installation_files
 
-    def evaluation_refined_tutorial(self, refined_repo_path: str, tutorial_files: list[str]) -> tuple[dict, list[str]]:
+    def evaluate_refined_tutorial(self, tutorial_files: list[str]) -> tuple[dict, list[str]]:
         task = EvaluationTutorialTask(
             llm=self.llm,
-            repo_path=refined_repo_path,
-            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            repo_path=self.refined_rag.repo_dir,
+            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
             meta_data=self.refined_project_metadata,
             step_callback=self.step_callback,
             summarized_files_db=self.refined_summary_file_db,
@@ -208,11 +217,11 @@ class EvaluationManager:
         results, tutorial_files = task.evaluate()
         return results, tutorial_files
 
-    def evaluation_refined_userguide(self, refined_repo_path: str, userguide_files: list[str]) -> tuple[dict, list[str]]:
+    def evaluate_refined_userguide(self, userguide_files: list[str]) -> tuple[dict, list[str]]:
         task = EvaluationUserGuideTask(
             llm=self.llm,
-            repo_path=refined_repo_path,
-            gitignore_path=Path(refined_repo_path, ".gitignore"),
+            repo_path=self.refined_rag.repo_dir,
+            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
             meta_data=self.refined_project_metadata,
             step_callback=self.step_callback,
             summarized_files_db=self.refined_summary_file_db,
