@@ -281,7 +281,15 @@ def test_EvaluationReadmeCorruptedTask_Seurat_Low(llm, step_callback):
     that the evaluation can detect typos, link issues, markdown problems, and bio term errors.
     """
     # Path to the corrupted README test data
-    corrupted_dir = Path("outputs/_tmp_satijalab_seurat_low/20251104_133314")
+    # Path to the corrupted README test data
+    base_dir = Path("outputs/_tmp_satijalab_seurat_low")
+    # Find latest timestamp dir
+    dirs = sorted([d for d in base_dir.iterdir() if d.is_dir() and d.name[0].isdigit()])
+    if not dirs:
+        pytest.skip("No output directory found")
+    corrupted_dir = dirs[-1]
+    print(f"Using output directory: {corrupted_dir}")
+    
     corrupted_readme = corrupted_dir / "README.corrupted.md"
     manifest_path = corrupted_dir / "INJECTION_MANIFEST.json"
     
@@ -391,7 +399,12 @@ def test_EvaluationReadmeCorruptedTask_Compare_Original(llm, step_callback):
     Compare evaluation scores between original and corrupted README.
     The corrupted version should have lower scores.
     """
-    corrupted_dir = Path("outputs/_tmp_satijalab_seurat_low/20251104_133314")
+    base_dir = Path("outputs/_tmp_satijalab_seurat_low")
+    # Find latest timestamp dir
+    dirs = sorted([d for d in base_dir.iterdir() if d.is_dir() and d.name[0].isdigit()])
+    if not dirs:
+        pytest.skip("No output directory found")
+    corrupted_dir = dirs[-1]
     
     # Evaluate original README
     task_original = EvaluationREADMETask(

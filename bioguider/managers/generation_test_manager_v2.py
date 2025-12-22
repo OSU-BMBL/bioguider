@@ -87,6 +87,47 @@ class GenerationTestManagerV2:
         
         return targets
 
+    def _extract_project_terms(self, repo_path: str) -> List[str]:
+        """
+        Extract function names and key terms from the codebase to use as injection targets.
+        """
+        import re
+        from collections import Counter
+        
+        terms = Counter()
+        
+        # Walk through the repo
+        for root, _, files in os.walk(repo_path):
+            if ".git" in root or "__pycache__" in root:
+                continue
+                
+            for file in files:
+                fpath = os.path.join(root, file)
+                try:
+                    content = read_file(fpath)
+                    if not content:
+                        continue
+                        
+                    if file.endswith(".py"):
+                        # Python function definitions
+                        funcs = re.findall(r"def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(", content)
+                        terms.update(funcs)
+                        # Python class definitions
+                        classes = re.findall(r"class\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*[:\(]", content)
+                        terms.update(classes)
+                        
+                    elif file.endswith(".R"):
+                        # R function definitions
+                        funcs = re.findall(r"([a-zA-Z_.][a-zA-Z0-9_.]*)\s*<-\s*function", content)
+                        terms.update(funcs)
+                        
+                except Exception:
+                    continue
+        
+        # Filter out common/short terms
+        filtered_terms = [t for t, _ in terms.most_common(50) if len(t) > 4 and t not in ["init", "self", "setup", "test", "main"]]
+        return filtered_terms[:20]
+
     def _inject_errors_into_files(
         self, 
         target_files: Dict[str, List[str]], 
@@ -101,6 +142,10 @@ class GenerationTestManagerV2:
         """
         injector = LLMErrorInjector(self.llm)
         all_manifests = {}
+        
+        # Extract project terms once
+        project_terms = self._extract_project_terms(tmp_repo_path)
+        self.print_step("ExtractTerms", f"Found {len(project_terms)} project terms: {', '.join(project_terms[:5])}...")
         
         for category, file_list in target_files.items():
             self.print_step(f"InjectErrors:{category.title()}", f"Injecting {min_per_category} errors per file into {len(file_list)} files")
@@ -117,7 +162,8 @@ class GenerationTestManagerV2:
                     # Inject errors
                     corrupted, manifest = injector.inject(
                         baseline_content, 
-                        min_per_category=min_per_category
+                        min_per_category=min_per_category,
+                        project_terms=project_terms
                     )
                     
                     # Save corrupted version to tmp repo

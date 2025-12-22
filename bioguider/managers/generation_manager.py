@@ -65,7 +65,18 @@ class DocumentationGenerationManager:
             
         return f"{start_str} → {end_str} ({duration_str})"
 
-    def run(self, report_path: str, repo_path: str | None = None) -> str:
+    def run(self, report_path: str, repo_path: str | None = None, target_files: List[str] | None = None, max_files: int | None = None) -> str:
+        """
+        Run the documentation generation pipeline.
+        
+        Args:
+            report_path: Path to the evaluation report JSON
+            repo_path: Path to the repository (optional)
+            target_files: Optional list of file paths to limit processing to.
+                         If provided, only these files will be processed.
+            max_files: Optional hard limit on number of files to process.
+                      If provided, only the first N files will be processed.
+        """
         import time
         self.start_time = time.time()
         repo_path = repo_path or self.repo_url_or_path or ""
@@ -107,6 +118,25 @@ class DocumentationGenerationManager:
         target_files = list(dict.fromkeys(target_files))  # de-dup
         files, missing = reader.read_files(target_files) if target_files else reader.read_default_targets()
         self.print_step(step_name="ReadRepoFiles", step_output=f"✓ Read {len(files)} files from repository")
+        
+        # EARLY FILTER: If target_files specified, limit which files get processed
+        # This is the most effective filter - applied BEFORE suggestions are extracted
+        if target_files:
+            # Normalize target file paths for matching
+            target_basenames = {os.path.basename(f) for f in target_files}
+            target_paths = set(target_files)
+            
+            # Filter files dict to only include target files
+            original_count = len(files)
+            filtered_files = {}
+            for fpath, content in files.items():
+                # Match by full path or basename
+                if fpath in target_paths or os.path.basename(fpath) in target_basenames:
+                    filtered_files[fpath] = content
+            
+            if len(filtered_files) < original_count:
+                self.print_step(step_name="FilterFiles", step_output=f"Limiting to {len(filtered_files)} target files (from {original_count})")
+                files = filtered_files
 
         self.print_step(step_name="AnalyzeStyle", step_output="Analyzing document style and formatting...")
         style = self.style_analyzer.analyze(files)
@@ -127,6 +157,38 @@ class DocumentationGenerationManager:
         edits_by_file: Dict[str, list] = {}
         for e in plan.planned_edits:
             edits_by_file.setdefault(e.file_path, []).append(e)
+        
+        # FILTER: Only process target files if specified
+        if target_files:
+            # Build multiple matching sets for robust path comparison
+            target_basenames = {os.path.basename(f) for f in target_files}
+            target_paths = set(target_files)
+            # Also normalize paths
+            target_normalized = {os.path.normpath(f) for f in target_files}
+            
+            self.print_step(step_name="FilterDebug", step_output=f"Target files: {list(target_files)[:5]}, edits keys: {list(edits_by_file.keys())[:5]}")
+            
+            filtered_edits = {}
+            for fpath, edits in edits_by_file.items():
+                fpath_norm = os.path.normpath(fpath)
+                fpath_base = os.path.basename(fpath)
+                # Match by any of: exact path, normalized path, or basename
+                if (fpath in target_paths or 
+                    fpath_norm in target_normalized or 
+                    fpath_base in target_basenames):
+                    filtered_edits[fpath] = edits
+            
+            skipped_count = len(edits_by_file) - len(filtered_edits)
+            self.print_step(step_name="FilterEdits", step_output=f"Matched {len(filtered_edits)} of {len(edits_by_file)} files (skipping {skipped_count})")
+            edits_by_file = filtered_edits
+        
+        # HARD LIMIT: Fallback if filter didn't work or max_files specified
+        if max_files and max_files > 0 and len(edits_by_file) > max_files:
+            all_files = list(edits_by_file.keys())
+            limited_files = all_files[:max_files]
+            original_count = len(edits_by_file)
+            edits_by_file = {k: edits_by_file[k] for k in limited_files}
+            self.print_step(step_name="HardLimit", step_output=f"Limited to {len(edits_by_file)} files (from {original_count})")
         
         total_files = len(edits_by_file)
         processed_files = 0
@@ -161,7 +223,6 @@ class DocumentationGenerationManager:
             
             # Debug: Save suggestion grouping info
             import json
-            import os
             from datetime import datetime
             
             debug_dir = "outputs/debug_generation"

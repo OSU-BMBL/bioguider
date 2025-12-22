@@ -933,12 +933,22 @@ class LLMContentGenerator:
         return '\n'.join(cleaned_lines)
 
     def _split_rmd_into_chunks(self, content: str) -> list[dict]:
+        """
+        Split RMarkdown content into chunks for processing.
+        
+        CRITICAL: This function must correctly identify code blocks to preserve them.
+        Code blocks in RMarkdown start with ```{r...} or ``` and end with ```.
+        
+        Returns list of dicts with 'type' (yaml/code/text) and 'content'.
+        """
         chunks = []
         if not content:
             return chunks
         lines = content.split('\n')
         n = len(lines)
         i = 0
+        
+        # Handle YAML frontmatter
         if n >= 3 and lines[0].strip() == '---':
             j = 1
             while j < n and lines[j].strip() != '---':
@@ -946,42 +956,88 @@ class LLMContentGenerator:
             if j < n and lines[j].strip() == '---':
                 chunks.append({"type": "yaml", "content": '\n'.join(lines[0:j+1])})
                 i = j + 1
+        
         buffer = []
         in_code = False
+        
         for k in range(i, n):
             line = lines[k]
-            if line.strip().startswith('```'):
+            # Check for code fence - must be at start of line (possibly with whitespace)
+            stripped = line.strip()
+            
+            # Detect code fence opening: ``` or ```{r...} or ```python etc
+            is_code_fence = stripped.startswith('```')
+            
+            if is_code_fence:
                 if in_code:
+                    # This is a closing fence
                     buffer.append(line)
                     chunks.append({"type": "code", "content": '\n'.join(buffer)})
                     buffer = []
                     in_code = False
                 else:
+                    # This is an opening fence
+                    # Save any accumulated text first
                     if buffer and any(s.strip() for s in buffer):
                         chunks.append({"type": "text", "content": '\n'.join(buffer)})
+                    # Start new code block with the opening fence
                     buffer = [line]
                     in_code = True
             else:
                 buffer.append(line)
+        
+        # Handle remaining buffer
         if buffer and any(s.strip() for s in buffer):
-            chunks.append({"type": "code" if in_code else "text", "content": '\n'.join(buffer)})
+            if in_code:
+                # Unclosed code block - this is an error but add it anyway
+                print(f"WARNING: Unclosed code block detected in RMarkdown")
+                chunks.append({"type": "code", "content": '\n'.join(buffer)})
+            else:
+                chunks.append({"type": "text", "content": '\n'.join(buffer)})
+        
+        # Validation: count code fences in chunks vs original
+        original_fences = len(re.findall(r'^```', content, flags=re.M))
+        chunk_fences = 0
+        for ch in chunks:
+            if ch["type"] == "code":
+                chunk_fences += len(re.findall(r'^```', ch["content"], flags=re.M))
+        
+        if original_fences != chunk_fences:
+            print(f"WARNING: Code fence count mismatch in chunking: original={original_fences}, chunks={chunk_fences}")
+        
         return chunks
 
     def _generate_text_chunk(self, conv: CommonConversation, evaluation_report: dict, context: str, chunk_text: str) -> tuple[str, dict]:
         LLM_CHUNK_PROMPT = (
-            "You are BioGuider improving a single markdown chunk of a larger RMarkdown document.\n\n"
+            "You are BioGuider improving a single TEXT chunk of a larger RMarkdown document.\n\n"
             "GOAL\nRefine ONLY the given chunk's prose per evaluation suggestions while preserving structure.\n"
             "Do not add conclusions or new sections.\n\n"
             "INPUTS\n- evaluation_report: <<{evaluation_report}>>\n- repo_context_excerpt: <<{context}>>\n- original_chunk:\n<<<\n{chunk}\n>>>\n\n"
-            "RULES\n- Preserve headers/formatting in this chunk.\n- Do not invent technical specs.\n- Output ONLY the refined chunk (no fences)."
+            "CRITICAL RULES\n"
+            "- This is a TEXT-ONLY chunk - do NOT add any code blocks or code fences (```).\n"
+            "- Preserve all headers and formatting in this chunk.\n"
+            "- Do not invent technical specs.\n"
+            "- Output ONLY the refined text (no code fences, no markdown code blocks).\n"
+            "- NEVER add ``` anywhere in your output.\n"
+            "- Keep the same approximate length as the original chunk."
         )
         system_prompt = LLM_CHUNK_PROMPT.format(
             evaluation_report=json.dumps(evaluation_report)[:4000],
             context=context[:1500],
             chunk=chunk_text[:6000],
         )
-        content, usage = conv.generate(system_prompt=system_prompt, instruction_prompt="Rewrite this chunk now.")
-        return content.strip(), usage
+        content, usage = conv.generate(system_prompt=system_prompt, instruction_prompt="Rewrite this text chunk now. Remember: NO code fences (```).")
+        
+        # Post-processing: remove any code fences that may have been added
+        output = content.strip()
+        
+        # If output contains code fences, the LLM didn't follow instructions
+        # Return original to preserve document structure
+        if '```' in output:
+            print(f"WARNING: LLM added code fences to text chunk, using original")
+            return chunk_text, usage
+        
+        return output, usage
 
     def _generate_full_document_chunked(self, target_file: str, evaluation_report: dict, context: str, original_content: str, debug_dir: str, safe_filename: str) -> tuple[str, dict]:
         conv = CommonConversation(self.llm)
@@ -989,13 +1045,31 @@ class LLMContentGenerator:
         merged = []
         total_usage = {"total_tokens": 0, "prompt_tokens": 0, "completion_tokens": 0}
         from datetime import datetime
+        
+        # Save chunk analysis for debugging
+        chunk_analysis_file = os.path.join(debug_dir, f"{safe_filename}_chunk_analysis.txt")
+        with open(chunk_analysis_file, 'w', encoding='utf-8') as f:
+            f.write(f"Total chunks: {len(chunks)}\n")
+            for idx, ch in enumerate(chunks):
+                f.write(f"Chunk {idx}: type={ch['type']}, length={len(ch['content'])}\n")
+                if ch['type'] == 'code':
+                    f.write(f"  First line: {ch['content'].split(chr(10))[0][:80]}\n")
+        
         for idx, ch in enumerate(chunks):
             if ch["type"] in ("yaml", "code"):
+                # CRITICAL: Pass through code/yaml chunks EXACTLY as-is
                 merged.append(ch["content"])
                 continue
+            
+            # For text chunks, try to improve but fall back to original if needed
             out, usage = self._generate_text_chunk(conv, evaluation_report, context, ch["content"])
-            if not out:
+            
+            # Validate the output doesn't contain code fence fragments that could break structure
+            if not out or '```' in out:
+                # If LLM added code fences in text chunk, it could break the document
+                # Fall back to original text
                 out = ch["content"]
+            
             merged.append(out)
             try:
                 total_usage["total_tokens"] += int(usage.get("total_tokens", 0))
@@ -1007,7 +1081,24 @@ class LLMContentGenerator:
             with open(chunk_file, 'w', encoding='utf-8') as f:
                 f.write(f"=== CHUNK {idx} ({ch['type']}) at {datetime.now().isoformat()} ===\n")
                 f.write(out)
+        
         content = '\n'.join(merged)
+        
+        # CRITICAL: Validate code block structure is preserved
+        original_fences = len(re.findall(r'^```', original_content, flags=re.M))
+        generated_fences = len(re.findall(r'^```', content, flags=re.M))
+        
+        if original_fences != generated_fences:
+            # Code block structure was broken - log error and return original
+            error_file = os.path.join(debug_dir, f"{safe_filename}_ERROR_codeblock_mismatch.txt")
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write(f"ERROR: Code block count mismatch!\n")
+                f.write(f"Original: {original_fences} code fences\n")
+                f.write(f"Generated: {generated_fences} code fences\n")
+                f.write(f"\nReturning original content to preserve structure.\n")
+            print(f"WARNING: Code block structure broken for {target_file}, returning original content")
+            return original_content, total_usage
+        
         return content, total_usage
     
     def _detect_document_context(self, context: str, anchor_title: str) -> str:
