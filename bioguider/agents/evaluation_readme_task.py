@@ -474,7 +474,7 @@ class EvaluationREADMETask(EvaluationTask):
                 readme_path=readme_file,
                 readme_content=readme_content,
             )
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
+            agent = CommonAgentTwoSteps(llm=self.llm)
             response, _, token_usage, reasoning_process = agent.go(
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,
