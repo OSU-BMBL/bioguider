@@ -15,10 +15,9 @@ from bioguider.utils.constants import (
     EvaluationInstallationResult,
 )
 from bioguider.rag.data_pipeline import count_tokens
-from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
+from .evaluation_utils import run_llm_evaluation
 
 from .evaluation_task import EvaluationTask
-from .agent_utils import read_file
 from bioguider.utils.utils import get_overall_score, increase_token_usage
 
 
@@ -183,11 +182,12 @@ class EvaluationInstallationTask(EvaluationTask):
         ).format(
             installation_files_content=files_content,
         )
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
+        res, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=StructuredEvaluationInstallationResult,
+            chain=True,
         )
         res: StructuredEvaluationInstallationResult = res
         res.overall_score = get_overall_score([
@@ -219,8 +219,8 @@ class EvaluationInstallationTask(EvaluationTask):
             installation_files_content=files_content,
             structured_evaluation_and_reasoning_process=structured_evaluation_and_reasoning_process,
         )
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
+        res, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=FreeEvaluationInstallationResult,

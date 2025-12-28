@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Optional, Tuple, Dict, List
+import json
+from datetime import datetime
 
 from bioguider.generation import (
     EvaluationReportLoader,
@@ -222,9 +224,6 @@ class DocumentationGenerationManager:
                         section_edits.append(e)
             
             # Debug: Save suggestion grouping info
-            import json
-            from datetime import datetime
-            
             debug_dir = "outputs/debug_generation"
             os.makedirs(debug_dir, exist_ok=True)
             safe_filename = fpath.replace("/", "_").replace(".", "_")

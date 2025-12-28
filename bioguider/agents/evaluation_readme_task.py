@@ -4,21 +4,15 @@ from pathlib import Path
 from typing import Callable
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
 from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
 from bioguider.utils.gitignore_checker import GitignoreChecker
 
-from ..utils.pyphen_utils import PyphenReadability
+from .evaluation_utils import compute_readability_metrics, run_llm_evaluation
 from bioguider.agents.agent_utils import ( 
     read_file, read_license_file, 
     summarize_file
 )
-from bioguider.agents.common_agent_2step import (
-    CommonAgentTwoChainSteps, 
-    CommonAgentTwoSteps,
-)
-from bioguider.agents.common_agent import CommonAgent
 from bioguider.agents.evaluation_task import EvaluationTask
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
@@ -474,8 +468,8 @@ class EvaluationREADMETask(EvaluationTask):
                 readme_path=readme_file,
                 readme_content=readme_content,
             )
-            agent = CommonAgentTwoSteps(llm=self.llm)
-            response, _, token_usage, reasoning_process = agent.go(
+            response, token_usage, reasoning_process = run_llm_evaluation(
+                llm=self.llm,
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,
                 schema=ProjectLevelEvaluationREADMEResult,
@@ -545,9 +539,8 @@ class EvaluationREADMETask(EvaluationTask):
                     "reasoning_process": f"{readme_file} is an empty file.",
                 }
                 continue
-            readability = PyphenReadability()
-            flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(readme_content)
+            flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index = \
+                compute_readability_metrics(readme_content)
             system_prompt = ChatPromptTemplate.from_template(
                 STRUCTURED_EVALUATION_README_SYSTEM_PROMPT
             ).format(
@@ -561,11 +554,12 @@ class EvaluationREADMETask(EvaluationTask):
                 smog_index=smog_index,
             )
                         
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
-            response, _, token_usage, reasoning_process = agent.go(
+            response, token_usage, reasoning_process = run_llm_evaluation(
+                llm=self.llm,
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,
                 schema=StructuredEvaluationREADMEResult,
+                chain=True,
             )
             response.overall_score = get_overall_score(
                 [
@@ -618,8 +612,8 @@ class EvaluationREADMETask(EvaluationTask):
             readme_content=readme_content,
             structured_evaluation=structured_reasoning_process,
         )
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        response, _, token_usage, reasoning_process = agent.go(
+        response, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=FreeProjectLevelEvaluationREADMEResult,
@@ -644,9 +638,8 @@ class EvaluationREADMETask(EvaluationTask):
                 overall_improvement_suggestions=[f"{readme_file} is an empty file."],
             ), {**DEFAULT_TOKEN_USAGE}, f"{readme_file} is an empty file."
         
-        readability = PyphenReadability()
-        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-            _, _, _, _, _ = readability.readability_metrics(readme_content)
+        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index = \
+            compute_readability_metrics(readme_content)
         system_prompt = ChatPromptTemplate.from_template(
             FOLDER_LEVEL_EVALUATION_README_SYSTEM_PROMPT
         ).format(
@@ -657,11 +650,12 @@ class EvaluationREADMETask(EvaluationTask):
             gunning_fog_index=gunning_fog_index,
             smog_index=smog_index,
         )
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
-        response, _, token_usage, reasoning_process = agent.go(
+        response, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=FreeFolderLevelEvaluationREADMEResult,
+            chain=True,
         )
         self.print_step(step_output=f"README: {readme_file} free folder level README")
         self.print_step(step_output=reasoning_process)
@@ -771,4 +765,3 @@ class EvaluationREADMETask(EvaluationTask):
         )
                 
         return found_readme_files
-
