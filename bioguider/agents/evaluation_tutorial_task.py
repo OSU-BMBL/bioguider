@@ -1,25 +1,28 @@
 
 
-import json
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from pydantic import BaseModel, Field
 import logging
 
-from bioguider.agents.agent_utils import read_file
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
-from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationResult, ConsistencyEvaluationTask
+from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationResult
 from bioguider.agents.evaluation_task import EvaluationTask
 from bioguider.agents.collection_task import CollectionTask
 from bioguider.agents.evaluation_tutorial_task_prompts import INDIVIDUAL_TUTORIAL_EVALUATION_SYSTEM_PROMPT
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE, ProjectMetadata
-from bioguider.utils.file_utils import detect_file_type, flatten_files
-from bioguider.utils.notebook_utils import extract_markdown_from_notebook, strip_notebook_to_code_and_markdown
-from bioguider.utils.pyphen_utils import PyphenReadability
-from bioguider.utils.utils import convert_html_to_text, increase_token_usage, get_overall_score
+from bioguider.utils.file_utils import flatten_files
+from bioguider.utils.utils import increase_token_usage, get_overall_score
+from .evaluation_utils import (
+    compute_readability_metrics,
+    default_consistency_result,
+    evaluate_consistency_on_content,
+    normalize_evaluation_content,
+    run_llm_evaluation,
+    sanitize_files,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,38 +71,13 @@ class EvaluationTutorialTask(EvaluationTask):
         self.collected_files = collected_files
 
     def _sanitize_files(self, files: list[str]) -> list[str]:
-        sanitized_files = []
-        for file in files:
-            file_path = Path(self.repo_path, file)
-            if not file_path.exists() or not file_path.is_file():
-                continue
-            if detect_file_type(file_path) == "binary":
-                continue
-            if file.endswith(".svg"):
-                continue
-            if not file.endswith(".ipynb") and file_path.stat().st_size > MAX_FILE_SIZE:
-                continue
-            sanitized_files.append(file)
-        return sanitized_files
-
-    def _sanitize_file_content(self, file: str) -> Tuple[str | None, str | None]:
-        content = read_file(Path(self.repo_path, file))
-        if content is None:
-            logger.error(f"Error in reading file {file} - {Path(self.repo_path, file).resolve()}")
-            return None, None
-
-        if file.endswith(".ipynb") or file.endswith(".html") or file.endswith(".htm"):
-            if file.endswith(".ipynb"):
-                readability_content = extract_markdown_from_notebook(Path(self.repo_path, file))
-                content = json.dumps(strip_notebook_to_code_and_markdown(Path(self.repo_path, file)))
-            else:
-                readability_content = convert_html_to_text(Path(self.repo_path, file))
-                content = readability_content
-
-            content = content.replace("{", "<<").replace("}", ">>")
-        else:
-            readability_content = content
-        return content, readability_content
+        return sanitize_files(
+            self.repo_path,
+            files,
+            max_size_bytes=MAX_FILE_SIZE,
+            disallowed_exts={".svg"},
+            check_ipynb_size=False,
+        )
 
     def _collect_files(self):
         if self.collected_files is not None:
@@ -120,49 +98,17 @@ class EvaluationTutorialTask(EvaluationTask):
         files = self._sanitize_files(files)
         return files
 
-    def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
-        # Skip consistency evaluation if no code structure database is available
-        if self.code_structure_db is None:
-            return None
-        
-        consistency_evaluation_task = ConsistencyEvaluationTask(
-            llm=self.llm,
-            code_structure_db=self.code_structure_db,
-            step_callback=self.step_callback,
-        )
-        file = file.strip()
-        with open(Path(self.repo_path, file), "r") as f:
-            tutorial_content = f.read()
-        return consistency_evaluation_task.evaluate(
-            domain="tutorial/vignette",
-            documentation=tutorial_content,
-        )
-
-    def _evaluate_consistency_on_content(self, content: str) -> ConsistencyEvaluationResult:
-        # Skip consistency evaluation if no code structure database is available
-        if self.code_structure_db is None:
-            return None, {**DEFAULT_TOKEN_USAGE}
-        
-        consistency_evaluation_task = ConsistencyEvaluationTask(
-            llm=self.llm,
-            code_structure_db=self.code_structure_db,
-            step_callback=self.step_callback,
-        )
-        return consistency_evaluation_task.evaluate(
-            domain="tutorial/vignette",
-            documentation=content,
-        ), {**DEFAULT_TOKEN_USAGE}
-
     def _evaluate_individual_tutorial(self, file: str) -> tuple[IndividualTutorialEvaluationResult | None, dict]:
-        content, readability_content = self._sanitize_file_content(file)
+        content, readability_content = normalize_evaluation_content(
+            self.repo_path, file
+        )
         if content is None or readability_content is None:
             logger.error(f"Error in sanitizing file {file} - {Path(self.repo_path, file).resolve()}")
             return None, {**DEFAULT_TOKEN_USAGE}
             
         # evaluate general criteria
-        readability = PyphenReadability()
-        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(readability_content)
+        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index = \
+            compute_readability_metrics(readability_content)
         system_prompt = ChatPromptTemplate.from_template(
             INDIVIDUAL_TUTORIAL_EVALUATION_SYSTEM_PROMPT
         ).format(
@@ -173,8 +119,8 @@ class EvaluationTutorialTask(EvaluationTask):
             tutorial_file_content=readability_content,
         )
                 
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
+        res, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the tutorial evaluation.",
             schema=TutorialEvaluationResult,
@@ -182,15 +128,16 @@ class EvaluationTutorialTask(EvaluationTask):
         res: TutorialEvaluationResult = res
 
         # evaluate consistency
-        consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
+        consistency_evaluation_result, _temp_token_usage = evaluate_consistency_on_content(
+            llm=self.llm,
+            code_structure_db=self.code_structure_db,
+            step_callback=self.step_callback,
+            domain="tutorial/vignette",
+            content=content,
+        )
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the tutorial
-            consistency_evaluation_result = ConsistencyEvaluationResult(
-                score=0,
-                assessment="No sufficient information to evaluate the consistency of the tutorial",
-                development=[],
-                strengths=[],
-            )
+            consistency_evaluation_result = default_consistency_result("tutorial/vignette")
 
         # calculate overall score
         res.overall_score = get_overall_score(
@@ -220,5 +167,3 @@ class EvaluationTutorialTask(EvaluationTask):
             total_token_usage = increase_token_usage(total_token_usage, token_usage)
             tutorial_evaluation_results[file] = tutorial_evaluation_result
         return tutorial_evaluation_results, total_token_usage, files
-
-

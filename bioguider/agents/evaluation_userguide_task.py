@@ -5,20 +5,24 @@ from typing import Optional
 from langchain.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
-from bioguider.agents.agent_utils import read_file
 from bioguider.agents.collection_task import CollectionTask
-from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
-from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationTask, ConsistencyEvaluationResult
+from bioguider.agents.consistency_evaluation_task import ConsistencyEvaluationResult
 from bioguider.agents.prompt_utils import CollectionGoalItemEnum
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
 )
-from bioguider.utils.file_utils import detect_file_type, flatten_files
-from ..utils.pyphen_utils import PyphenReadability
+from bioguider.utils.file_utils import flatten_files
+from .evaluation_utils import (
+    compute_readability_metrics,
+    default_consistency_result,
+    evaluate_consistency_on_content,
+    normalize_evaluation_content,
+    run_llm_evaluation,
+    sanitize_files,
+)
 
 from .evaluation_task import EvaluationTask
-from .agent_utils import read_file
-from bioguider.utils.utils import convert_html_to_text, get_overall_score, increase_token_usage
+from bioguider.utils.utils import get_overall_score, increase_token_usage
 from .evaluation_userguide_prompts import INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
 
 
@@ -61,19 +65,6 @@ class EvaluationUserGuideTask(EvaluationTask):
         self.code_structure_db = code_structure_db
         self.collected_files = collected_files
 
-    def sanitize_files(self, files: list[str]) -> list[str]:
-        sanitized_files = []
-        for file in files:
-            file_path = Path(self.repo_path, file)
-            if not file_path.exists() or not file_path.is_file():
-                continue
-            if detect_file_type(file_path) == "binary":
-                continue
-            if file_path.stat().st_size > MAX_FILE_SIZE:
-                continue
-            sanitized_files.append(file)
-        return sanitized_files
-
     def _collect_files(self):
         if self.collected_files is not None:
             return self.collected_files
@@ -90,43 +81,20 @@ class EvaluationUserGuideTask(EvaluationTask):
         )
         files = task.collect()
         files = flatten_files(self.repo_path, files)
-        files = self.sanitize_files(files)
+        files = sanitize_files(self.repo_path, files, max_size_bytes=MAX_FILE_SIZE)
         return files
 
-    def _evaluate_consistency_on_content(self, content: str) -> ConsistencyEvaluationResult:
-        consistency_evaluation_task = ConsistencyEvaluationTask(
-            llm=self.llm,
-            code_structure_db=self.code_structure_db,
-            step_callback=self.step_callback,
-        )
-        return consistency_evaluation_task.evaluate(
-            domain="user guide/API",
-            documentation=content,
-        ), {**DEFAULT_TOKEN_USAGE}
-
-    def _evaluate_consistency(self, file: str) -> ConsistencyEvaluationResult:
-        file = file.strip()
-        with open(Path(self.repo_path, file), "r") as f:
-            user_guide_api_documentation = f.read()
-        return self._evaluate_consistency_on_content(user_guide_api_documentation)
-
     def _evaluate_individual_userguide(self, file: str) -> tuple[IndividualUserGuideEvaluationResult | None, dict]:
-        content = read_file(Path(self.repo_path, file))        
-        if content is None:
+        content, readability_content = normalize_evaluation_content(
+            self.repo_path, file
+        )
+        if content is None or readability_content is None:
             logger.error(f"Error in reading file {file}")
             return None, {**DEFAULT_TOKEN_USAGE}
 
-        if file.endswith(".html") or file.endswith(".htm"):
-            readability_content = convert_html_to_text(Path(self.repo_path, file))
-            content = readability_content
-            content = content.replace("{", "<<").replace("}", ">>")
-        else:
-            readability_content = content
-
         # evaluate general criteria
-        readability = PyphenReadability()
-        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(readability_content)
+        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index = \
+            compute_readability_metrics(readability_content)
         system_prompt = ChatPromptTemplate.from_template(
             INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT
         ).format(
@@ -136,8 +104,8 @@ class EvaluationUserGuideTask(EvaluationTask):
             smog_index=smog_index,
             userguide_content=readability_content,
         )
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
+        res, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the user guide/API documentation evaluation.",
             schema=UserGuideEvaluationResult,
@@ -145,15 +113,16 @@ class EvaluationUserGuideTask(EvaluationTask):
         res: UserGuideEvaluationResult = res
 
         # evaluate consistency
-        consistency_evaluation_result, _temp_token_usage = self._evaluate_consistency_on_content(content)
+        consistency_evaluation_result, _temp_token_usage = evaluate_consistency_on_content(
+            llm=self.llm,
+            code_structure_db=self.code_structure_db,
+            step_callback=self.step_callback,
+            domain="user guide/API",
+            content=content,
+        )
         if consistency_evaluation_result is None:
             # No sufficient information to evaluate the consistency of the user guide/API documentation
-            consistency_evaluation_result = ConsistencyEvaluationResult(
-                consistency_score="N/A",
-                consistency_assessment="No sufficient information to evaluate the consistency of the user guide/API documentation",
-                consistency_development=[],
-                consistency_strengths=[],
-            )
+            consistency_evaluation_result = default_consistency_result("user guide/API")
 
         # calculate overall score
         res.overall_score = get_overall_score(
