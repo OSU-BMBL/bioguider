@@ -34,7 +34,7 @@ def sanitize_files(
         file_path = Path(repo_path, file)
         if not file_path.exists() or not file_path.is_file():
             continue
-        if detect_file_type(file_path) == "binary":
+        if detect_file_type(file_path) == "binary" and file_path.suffix.lower() not in {".ipynb", ".Rmd"}:
             continue
         if disallowed_exts and file_path.suffix.lower() in disallowed_exts:
             continue
