@@ -8,7 +8,8 @@ from bioguider.agents.agent_utils import (
     PlanAgentResultJsonSchema,
     PlanAgentResult,
 )
-from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
+from bioguider.agents.common_agent import CommonAgent
+from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
@@ -75,6 +76,17 @@ Step Input: <file or directory name>
 Step: <tool name>  # Tool name **must be one** of {tool_names}  
 Step Input: <file or directory name>
 ...
+
+### **Example**
+```
+Step: check_file_related_tool
+Step Input: README.md
+
+Step: summarize_file_tool
+Step Input: {{"file_name": "README.md", "summarize_prompt": "Please extract license information in summarized file content."}}
+...
+```
+
 """)
 
 class CollectionPlanStep(PEOCommonStep):
@@ -133,7 +145,7 @@ class CollectionPlanStep(PEOCommonStep):
 
     def _execute_directly(self, state: CollectionWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
-        agent = CommonAgentTwoSteps(llm=self.llm)
+        agent = CommonAgent(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the collection plan step.",

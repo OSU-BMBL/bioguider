@@ -5,7 +5,7 @@ from langchain_openai.chat_models.base import BaseChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from bioguider.agents.agent_utils import ObservationResult
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
-from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
+from bioguider.agents.common_agent import CommonAgent
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
 from bioguider.utils.constants import MAX_STEP_COUNT
@@ -42,7 +42,7 @@ Here is the 2-level file structure of the repository (`f` = file, `d` = director
 
   ```
   **Analysis**: your analysis here 
-  **FinalAnswer**: {{"final_answer": ["path/to/file1", "path/to/file2", ...]}}
+  **FinalAnswer**: '{{"final_answer": ["path/to/file1", "path/to/file2", ...]}}'
   ```
 4. If you believe **more files still need to be collected**:
 * Provide your reasoning under **Thoughts**:
@@ -57,8 +57,21 @@ Be precise and support your reasoning with evidence from the input.
 ---
 
 ### Notes
-- We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
-  If you find the current information insufficient, share your thoughts instead—we’ll continue with the next round accordingly.
+* We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
+* **Do NOT rush to provide a Final Answer.**
+  Carefully assess whether the currently available information is sufficient.
+
+* If the information is **insufficient or uncertain**:
+
+  * Clearly state **what is missing or unclear**
+  * Explain **what additional information is needed**
+  * Provide your **current reasoning or partial analysis**
+  * **Do NOT produce a Final Answer**
+
+* If the information is **sufficient and you are confident**:
+
+  * Provide a **complete and final answer**
+  * Do not defer or wait for additional rounds
 """
 
 class CollectionObserveStep(PEOCommonStep):
@@ -102,7 +115,7 @@ class CollectionObserveStep(PEOCommonStep):
             instruction = "Now, we have reached max recursion limit, please give me the **final answer** based on the current information" \
                 if step_count == MAX_STEP_COUNT/3 - 2 else "Let's begin thinking."
         system_prompt = self._build_prompt(state)
-        agent = CommonAgentTwoSteps(llm=self.llm)
+        agent = CommonAgent(llm=self.llm) # CommonAgentTwoSteps(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt=instruction,

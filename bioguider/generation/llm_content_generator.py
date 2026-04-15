@@ -629,16 +629,9 @@ class LLMContentGenerator:
             Tuple of (continuation_content, token_usage)
         """
         # Create LLM for continuation (uses 16k tokens by default)
-        from bioguider.agents.agent_utils import get_llm
-        import os
-        
-        llm = get_llm(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            model_name=os.environ.get("OPENAI_MODEL", "gpt-4o"),
-            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-            api_version=os.environ.get("OPENAI_API_VERSION"),
-            azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
-        )
+        from bioguider.agents.agent_utils import get_configured_llm
+
+        llm = get_configured_llm()
         
         conv = CommonConversation(llm)
         
@@ -708,22 +701,16 @@ class LLMContentGenerator:
 
     def generate_full_document(self, target_file: str, evaluation_report: dict, context: str = "", original_content: str = None) -> tuple[str, dict]:
         # Create LLM (uses 16k tokens by default - enough for any document)
-        from bioguider.agents.agent_utils import get_llm
+        from bioguider.agents.agent_utils import get_configured_llm
         import os
         import json
         from datetime import datetime
-        
-        # Get LLM with default 16k token limit
-        llm = get_llm(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            model_name=os.environ.get("OPENAI_MODEL", "gpt-4o"),
-            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-            api_version=os.environ.get("OPENAI_API_VERSION"),
-            azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
-        )
-        
+
+        # Get LLM based on LLM_PROVIDER env var
+        llm = get_configured_llm()
+
         conv = CommonConversation(llm)
-        
+
         # Debug: Save generation settings and context
         debug_info = {
             "target_file": target_file,
@@ -731,8 +718,8 @@ class LLMContentGenerator:
             "evaluation_report": evaluation_report,
             "context_length": len(context),
             "llm_settings": {
-                "model_name": os.environ.get("OPENAI_MODEL", "gpt-4o"),
-                "azure_deployment": os.environ.get("OPENAI_DEPLOYMENT_NAME"),
+                "provider": os.environ.get("LLM_PROVIDER", "azure"),
+                "model": getattr(llm, 'model_name', None) or getattr(llm, 'model', None),
                 "max_tokens": getattr(llm, 'max_tokens', 16384)
             }
         }

@@ -60,6 +60,45 @@ def get_openai():
         max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKEN"),
     )
 
+def get_configured_llm(provider: str = None):
+    """Create an LLM instance based on the specified provider.
+
+    Args:
+        provider: LLM provider to use ("minimax" or "azure").
+                  If None, reads from the LLM_PROVIDER environment variable (defaults to "azure").
+
+    Supported providers:
+    - "minimax": Uses MINIMAX_API_KEY, MINIMAX_MODEL, MINIMAX_BASE_URL
+    - "azure": Uses OPENAI_API_KEY, OPENAI_MODEL, AZURE_OPENAI_ENDPOINT, etc.
+    """
+    if provider is None:
+        provider = os.environ.get("LLM_PROVIDER", "azure")
+    provider = provider.lower()
+
+    if provider == "minimax":
+        return get_llm(
+            api_key=os.environ.get("MINIMAX_API_KEY"),
+            model_name=os.environ.get("MINIMAX_MODEL", "minimax-m2.5"),
+            max_tokens=int(os.environ.get("MINIMAX_MAX_OUTPUT_TOKENS", 16384)),
+        )
+    elif provider == "azure":
+        return get_llm(
+            api_key=os.environ.get("OPENAI_API_KEY"),
+            model_name=os.environ.get("OPENAI_MODEL", "gpt-4o"),
+            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+            api_version=os.environ.get("OPENAI_API_VERSION"),
+            azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
+            max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 16384)),
+        )
+    elif provider == "kimi":
+        return get_llm(
+            api_key=os.environ.get("KIMI_API_KEY"),
+            model_name=os.environ.get("KIMI_MODEL", "kimi-k2.5"),
+            max_tokens=int(os.environ.get("KIMI_MAX_OUTPUT_TOKENS", 16384)),
+        )
+    else:
+        raise ValueError(f"Unsupported LLM_PROVIDER: {provider}. Use 'minimax' or 'azure'.")
+
 def get_llm(
     api_key: str,
     model_name: str="gpt-4o",
@@ -85,6 +124,24 @@ def get_llm(
             temperature=temperature,
             max_tokens=max_tokens,
         )
+    elif model_name.lower().startswith("minimax"):
+        base_url = os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
+        chat = ChatOpenAI(
+            api_key=api_key,
+            model=model_name,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    elif model_name.lower().startswith("kimi"):
+        base_url = os.environ.get("KIMI_BASE_URL", "https://api.moonshot.ai/v1")
+        chat = ChatOpenAI(
+            api_key=api_key,
+            model=model_name,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
     elif model_name.startswith("gpt"):
         llm_params = {
             "api_key": api_key,
@@ -96,7 +153,7 @@ def get_llm(
         if supports_temperature:
             llm_params["temperature"] = temperature
 
-        if azure_endpoint is None: 
+        if azure_endpoint is None:
             # OpenAI
             llm_params["max_tokens"] = max_tokens
             chat = ChatOpenAI(**llm_params)

@@ -8,7 +8,7 @@ import logging
 
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.utils.utils import increase_token_usage
-from bioguider.agents.agent_utils import get_llm
+from bioguider.agents.agent_utils import get_llm, get_configured_llm
 
 load_dotenv()
 
@@ -40,9 +40,20 @@ def get_deepseek():
     )"""
     return None
 
+
+@pytest.fixture(scope="module")
+def minimax_llm():
+    return get_configured_llm("minimax")
+
+
+@pytest.fixture(scope="module")
+def kimi_llm():
+    return get_configured_llm("kimi")
+
+
 @pytest.fixture(scope="module")
 def llm():
-    return get_azure_openai()
+    return get_configured_llm("azure")
 
 @pytest.fixture(scope="module")
 def project_structure():
