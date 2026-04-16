@@ -21,26 +21,45 @@ Here is the 2-level file structure of the repository (f - file, d - directory, l
 
 ### **Instructions**
 Carefully review the **Goal**, **Repository File Structure**, and **Intermediate Output**.
-- If you believe the goal **can be achieved**, proceed as follows:  
-  - Provide your reasoning under **Analysis**  
-  - Then provide your result under **FinalAnswer**  
-  ```
-  **Analysis**: your analysis here  
-  **FinalAnswer**: your final answer here, in **raw json format**, **including** the surrounding "{{}}" but **without** using code fence (```json ... ```), 
-  For example, output exactly: {final_answer_example}
-  ```
-- If the information is **not sufficient** to achieve the goal, simply explain why under **Thoughts**:  
-  ```
-  **Thoughts**: your thoughts here
-  ```
+Decide whether the goal can be achieved with the current information:
+- If YES — fill `Analysis` and `FinalAnswer` (see Output Format below), leave `Thoughts` null.
+- If NO — fill `Thoughts` explaining what is still missing, leave `Analysis` and
+  `FinalAnswer` null. We will iterate in the next round.
+
 Be precise and support your reasoning with evidence from the input.
 
 ### **Important Instructions**
 {important_instructions}
 
 ### Notes
-We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
-If you find the current information insufficient, share your reasoning or thoughts instead—we’ll continue with the next round accordingly.
+We are collecting information over multiple rounds; your thoughts and the output of this
+step will be persisted, so **do not rush to provide a Final Answer**. If you find the
+current information insufficient, share your reasoning under `Thoughts` and we will
+continue with the next round accordingly.
+
+### **Output Format (STRICT — read carefully)**
+You MUST return a **single raw JSON object** — nothing else. No prose before or after,
+no `<think>` blocks, no markdown, no ```json fences, no commentary.
+
+The JSON object has exactly three optional fields:
+
+  - `Analysis`   : string. Your reasoning when you ARE confident and ready to finalize.
+  - `FinalAnswer`: string. A JSON-encoded string that matches the goal's expected shape.
+                   For this goal, the shape is:
+                   {final_answer_example}
+                   Emit it as a **string** (use escaped quotes inside the JSON string).
+                   Only fill this when you are confident the goal is fully achieved.
+  - `Thoughts`   : string. Your reasoning when you are NOT yet ready — describe what is
+                   missing and what you still need in the next round.
+
+**Hard rules — any violation means your answer is wrong:**
+  1. Return raw JSON only. No code fences, no leading/trailing text.
+  2. Fill either (`Analysis` + `FinalAnswer`) OR (`Thoughts`). Not both.
+  3. The value of `FinalAnswer` is a **string**, not a nested JSON object.
+  4. Do NOT rush to finalize. If uncertain, use `Thoughts` and leave `FinalAnswer` null.
+
+**Concrete example (not yet ready):**
+{{"Analysis": null, "FinalAnswer": null, "Thoughts": "Still need to inspect pyproject.toml to confirm the project type before finalizing."}}
 """
 
 
