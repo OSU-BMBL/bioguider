@@ -6,7 +6,11 @@ from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.agents.collection_task import CollectionTask
-from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, CollectionGoalItemEnum
+from bioguider.agents.prompt_utils import (
+    EVALUATION_INSTRUCTION,
+    CollectionGoalItemEnum,
+    OUTPUT_FORMAT_STRICT_EVALUATION,
+)
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
     ProjectMetadata,
@@ -57,7 +61,7 @@ Your task is to analyze the provided files related to installation and generate 
 ### Installation Files Provided:
 {installation_files_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 
 FREE_EVALUATION_INSTALLATION_SYSTEM_PROMPT = """
@@ -135,7 +139,7 @@ Your output must **exactly match** the following format. Do not add or omit any 
 ### Installation Files Provided:
 {installation_files_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 class EvaluationInstallationTask(EvaluationTask):
     def __init__(

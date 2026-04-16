@@ -1,3 +1,4 @@
+from bioguider.agents.prompt_utils import OUTPUT_FORMAT_STRICT_EVALUATION
 
 INDIVIDUAL_USERGUIDE_EVALUATION_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of user guide in software repositories. 
@@ -175,5 +176,5 @@ Your final report must **exactly match** the following format. Do not add or omi
 
 ---
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 

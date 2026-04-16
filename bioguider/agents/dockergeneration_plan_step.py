@@ -14,9 +14,10 @@ from bioguider.agents.agent_utils import (
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.dockergeneration_task_utils import (
-    DockerGenerationWorkflowState, 
+    DockerGenerationWorkflowState,
     prepare_provided_files_string,
 )
+from bioguider.agents.prompt_utils import OUTPUT_FORMAT_STRICT_PLAN
 
 DOCKERGENERATION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""
 You are an expert in software containerization and reproducibility engineering.
@@ -76,15 +77,12 @@ You have access to the following function tools:
 9. Always use `generate_Dockerfile_tool` as the **final action step** in your plan to ensure the Dockerfile is generated at the end of the process.
 ---
 
-### **Output Format**  
-Your plan should be returned as a sequence of step actions in the following format:
-
-Step: <tool name>   # Tool name must be one of {tool_names}  
-Step Input: <file or directory name>
-
-Step: <tool name>  
-Step Input: <file or directory name>
-...
+""" + OUTPUT_FORMAT_STRICT_PLAN + """
+### **Docker-specific reminders**
+ - The **final** entry in `actions` MUST use `generate_Dockerfile_tool`.
+ - When you call `generate_Dockerfile_tool`, pass the Dockerfile filename `demo-bioguider-{docker_id}.Dockerfile` as its input.
+ - When you call `write_file_tool`, pass a JSON object as `input` with both `file_name` and `file_content` keys, e.g.
+   `{{"name": "write_file_tool", "input": {{"file_name": "demo.py", "file_content": "print('hello')"}}}}`.
 """)
 
 class DockerGenerationPlanStep(PEOCommonStep):

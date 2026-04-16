@@ -133,3 +133,38 @@ class EvaluationSubmissionRequirementsResult(BaseModel):
     license: bool | None
     hardware_requirements: bool | None
     compatible_os: bool | None
+
+
+class EvaluationStepEnum(Enum):
+    identify = "identify"
+    readme = "readme"
+    installation = "installation"
+    userguide = "userguide"
+    tutorial = "tutorial"
+    submission_requirements = "submission_requirements"
+
+
+class StepStatus(Enum):
+    pending = "pending"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+    skipped = "skipped"
+
+
+class EvaluationStepResult(BaseModel):
+    step: str
+    status: str = "pending"
+    evaluation: Optional[dict] = None
+    files: Optional[list[str]] = None
+    error: Optional[str] = None
+    token_usage: dict = Field(default_factory=lambda: {**DEFAULT_TOKEN_USAGE})
+
+
+class BatchRepoEvaluationResult(BaseModel):
+    repo_url: str
+    status: str = "pending"
+    project_metadata: Optional[dict] = None
+    steps: dict[str, EvaluationStepResult] = Field(default_factory=dict)
+    total_token_usage: dict = Field(default_factory=lambda: {**DEFAULT_TOKEN_USAGE})
+    error: Optional[str] = None

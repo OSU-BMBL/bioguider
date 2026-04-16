@@ -7,7 +7,11 @@ from bioguider.agents.agent_utils import ObservationResult
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
 from bioguider.agents.common_agent import CommonAgent
 from bioguider.agents.peo_common_step import PEOCommonStep
-from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
+from bioguider.agents.prompt_utils import (
+    COLLECTION_GOAL,
+    COLLECTION_PROMPTS,
+    OUTPUT_FORMAT_STRICT_OBSERVE,
+)
 from bioguider.utils.constants import MAX_STEP_COUNT
 
 
@@ -29,50 +33,27 @@ Here is the 2-level file structure of the repository (`f` = file, `d` = director
 ### **Instructions**
 1. Your goal is to identify files that are relevant to the **goal item**.
 2. Carefully review the **Goal**, **Repository Structure**, and **Intermediate Output**.
-3. If you believe **all relevant files** have been collected:
-
-* Proceed with the following format:
-
-  * Provide your reasoning under **Analysis**
-  * Then list all relevant files and folders under **FinalAnswer**
-  * **FinalAnswer** format must exactly match this format:
-    **FinalAnswer**: {{"final_answer": [<file path>, <file path>, <file path>, ...]}}
-  * Be sure to include the **full relative paths** with respect to the repository root.
-  * Your answer **must exactly match the follwing format** (note: no JSON code block, no additional comments), **do not** make up anything:
-
-  ```
-  **Analysis**: your analysis here 
-  **FinalAnswer**: '{{"final_answer": ["path/to/file1", "path/to/file2", ...]}}'
-  ```
-4. If you believe **more files still need to be collected**:
-* Provide your reasoning under **Thoughts**:
-
-  ```
-  **Thoughts**: your explanation here
-  ```
-  
-5. Important instructions:
+3. Decide whether you have collected **all relevant files**:
+   * If YES — fill `Analysis` and `FinalAnswer` (see Output Format below), leave `Thoughts` null.
+     Include the **full relative path** of every file with respect to the repository root.
+   * If NO — fill `Thoughts` explaining what is still missing, leave `Analysis` and
+     `FinalAnswer` null. We will iterate in the next round.
+4. Important instructions:
   {important_instructions}
 Be precise and support your reasoning with evidence from the input.
 ---
 
 ### Notes
-* We are collecting information over multiple rounds, your thoughts and the output of this step will be persisted, so please **do not rush to provide a Final Answer**.  
-* **Do NOT rush to provide a Final Answer.**
-  Carefully assess whether the currently available information is sufficient.
+* We are collecting information over multiple rounds; your thoughts and the output of this
+  step will be persisted. **Do not rush to provide a Final Answer.**
+* If the information is **insufficient or uncertain**, clearly state what is missing and
+  what additional information is needed — do NOT finalize.
+* If the information is **sufficient and you are confident**, emit a complete final answer
+  in this round — do not defer unnecessarily.
 
-* If the information is **insufficient or uncertain**:
+---
 
-  * Clearly state **what is missing or unclear**
-  * Explain **what additional information is needed**
-  * Provide your **current reasoning or partial analysis**
-  * **Do NOT produce a Final Answer**
-
-* If the information is **sufficient and you are confident**:
-
-  * Provide a **complete and final answer**
-  * Do not defer or wait for additional rounds
-"""
+""" + OUTPUT_FORMAT_STRICT_OBSERVE
 
 class CollectionObserveStep(PEOCommonStep):
     def __init__(

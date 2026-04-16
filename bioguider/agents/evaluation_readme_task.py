@@ -5,7 +5,7 @@ from typing import Callable
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
-from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
+from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, OUTPUT_FORMAT_STRICT_EVALUATION
 from bioguider.utils.gitignore_checker import GitignoreChecker
 
 from .evaluation_utils import compute_readability_metrics, run_llm_evaluation
@@ -29,7 +29,7 @@ from bioguider.rag.config import configs
 logger = logging.getLogger(__name__)
 
 README_PROJECT_LEVEL_SYSTEM_PROMPT = """
-You are an expert in evaluating the quality of README files in software repositories. 
+You are an expert in evaluating the quality of README files in software repositories.
 Your task is to analyze the provided README file and identify if it is a project-level README file or a folder-level README file.
 
 ---
@@ -48,10 +48,12 @@ Your task is to analyze the provided README file and identify if it is a project
 
 ### **Output Format**
 Based solely on the file's **path**, **name**, and **content**, classify the README as either a **project-level** or **folder-level** README.
-Output **exactly** the following format:
+Output **exactly** the following format — no prose, no code fences, no extra sections:
 
 **FinalAnswer**
 **Project-level:** [Yes / No]
+
+The `**Project-level:**` value MUST be exactly `Yes` or `No` (no synonyms, no hedging).
 
 ---
 
@@ -63,7 +65,7 @@ Output **exactly** the following format:
 ### **README content**
 {readme_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 STRUCTURED_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -214,7 +216,7 @@ Note: Be thorough and comprehensive. Report EVERY issue you find, even if you're
 ### **LICENSE Summarized Content**
 {license_summarized_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 PROJECT_LEVEL_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -360,7 +362,7 @@ Your output must **exactly match** the following format. Do not add or omit any 
 ### **README content**
 {readme_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 FOLDER_LEVEL_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -428,7 +430,7 @@ For each criterion below, provide a brief assessment followed by specific, actio
 
 ### **README Content:**
 {readme_content}
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 class EvaluationREADMETask(EvaluationTask):
     def __init__(

@@ -8,16 +8,17 @@ from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.agents.agent_utils import CustomOutputParser, CustomPromptTemplate
-from bioguider.agents.peo_common_step import ( 
+from bioguider.agents.peo_common_step import (
     PEOCommonStep,
 )
+from bioguider.agents.prompt_utils import OUTPUT_FORMAT_STRICT_REACT
 
 logger = logging.getLogger(__name__)
 
 ## execution system prompt
 IDENTIFICATION_EXECUTION_SYSTEM_PROMPT = """You are an expert Python developer.
 
-You are given a **plan** and are expected to complete it using Python code and the available tools.
+You are given a **plan** and must complete it strictly using the available tools.
 
 ---
 
@@ -26,66 +27,9 @@ You are given a **plan** and are expected to complete it using Python code and t
 
 ---
 
-### **Your Task**
-
-Execute the plan step by step using the format below:
-
-```
-Thought: Describe what you are thinking or planning to do next.  
-Action: The tool you are going to use (must be one of: {tool_names})  
-Action Input: The input to the selected action  
-Observation: The result returned by the action  
-```
-
-You may repeat the **Thought → Action → Action Input → Observation** loop as many times as needed.
-
-Once the plan is fully completed, output the result in the following format:
-```
-Thought: I have completed the plan.
-Final Answer:
-Action: {{tool_name}}
-Action Input: {{file_name1}}
-Action Observation: {{Observation1}}
----
-Action: {{tool_name}}
-Action Input: {{file_name2}}
-Action Observation: {{Observation2}}
----
-...
-```
+""" + OUTPUT_FORMAT_STRICT_REACT + """
 
 ---
-
-### **Example**
-```
-Action: summarize_file_tool  
-Action Input: README.md  
-Action Input: "Please extract license information in summarized file content."
-Observation: # BioGuider\nBioGuider is a Python package for bioinformatics.\n...
-...
-Final Answer:
-Action: summarize_file_tool
-Action Input: README.md
-Action Input: "N/A"
-Action Observation: # BioGuider\nBioGuider is a Python package for bioinformatics.\n...
----
-Action: check_file_related_tool
-Action Input: pyproject.toml
-Action Observation: Yes, the file is related to the project.
----
-...
-```
-
----
-
-### **Important Notes**
-
-- You must strictly follow the provided plan.  
-- **Do not take any additional or alternative actions**, even if:  
-  - No relevant result is found  
-  - The file content is missing, empty, or irrelevant  
-- If no information is found in a step, simply proceed to the next action in the plan without improvising.  
-- Only use the tools specified in the plan actions. No independent decisions or extra steps are allowed.
 
 ### **Plan**
 {plan_actions}
