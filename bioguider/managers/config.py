@@ -191,6 +191,66 @@ def min_per_category_from_total(
     return max(1, math.ceil(target_total_errors / denom))
 
 
+def compute_scorable_breakdown(error_records, false_positives_total: int) -> dict:
+    """Compute precision / recall / F1 / fix_rate with UNSCORABLE_CATEGORIES removed.
+
+    Shared by ``bioguider.generation.unified_metrics.EvaluationResult`` and
+    ``bioguider.generation.benchmark_metrics.BenchmarkResult`` so the scorable
+    story stays identical across both evaluators. Either pass dataclass
+    instances with ``.category`` / ``.is_fixed`` attrs or plain dicts with
+    the same keys.
+
+    Args:
+        error_records: iterable of per-error records (ErrorEvaluation or
+            ErrorMetrics instance or dict).
+        false_positives_total: headline FP count; mirrored to the scorable
+            bucket because FPs are category-agnostic (unintended changes to
+            non-injected text).
+
+    Returns:
+        Dict with keys ``tp_scorable``, ``fn_scorable``, ``fp_scorable``,
+        ``total_scorable``, ``precision_scorable``, ``recall_scorable``,
+        ``f1_score_scorable``, ``fix_rate_scorable``.
+    """
+    def _get(rec, attr):
+        if hasattr(rec, attr):
+            return getattr(rec, attr)
+        if isinstance(rec, dict):
+            return rec.get(attr)
+        return None
+
+    tp_s = 0
+    fn_s = 0
+    for rec in error_records:
+        if _get(rec, "category") in UNSCORABLE_CATEGORIES:
+            continue
+        if _get(rec, "is_fixed"):
+            tp_s += 1
+        else:
+            fn_s += 1
+
+    fp_s = false_positives_total
+    total = tp_s + fn_s
+    precision = tp_s / (tp_s + fp_s) if (tp_s + fp_s) > 0 else 0.0
+    recall = tp_s / total if total > 0 else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
+    fix_rate = tp_s / total if total > 0 else 0.0
+    return {
+        "tp_scorable": tp_s,
+        "fn_scorable": fn_s,
+        "fp_scorable": fp_s,
+        "total_scorable": total,
+        "precision_scorable": precision,
+        "recall_scorable": recall,
+        "f1_score_scorable": f1,
+        "fix_rate_scorable": fix_rate,
+    }
+
+
 # File category definitions
 FILE_CATEGORIES = {
     "readme": {

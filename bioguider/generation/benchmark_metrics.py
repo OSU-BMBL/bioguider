@@ -13,6 +13,7 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.agents.common_conversation import CommonConversation
+from bioguider.managers.config import UNSCORABLE_CATEGORIES, compute_scorable_breakdown
 
 
 @dataclass
@@ -54,13 +55,26 @@ class BenchmarkResult:
     recall: float = 0.0
     f1_score: float = 0.0
     fix_rate: float = 0.0
-    
+
+    # Scorable-only metrics — UNSCORABLE_CATEGORIES excluded. Headline numbers
+    # for the paper figure; the `function` category is injected but not scored
+    # because BioGuider's locator uses function names as anchors (structurally
+    # unfixable by design).
+    true_positives_scorable: int = 0
+    false_negatives_scorable: int = 0
+    false_positives_scorable: int = 0
+    total_errors_scorable: int = 0
+    precision_scorable: float = 0.0
+    recall_scorable: float = 0.0
+    f1_score_scorable: float = 0.0
+    fix_rate_scorable: float = 0.0
+
     # Detailed breakdowns
     per_category: Dict[str, Dict[str, int]] = field(default_factory=dict)
     per_file: Dict[str, Dict[str, int]] = field(default_factory=dict)
     error_details: List[ErrorMetrics] = field(default_factory=list)
     fp_details: List[FalsePositive] = field(default_factory=list)
-    
+
     def compute_derived_metrics(self):
         """Compute precision, recall, F1 from TP/FP/FN."""
         # Precision = TP / (TP + FP)
@@ -68,25 +82,40 @@ class BenchmarkResult:
             self.precision = self.true_positives / (self.true_positives + self.false_positives)
         else:
             self.precision = 0.0
-        
+
         # Recall = TP / (TP + FN)
         if self.true_positives + self.false_negatives > 0:
             self.recall = self.true_positives / (self.true_positives + self.false_negatives)
         else:
             self.recall = 0.0
-        
+
         # F1 = 2 * (precision * recall) / (precision + recall)
         if self.precision + self.recall > 0:
             self.f1_score = 2 * (self.precision * self.recall) / (self.precision + self.recall)
         else:
             self.f1_score = 0.0
-        
+
         # Fix rate = TP / (TP + FN)
         total_errors = self.true_positives + self.false_negatives
         if total_errors > 0:
             self.fix_rate = self.true_positives / total_errors
         else:
             self.fix_rate = 0.0
+
+        # Scorable-only metrics — shared helper so stress-test figures and
+        # unified_metrics stay in sync on the UNSCORABLE_CATEGORIES carve-out.
+        b = compute_scorable_breakdown(
+            self.error_details,
+            false_positives_total=self.false_positives,
+        )
+        self.true_positives_scorable = b["tp_scorable"]
+        self.false_negatives_scorable = b["fn_scorable"]
+        self.false_positives_scorable = b["fp_scorable"]
+        self.total_errors_scorable = b["total_scorable"]
+        self.precision_scorable = b["precision_scorable"]
+        self.recall_scorable = b["recall_scorable"]
+        self.f1_score_scorable = b["f1_score_scorable"]
+        self.fix_rate_scorable = b["fix_rate_scorable"]
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -101,6 +130,15 @@ class BenchmarkResult:
             "recall": round(self.recall, 4),
             "f1_score": round(self.f1_score, 4),
             "fix_rate": round(self.fix_rate, 4),
+            "unscorable_categories": sorted(UNSCORABLE_CATEGORIES),
+            "total_errors_scorable": self.total_errors_scorable,
+            "true_positives_scorable": self.true_positives_scorable,
+            "false_negatives_scorable": self.false_negatives_scorable,
+            "false_positives_scorable": self.false_positives_scorable,
+            "precision_scorable": round(self.precision_scorable, 4),
+            "recall_scorable": round(self.recall_scorable, 4),
+            "f1_score_scorable": round(self.f1_score_scorable, 4),
+            "fix_rate_scorable": round(self.fix_rate_scorable, 4),
             "per_category": self.per_category,
             "per_file": self.per_file,
             "error_details": [

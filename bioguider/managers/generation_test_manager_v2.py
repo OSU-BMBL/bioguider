@@ -68,6 +68,7 @@ class GenerationTestManagerV2(BaseTestManager):
         phase: Phase = "full",
         resume_from: Optional[str] = None,
         example_files: Optional[List[str]] = None,
+        target_total_errors: Optional[int] = None,
     ) -> str:
         """
         Run quantifiable testing with multi-file error injection.
@@ -123,6 +124,7 @@ class GenerationTestManagerV2(BaseTestManager):
             tmp_repo_path=tmp_repo_path,
             min_per_category=min_per_category,
             project_terms=project_terms,
+            target_total_errors=target_total_errors,
         )
 
         # 5. Save injection manifest

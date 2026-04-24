@@ -22,7 +22,7 @@ try:
 except ImportError:
     BaseChatOpenAI = Any  # type: ignore
 
-from bioguider.managers.config import UNSCORABLE_CATEGORIES
+from bioguider.managers.config import UNSCORABLE_CATEGORIES, compute_scorable_breakdown
 
 
 class FixStatus(str, Enum):
@@ -254,43 +254,21 @@ class EvaluationResult:
             self.fix_rate = 0.0
             self.success_rate = 0.0
 
-        # ---- Scorable-only metrics ---------------------------------------
-        # Re-derive TP/FN by category, excluding UNSCORABLE_CATEGORIES.
-        # FPs are category-agnostic (harmful changes to non-injected text), so
-        # we mirror the headline FP count into both totals.
-        tp_s = 0
-        fn_s = 0
-        for ev in self.error_evaluations:
-            if ev.category in UNSCORABLE_CATEGORIES:
-                continue
-            if ev.is_fixed:
-                tp_s += 1
-            else:
-                fn_s += 1
-        self.true_positives_scorable = tp_s
-        self.false_negatives_scorable = fn_s
-        self.false_positives_scorable = self.false_positives
-        self.total_errors_scorable = tp_s + fn_s
-
-        if tp_s + self.false_positives > 0:
-            self.precision_scorable = tp_s / (tp_s + self.false_positives)
-        else:
-            self.precision_scorable = 0.0
-
-        if tp_s + fn_s > 0:
-            self.recall_scorable = tp_s / (tp_s + fn_s)
-            self.fix_rate_scorable = tp_s / (tp_s + fn_s)
-        else:
-            self.recall_scorable = 0.0
-            self.fix_rate_scorable = 0.0
-
-        if self.precision_scorable + self.recall_scorable > 0:
-            self.f1_score_scorable = (
-                2 * self.precision_scorable * self.recall_scorable
-                / (self.precision_scorable + self.recall_scorable)
-            )
-        else:
-            self.f1_score_scorable = 0.0
+        # Scorable-only metrics (UNSCORABLE_CATEGORIES filtered). Shared helper
+        # keeps the math identical with BenchmarkEvaluator.BenchmarkResult so
+        # the stress-test CSV and the unified evaluator never drift.
+        b = compute_scorable_breakdown(
+            self.error_evaluations,
+            false_positives_total=self.false_positives,
+        )
+        self.true_positives_scorable = b["tp_scorable"]
+        self.false_negatives_scorable = b["fn_scorable"]
+        self.false_positives_scorable = b["fp_scorable"]
+        self.total_errors_scorable = b["total_scorable"]
+        self.precision_scorable = b["precision_scorable"]
+        self.recall_scorable = b["recall_scorable"]
+        self.f1_score_scorable = b["f1_score_scorable"]
+        self.fix_rate_scorable = b["fix_rate_scorable"]
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""

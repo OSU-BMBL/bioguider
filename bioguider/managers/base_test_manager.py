@@ -256,6 +256,7 @@ class BaseTestManager(ABC):
         tmp_repo_path: str,
         min_per_category: int,
         project_terms: Optional[List[str]] = None,
+        target_total_errors: Optional[int] = None,
     ) -> Dict[str, InjectionResult]:
         """
         Inject errors into multiple files.
@@ -265,10 +266,34 @@ class BaseTestManager(ABC):
             tmp_repo_path: Path to the temporary repository
             min_per_category: Minimum errors per category
             project_terms: Optional list of project-specific terms
+            target_total_errors: When set, overrides ``min_per_category`` with
+                an even-spread derivation across all (file, scorable-category)
+                slots. Gives the gradient runner a predictable total budget
+                without the caller needing to know ``n_files`` up front.
 
         Returns:
             Dict mapping relative paths to InjectionResults
         """
+        if target_total_errors is not None:
+            from bioguider.managers.config import (
+                SCORABLE_CATEGORIES,
+                min_per_category_from_total,
+            )
+
+            n_files = sum(
+                len(files) for files in file_selection.files_by_category.values()
+            )
+            min_per_category = min_per_category_from_total(
+                target_total_errors=target_total_errors,
+                n_files=max(1, n_files),
+                n_categories=len(SCORABLE_CATEGORIES),
+            )
+            self.print_step(
+                "BudgetTranslate",
+                f"target_total_errors={target_total_errors} n_files={n_files} "
+                f"-> min_per_category={min_per_category}",
+            )
+
         all_results: Dict[str, InjectionResult] = {}
 
         for category, files in file_selection.files_by_category.items():

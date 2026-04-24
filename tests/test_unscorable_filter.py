@@ -134,3 +134,83 @@ class TestScorableMetricsSplit:
         # FPs are category-agnostic so they mirror to the scorable bucket as-is.
         assert result.false_positives_scorable == 4
         assert result.precision_scorable == 1 / 5
+
+
+class TestBenchmarkResultScorable:
+    """D2-style scorable carve-out in BenchmarkResult (stress-test path)."""
+
+    def _result_with(self, function_tp=0, function_fn=0, typo_tp=0, typo_fn=0, fp=0):
+        from bioguider.generation.benchmark_metrics import (
+            BenchmarkResult,
+            ErrorMetrics,
+        )
+
+        errors = []
+        for _ in range(function_tp):
+            errors.append(ErrorMetrics("e", "function", "f", True, "", "", "fixed_to_baseline"))
+        for _ in range(function_fn):
+            errors.append(ErrorMetrics("e", "function", "f", False, "", "", "unchanged"))
+        for _ in range(typo_tp):
+            errors.append(ErrorMetrics("e", "typo", "f", True, "", "", "fixed_to_baseline"))
+        for _ in range(typo_fn):
+            errors.append(ErrorMetrics("e", "typo", "f", False, "", "", "unchanged"))
+        r = BenchmarkResult(
+            error_count=10,
+            file_count=1,
+            true_positives=function_tp + typo_tp,
+            false_negatives=function_fn + typo_fn,
+            false_positives=fp,
+            error_details=errors,
+        )
+        r.compute_derived_metrics()
+        return r
+
+    def test_scorable_excludes_function(self):
+        r = self._result_with(function_tp=5, typo_tp=3, typo_fn=2)
+        # Headline sees 8 / 10 (80%). Scorable sees 3 / 5 (60%).
+        assert r.fix_rate == 0.8
+        assert r.fix_rate_scorable == 0.6
+        assert r.f1_score_scorable < r.f1_score
+
+    def test_no_unscorable_yields_parity(self):
+        r = self._result_with(typo_tp=4, typo_fn=1)
+        assert r.f1_score == r.f1_score_scorable
+
+    def test_to_dict_has_scorable_keys(self):
+        r = self._result_with(typo_tp=1, function_tp=1)
+        d = r.to_dict()
+        for k in (
+            "f1_score_scorable",
+            "precision_scorable",
+            "recall_scorable",
+            "fix_rate_scorable",
+            "true_positives_scorable",
+            "false_negatives_scorable",
+            "total_errors_scorable",
+            "unscorable_categories",
+        ):
+            assert k in d, f"Missing scorable key in BenchmarkResult.to_dict: {k}"
+        assert d["unscorable_categories"] == ["function"]
+
+
+class TestSharedHelperParity:
+    """The shared ``compute_scorable_breakdown`` produces identical numbers
+    whether fed dataclass instances or plain dicts — both evaluators rely on this."""
+
+    def test_dict_and_dataclass_parity(self):
+        from bioguider.generation.benchmark_metrics import ErrorMetrics
+        from bioguider.managers.config import compute_scorable_breakdown
+
+        dc = [
+            ErrorMetrics("a", "typo", "f", True, "", "", "fixed_to_baseline"),
+            ErrorMetrics("b", "typo", "f", False, "", "", "unchanged"),
+            ErrorMetrics("c", "function", "f", True, "", "", "fixed_to_baseline"),
+        ]
+        dicts = [
+            {"category": "typo", "is_fixed": True},
+            {"category": "typo", "is_fixed": False},
+            {"category": "function", "is_fixed": True},
+        ]
+        a = compute_scorable_breakdown(dc, 0)
+        b = compute_scorable_breakdown(dicts, 0)
+        assert a == b

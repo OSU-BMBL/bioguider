@@ -19,6 +19,9 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 
 import pytest
+from langchain_openai import ChatOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from openai import RateLimitError
 
 from bioguider.generation.llm_injector import LLMErrorInjector
 from bioguider.generation.benchmark_metrics import BenchmarkEvaluator, BenchmarkResult
@@ -41,8 +44,8 @@ QUICK_STRESS_LEVELS = [10, 40, 100]
 # Output directory
 OUTPUT_BASE = "outputs/single_file_stress"
 
-# Max workers for parallel processing
-MAX_WORKERS = 16
+# Max workers for parallel processing (override with STRESS_MAX_WORKERS env var)
+MAX_WORKERS = int(os.environ.get("STRESS_MAX_WORKERS", "8"))
 
 
 # ============================================================================
@@ -73,6 +76,53 @@ class StressLevelResult:
     duration_seconds: float
     category_results: List[CategoryResult] = None  # Per-category breakdown
     model_name: str = "bioguider"  # Model used for fixing
+
+    # Scorable variants — UNSCORABLE_CATEGORIES excluded. Populated by
+    # ``_populate_scorable`` from ``category_results`` before save. Kept
+    # optional so legacy callers that don't populate category_results still
+    # round-trip.
+    total_errors_injected_scorable: int = 0
+    errors_fixed_scorable: int = 0
+    errors_unfixed_scorable: int = 0
+    fix_rate_scorable: float = 0.0
+    precision_scorable: float = 0.0
+    recall_scorable: float = 0.0
+    f1_score_scorable: float = 0.0
+
+
+def _populate_scorable(r: "StressLevelResult") -> None:
+    """Fill in the scorable fields from the per-category breakdown.
+
+    Uses the shared UNSCORABLE_CATEGORIES / compute-scorable helper from
+    bioguider.managers.config so the stress-test CSV and the
+    UnifiedMetricsEvaluator.EvaluationResult stay in sync on the
+    carve-out story (function bucket injected, not in denominator).
+    """
+    from bioguider.managers.config import UNSCORABLE_CATEGORIES
+
+    cats = r.category_results or []
+    fixed_s = sum(c.fixed for c in cats if c.category not in UNSCORABLE_CATEGORIES)
+    unfixed_s = sum(c.unfixed for c in cats if c.category not in UNSCORABLE_CATEGORIES)
+    injected_s = fixed_s + unfixed_s
+
+    # FPs are not category-attributed in this pipeline; mirror the headline
+    # pseudo-FP count (derived from precision). If precision==1.0 and
+    # recall<1.0, FP==0, so scorable precision tracks fix_rate exactly.
+    tp_plus_fp = r.errors_fixed / r.precision if r.precision > 0 else r.errors_fixed
+    fp_count = max(0, tp_plus_fp - r.errors_fixed)
+
+    r.total_errors_injected_scorable = injected_s
+    r.errors_fixed_scorable = fixed_s
+    r.errors_unfixed_scorable = unfixed_s
+    r.fix_rate_scorable = fixed_s / injected_s if injected_s > 0 else 0.0
+    r.precision_scorable = fixed_s / (fixed_s + fp_count) if (fixed_s + fp_count) > 0 else 0.0
+    r.recall_scorable = fixed_s / injected_s if injected_s > 0 else 0.0
+    r.f1_score_scorable = (
+        2 * r.precision_scorable * r.recall_scorable
+        / (r.precision_scorable + r.recall_scorable)
+        if (r.precision_scorable + r.recall_scorable) > 0
+        else 0.0
+    )
 
 
 # ============================================================================
@@ -179,44 +229,14 @@ PROMPTS = {
 # MODEL CONFIGURATIONS
 # ============================================================================
 
-# API endpoints
-OLLAMA_BASE_URL = "https://bmblx.bmi.osumc.edu/ollama"
-CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
-
-# Available models for comparison
+# Available models — all routed through LiteLLM proxy (OPENAI_BASE_URL)
+# gpt-oss model id: verify via `curl $OPENAI_BASE_URL/models` if routing fails
 MODELS = {
-    # Azure OpenAI (current)
-    "gpt4o": {
-        "type": "azure",
-        "description": "GPT-4o (Azure OpenAI)"
-    },
-    # Claude (Anthropic)
-    "claude_sonnet": {
-        "type": "claude",
-        "model": "claude-sonnet-4-20250514",
-        "description": "Claude Sonnet 4 (Anthropic)"
-    },
-    # Ollama models
-    "qwen3_0.6b": {
-        "type": "ollama",
-        "model": "qwen3:0.6b",
-        "description": "Qwen3 0.6B (fast, small)"
-    },
-    "qwen3_30b": {
-        "type": "ollama",
-        "model": "qwen3:30b",
-        "description": "Qwen3 30B (balanced)"
-    },
-    "gpt_oss_20b": {
-        "type": "ollama",
-        "model": "gpt-oss:20b",
-        "description": "GPT-OSS 20B (open source)"
-    },
-    "deepseek_r1_8b": {
-        "type": "ollama",
-        "model": "deepseek-r1:8b",
-        "description": "DeepSeek-R1 8B (reasoning)"
-    },
+    "gpt-5.4":   {"type": "litellm", "model": "gpt-5.4"},
+    "kimi-k2.5": {"type": "litellm", "model": "kimi-k2.5"},
+    "glm-5":     {"type": "litellm", "model": "glm-5"},
+    "gpt-oss":   {"type": "litellm", "model": "gpt-oss-120b"},
+    "gpt-4o":    {"type": "litellm", "model": "gpt-4o"},
 }
 
 def print_prompts():
@@ -236,87 +256,20 @@ def print_models():
     print("AVAILABLE MODELS")
     print("="*70)
     for name, info in MODELS.items():
-        print(f"  {name}: {info['description']} ({info['type']})")
+        desc = info.get('description', info.get('model', name))
+        print(f"  {name}: {desc} ({info.get('type', 'litellm')})")
     print("="*70 + "\n")
 
 
-def call_ollama(model: str, prompt: str) -> str:
-    """
-    Call Ollama API to generate response.
-    
-    Args:
-        model: Ollama model name (e.g., "qwen3:30b")
-        prompt: The prompt to send
-        
-    Returns: Generated text response
-    """
-    import requests
-    
-    url = f"{OLLAMA_BASE_URL}/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "temperature": 0.3,  # Lower for more deterministic fixes
-        "num_predict": 8000,  # Enough for full document
-    }
-    
-    try:
-        response = requests.post(url, json=payload, timeout=300)
-        response.raise_for_status()
-        result = response.json()
-        return result.get("response", "")
-    except Exception as e:
-        print(f"  Ollama API error: {e}")
-        return ""
-
-
-def call_claude(model: str, prompt: str) -> str:
-    """
-    Call Claude API to generate response.
-    
-    Args:
-        model: Claude model name (e.g., "claude-sonnet-4-20250514")
-        prompt: The prompt to send
-        
-    Returns: Generated text response
-    """
-    import requests
-    from dotenv import load_dotenv
-    
-    load_dotenv()
-    api_key = os.environ.get("CLAUDE_API_KEY", "")
-    
-    if not api_key:
-        print("  Warning: CLAUDE_API_KEY not found in environment")
-        return ""
-    
-    headers = {
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json"
-    }
-    
-    payload = {
-        "model": model,
-        "max_tokens": 8000,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ]
-    }
-    
-    try:
-        response = requests.post(CLAUDE_API_URL, headers=headers, json=payload, timeout=300)
-        response.raise_for_status()
-        result = response.json()
-        # Claude returns content as a list of blocks
-        content_blocks = result.get("content", [])
-        if content_blocks and isinstance(content_blocks, list):
-            return content_blocks[0].get("text", "")
-        return ""
-    except Exception as e:
-        print(f"  Claude API error: {e}")
-        return ""
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=2, min=4, max=60),
+    retry=retry_if_exception_type(RateLimitError),
+)
+def _invoke_with_retry(llm: ChatOpenAI, prompt: str) -> str:
+    """Invoke an LLM with exponential-backoff retry on RateLimitError."""
+    response = llm.invoke(prompt)
+    return response.content if hasattr(response, "content") else str(response)
 
 
 def fix_with_model(
@@ -344,36 +297,27 @@ def fix_with_model(
     
     Returns fixed content.
     """
-    # Select prompt
     if prompt_name in PROMPTS:
         prompt_base = PROMPTS[prompt_name]["prompt"]
     else:
         prompt_base = BIOGUIDER_PROMPT
-    
-    # Build full prompt
+
     prompt = prompt_base + corrupted_content + "\n\nOUTPUT THE COMPLETE FIXED DOCUMENT:"
-    
-    # Get model config
-    model_config = MODELS.get(model_name, {"type": "azure"})
-    
+
+    model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
+    model_id = model_config.get("model", model_name)
+
     try:
-        if model_config["type"] == "ollama":
-            # Use Ollama API
-            ollama_model = model_config["model"]
-            fixed_content = call_ollama(ollama_model, prompt)
-        elif model_config["type"] == "claude":
-            # Use Claude API
-            claude_model = model_config["model"]
-            fixed_content = call_claude(claude_model, prompt)
-        else:
-            # Use Azure OpenAI (default)
-            response = llm.invoke(prompt)
-            fixed_content = response.content if hasattr(response, 'content') else str(response)
-        
+        llm_override = ChatOpenAI(
+            model=model_id,
+            api_key=os.environ.get("OPENAI_API_KEY"),
+            base_url=os.environ.get("OPENAI_BASE_URL"),
+        )
+        fixed_content = _invoke_with_retry(llm_override, prompt)
+
         # Clean up LLM wrapper text and markdown code fences
         lines = fixed_content.split('\n')
-        
-        # Remove common LLM intro lines
+
         while lines and not lines[0].strip().startswith('---'):
             if any(phrase in lines[0].lower() for phrase in ['here is', 'fixed document', 'corrected', 'output:', 'certainly', 'sure']):
                 lines = lines[1:]
@@ -383,18 +327,16 @@ def fix_with_model(
                 lines = lines[1:]
             else:
                 break
-        
-        # Remove trailing code fence
+
         while lines and (lines[-1].strip() == '```' or lines[-1].strip() == ''):
             lines = lines[:-1]
-        
+
         fixed_content = '\n'.join(lines)
-        
-        # Validate output length (should be similar to input)
+
         if len(fixed_content) < len(corrupted_content) * 0.5:
             print(f"  Warning: Fixed content too short ({len(fixed_content)} vs {len(corrupted_content)}), using corrupted")
             fixed_content = corrupted_content
-            
+
     except Exception as e:
         print(f"  Error fixing content: {e}")
         fixed_content = corrupted_content
@@ -409,8 +351,31 @@ def fix_with_model(
 # Backward compatibility alias
 def fix_with_bioguider(llm, corrupted_content, original_content, output_dir, file_basename, error_count):
     """Legacy function - uses BioGuider prompt with GPT-4o."""
-    return fix_with_model(llm, corrupted_content, original_content, output_dir, 
+    return fix_with_model(llm, corrupted_content, original_content, output_dir,
                           file_basename, error_count, prompt_name="bioguider", model_name="gpt4o")
+
+
+def _semantic_match(orig: str, fixed_context: str, llm=None) -> bool:
+    """LLM judge: does fixed_context correctly use term 'orig'? Falls back to exact check."""
+    import hashlib
+    if llm is None:
+        return orig in fixed_context
+    cache_key = hashlib.md5(f"{orig}:{fixed_context[:500]}".encode()).hexdigest()
+    if not hasattr(_semantic_match, "_cache"):
+        _semantic_match._cache = {}
+    if cache_key in _semantic_match._cache:
+        return _semantic_match._cache[cache_key]
+    try:
+        prompt = (
+            f"Does the following text correctly use the term '{orig}'? "
+            f"Answer YES or NO only.\n\nText:\n{fixed_context[:500]}"
+        )
+        resp = llm.invoke(prompt)
+        result = "YES" in (resp.content if hasattr(resp, "content") else str(resp)).upper()
+    except Exception:
+        result = orig in fixed_context
+    _semantic_match._cache[cache_key] = result
+    return result
 
 
 def evaluate_fixes(
@@ -504,7 +469,25 @@ def evaluate_fixes(
                 is_fixed = False
             else:
                 is_fixed = True  # Neither found = rewritten
-        
+
+        elif cat in ("reproducibility_drift", "analysis_hyperparam", "annotation_id_space"):
+            # Exact-string match: same shape as number branch
+            if orig and orig in fixed_content:
+                is_fixed = True
+            elif mut and mut in fixed_content:
+                is_fixed = False
+            else:
+                is_fixed = True  # Neither found = rewritten
+
+        elif cat in ("stat_test_misnaming", "celltype_marker"):
+            # Semantic match: use LLM judge when literal check is ambiguous
+            if orig and orig in fixed_content:
+                is_fixed = True
+            elif mut and mut not in fixed_content:
+                is_fixed = True
+            else:
+                is_fixed = _semantic_match(orig, fixed_content, llm)
+
         else:
             # Default: mutated gone or original restored
             is_fixed = (mut and mut not in fixed_content) or (orig and orig in fixed_content)
@@ -665,10 +648,17 @@ def run_stress_test_parallel(
 
 def save_results(results: List[StressLevelResult], output_dir: str):
     """Save results to JSON and CSV."""
-    
+    from bioguider.managers.config import UNSCORABLE_CATEGORIES
+
+    # Derive scorable variants from the per-category breakdown. Idempotent —
+    # safe to call on already-populated results.
+    for r in results:
+        _populate_scorable(r)
+
     # JSON format with category breakdown
     json_data = {
         "timestamp": datetime.now().isoformat(),
+        "unscorable_categories": sorted(UNSCORABLE_CATEGORIES),
         "results": [
             {
                 "model": r.model_name,
@@ -680,6 +670,13 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 "precision": round(r.precision, 4),
                 "recall": round(r.recall, 4),
                 "f1_score": round(r.f1_score, 4),
+                "total_errors_injected_scorable": r.total_errors_injected_scorable,
+                "errors_fixed_scorable": r.errors_fixed_scorable,
+                "errors_unfixed_scorable": r.errors_unfixed_scorable,
+                "fix_rate_scorable": round(r.fix_rate_scorable, 4),
+                "precision_scorable": round(r.precision_scorable, 4),
+                "recall_scorable": round(r.recall_scorable, 4),
+                "f1_score_scorable": round(r.f1_score_scorable, 4),
                 "duration_seconds": round(r.duration_seconds, 2),
                 "category_breakdown": [
                     {
@@ -687,7 +684,8 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                         "injected": cr.injected,
                         "fixed": cr.fixed,
                         "unfixed": cr.unfixed,
-                        "fix_rate": round(cr.fix_rate, 4)
+                        "fix_rate": round(cr.fix_rate, 4),
+                        "scorable": cr.category not in UNSCORABLE_CATEGORIES,
                     }
                     for cr in (r.category_results or [])
                 ]
@@ -700,19 +698,28 @@ def save_results(results: List[StressLevelResult], output_dir: str):
     with open(json_path, 'w') as f:
         json.dump(json_data, f, indent=2)
     
-    # CSV format - summary table with model column
+    # CSV format - summary table with model column. Scorable columns are
+    # the UNSCORABLE_CATEGORIES-filtered variants (headline for the paper
+    # figures, see bioguider.managers.config.UNSCORABLE_CATEGORIES).
     csv_path = os.path.join(output_dir, "STRESS_TEST_TABLE.csv")
     with open(csv_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
             "model", "error_count", "total_injected", "fixed", "unfixed",
-            "fix_rate", "precision", "recall", "f1_score", "duration_s"
+            "fix_rate", "precision", "recall", "f1_score",
+            "total_injected_scorable", "fixed_scorable", "unfixed_scorable",
+            "fix_rate_scorable", "precision_scorable", "recall_scorable", "f1_score_scorable",
+            "duration_s"
         ])
         for r in results:
             writer.writerow([
                 r.model_name, r.error_count, r.total_errors_injected, r.errors_fixed, r.errors_unfixed,
                 round(r.fix_rate, 4), round(r.precision, 4), round(r.recall, 4),
-                round(r.f1_score, 4), round(r.duration_seconds, 2)
+                round(r.f1_score, 4),
+                r.total_errors_injected_scorable, r.errors_fixed_scorable, r.errors_unfixed_scorable,
+                round(r.fix_rate_scorable, 4), round(r.precision_scorable, 4),
+                round(r.recall_scorable, 4), round(r.f1_score_scorable, 4),
+                round(r.duration_seconds, 2)
             ])
     
     # CSV format - detailed category breakdown (for figures)
@@ -801,6 +808,12 @@ def save_results(results: List[StressLevelResult], output_dir: str):
     print(f"  - {json_path}")
     print(f"  - {csv_path}")
     print(f"  - {md_path}")
+
+    try:
+        from bioguider.generation.viz import BenchmarkPlotter
+        BenchmarkPlotter(output_dir).render_all(output_dir)
+    except ImportError:
+        print("matplotlib not available; skipping figure generation")
 
 
 # ============================================================================
@@ -1227,14 +1240,8 @@ def test_full_benchmark(llm, test_output_dir):
     # Part 2: Stress test levels (BioGuider only)
     stress_levels = [10, 20, 40, 60, 100, 150, 200, 300]
     
-    # Model configurations for comparison (at 30 errors)
-    test_configs = [
-        ("gpt4o", "bioguider"),      # BioGuider (should be best)
-        ("gpt4o", "simple"),         # GPT-4o baseline
-        ("claude_sonnet", "simple"), # Claude
-        ("qwen3_30b", "simple"),     # Qwen 30B
-        ("gpt_oss_20b", "simple"),   # GPT-OSS 20B
-    ]
+    # All models with bioguider prompt + one simple-prompt baseline
+    test_configs = [(m, "bioguider") for m in MODELS] + [("gpt-5.4", "simple")]
 
 
 def test_all_models_all_levels(llm, test_output_dir):
@@ -1254,14 +1261,8 @@ def test_all_models_all_levels(llm, test_output_dir):
     # Error levels to test
     error_levels = [10, 30, 50, 100, 200, 300]
     
-    # All model configurations
-    test_configs = [
-        ("gpt4o", "bioguider"),      # BioGuider
-        ("gpt4o", "simple"),         # GPT-4o simple
-        ("claude_sonnet", "simple"), # Claude
-        ("qwen3_30b", "simple"),     # Qwen 30B
-        ("gpt_oss_20b", "simple"),   # GPT-OSS 20B
-    ]
+    # All models with bioguider prompt + one simple-prompt baseline (AC6: ≥4 series)
+    test_configs = [(m, "bioguider") for m in MODELS] + [("gpt-5.4", "simple")]
     
     print_prompts()
     print_models()
