@@ -22,6 +22,8 @@ try:
 except ImportError:
     BaseChatOpenAI = Any  # type: ignore
 
+from bioguider.managers.config import UNSCORABLE_CATEGORIES
+
 
 class FixStatus(str, Enum):
     """Status of an error fix attempt."""
@@ -197,6 +199,17 @@ class EvaluationResult:
     fix_rate: float = 0.0
     success_rate: float = 0.0  # Legacy compatibility
 
+    # Scorable-only metrics — exclude UNSCORABLE_CATEGORIES (e.g. "function")
+    # from the denominator. These are the headline numbers for the paper.
+    true_positives_scorable: int = 0
+    false_negatives_scorable: int = 0
+    false_positives_scorable: int = 0  # FPs are category-agnostic, mirrors total
+    total_errors_scorable: int = 0
+    precision_scorable: float = 0.0
+    recall_scorable: float = 0.0
+    f1_score_scorable: float = 0.0
+    fix_rate_scorable: float = 0.0
+
     # Detailed breakdowns
     per_category: Dict[str, CategoryMetrics] = field(default_factory=dict)
     per_file: Dict[str, FileMetrics] = field(default_factory=dict)
@@ -241,6 +254,44 @@ class EvaluationResult:
             self.fix_rate = 0.0
             self.success_rate = 0.0
 
+        # ---- Scorable-only metrics ---------------------------------------
+        # Re-derive TP/FN by category, excluding UNSCORABLE_CATEGORIES.
+        # FPs are category-agnostic (harmful changes to non-injected text), so
+        # we mirror the headline FP count into both totals.
+        tp_s = 0
+        fn_s = 0
+        for ev in self.error_evaluations:
+            if ev.category in UNSCORABLE_CATEGORIES:
+                continue
+            if ev.is_fixed:
+                tp_s += 1
+            else:
+                fn_s += 1
+        self.true_positives_scorable = tp_s
+        self.false_negatives_scorable = fn_s
+        self.false_positives_scorable = self.false_positives
+        self.total_errors_scorable = tp_s + fn_s
+
+        if tp_s + self.false_positives > 0:
+            self.precision_scorable = tp_s / (tp_s + self.false_positives)
+        else:
+            self.precision_scorable = 0.0
+
+        if tp_s + fn_s > 0:
+            self.recall_scorable = tp_s / (tp_s + fn_s)
+            self.fix_rate_scorable = tp_s / (tp_s + fn_s)
+        else:
+            self.recall_scorable = 0.0
+            self.fix_rate_scorable = 0.0
+
+        if self.precision_scorable + self.recall_scorable > 0:
+            self.f1_score_scorable = (
+                2 * self.precision_scorable * self.recall_scorable
+                / (self.precision_scorable + self.recall_scorable)
+            )
+        else:
+            self.f1_score_scorable = 0.0
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -255,6 +306,15 @@ class EvaluationResult:
             "f1_score": round(self.f1_score, 4),
             "fix_rate": round(self.fix_rate, 4),
             "success_rate": self.success_rate,
+            "unscorable_categories": sorted(UNSCORABLE_CATEGORIES),
+            "total_errors_scorable": self.total_errors_scorable,
+            "true_positives_scorable": self.true_positives_scorable,
+            "false_negatives_scorable": self.false_negatives_scorable,
+            "false_positives_scorable": self.false_positives_scorable,
+            "precision_scorable": round(self.precision_scorable, 4),
+            "recall_scorable": round(self.recall_scorable, 4),
+            "f1_score_scorable": round(self.f1_score_scorable, 4),
+            "fix_rate_scorable": round(self.fix_rate_scorable, 4),
             "per_category": {k: v.to_dict() for k, v in self.per_category.items()},
             "per_file": {k: v.to_dict() for k, v in self.per_file.items()},
             "error_evaluations": [e.to_dict() for e in self.error_evaluations],

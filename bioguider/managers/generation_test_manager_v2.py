@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import json
 import shutil
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Literal, Optional, Any
 
 from bioguider.managers.base_test_manager import BaseTestManager, InjectionResult
 from bioguider.managers.generation_manager import DocumentationGenerationManager
@@ -20,6 +20,10 @@ from bioguider.generation.unified_metrics import (
     EvaluationResult,
 )
 from bioguider.agents.agent_utils import read_file, write_file
+
+
+Phase = Literal["full", "eval_only", "correction_only"]
+EVALUATION_STATE_FILENAME = "EVALUATION_STATE.json"
 
 
 class GenerationTestManagerV2(BaseTestManager):
@@ -61,6 +65,9 @@ class GenerationTestManagerV2(BaseTestManager):
         baseline_repo_path: str,
         tmp_repo_path: str,
         min_per_category: int = 3,
+        phase: Phase = "full",
+        resume_from: Optional[str] = None,
+        example_files: Optional[List[str]] = None,
     ) -> str:
         """
         Run quantifiable testing with multi-file error injection.
@@ -70,10 +77,31 @@ class GenerationTestManagerV2(BaseTestManager):
             baseline_repo_path: Path to baseline repository
             tmp_repo_path: Path for temporary test repository
             min_per_category: Minimum errors per category to inject
+            phase: One of ``"full"`` (status quo), ``"eval_only"`` (inject +
+                persist state and stop before correction), or
+                ``"correction_only"`` (resume from a prior eval_only run and
+                execute only correction + scoring).
+            resume_from: Required for ``phase="correction_only"``. Path to the
+                ``EVALUATION_STATE.json`` written by a prior ``eval_only`` run.
+            example_files: Optional whitelist of rel paths to correct in
+                ``phase="correction_only"``. When set, only these files are
+                passed to the generator; everything else is skipped. Matches
+                Qin's "correction samples two examples" decision.
 
         Returns:
-            Path to the output directory
+            Path to the output directory (``tmp_repo_path`` for eval_only,
+            ``out_dir`` otherwise).
         """
+        if phase == "correction_only":
+            if not resume_from:
+                raise ValueError(
+                    "phase='correction_only' requires resume_from=<path to EVALUATION_STATE.json>"
+                )
+            return self._run_correction_only(resume_from, example_files)
+
+        if phase not in ("full", "eval_only"):
+            raise ValueError(f"Unknown phase: {phase!r}")
+
         # 1. Select target files
         self.print_step("SelectFiles", "Identifying target files...")
         file_selection = self.select_target_files(
@@ -99,6 +127,24 @@ class GenerationTestManagerV2(BaseTestManager):
 
         # 5. Save injection manifest
         inj_path = self.save_injection_manifest(injection_results, tmp_repo_path)
+
+        if phase == "eval_only":
+            # Persist original + corrupted versions alongside the manifest so a
+            # later correction_only run has everything it needs without the
+            # in-memory InjectionResult objects.
+            self._persist_injection_sidecars(injection_results, tmp_repo_path)
+            state_path = self._write_evaluation_state(
+                tmp_repo_path=tmp_repo_path,
+                report_path=report_path,
+                injection_manifest_path=inj_path,
+                injection_results=injection_results,
+                min_per_category=min_per_category,
+            )
+            self.print_step(
+                "EvalOnlyComplete",
+                f"Injection + state saved. Resume with resume_from={state_path}",
+            )
+            return tmp_repo_path
 
         # 6. Run generation/fixing
         self.print_step("RunGeneration", "Running BioGuider to fix errors...")
@@ -130,6 +176,118 @@ class GenerationTestManagerV2(BaseTestManager):
         self._save_versioned_files(injection_results, out_dir)
 
         self.print_step("TestComplete", f"Results saved to {out_dir}")
+        return out_dir
+
+    # ------------------------------------------------------------------
+    # Phase split helpers
+    # ------------------------------------------------------------------
+
+    def _persist_injection_sidecars(
+        self,
+        injection_results: Dict[str, InjectionResult],
+        tmp_repo_path: str,
+    ) -> None:
+        """Write ``<rel_path>.original`` sidecars alongside the corrupted files.
+
+        The corrupted versions already live at their normal paths in
+        ``tmp_repo_path`` after injection; we only need to persist the
+        baselines so a later correction_only run can score against ground
+        truth without relying on in-memory state.
+        """
+        for rel_path, result in injection_results.items():
+            sidecar = os.path.join(tmp_repo_path, rel_path + ".original")
+            os.makedirs(os.path.dirname(sidecar), exist_ok=True)
+            write_file(sidecar, result.baseline_content)
+
+    def _write_evaluation_state(
+        self,
+        tmp_repo_path: str,
+        report_path: str,
+        injection_manifest_path: str,
+        injection_results: Dict[str, InjectionResult],
+        min_per_category: int,
+    ) -> str:
+        """Dump enough state to resume with ``phase='correction_only'``."""
+        state = {
+            "version": 1,
+            "tmp_repo_path": os.path.abspath(tmp_repo_path),
+            "report_path": os.path.abspath(report_path),
+            "injection_manifest_path": os.path.abspath(injection_manifest_path),
+            "min_per_category": min_per_category,
+            "injected_files": sorted(injection_results.keys()),
+        }
+        state_path = os.path.join(tmp_repo_path, EVALUATION_STATE_FILENAME)
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
+        return state_path
+
+    def _run_correction_only(
+        self,
+        resume_from: str,
+        example_files: Optional[List[str]] = None,
+    ) -> str:
+        """Execute correction + scoring on a resumed injection state."""
+        with open(resume_from, "r", encoding="utf-8") as f:
+            state = json.load(f)
+
+        tmp_repo_path = state["tmp_repo_path"]
+        report_path = state["report_path"]
+        injection_manifest_path = state["injection_manifest_path"]
+        min_per_category = state.get("min_per_category", 3)
+        injected_files = state.get("injected_files") or []
+
+        # Narrow to the user-picked whitelist (Qin's "two examples" rule).
+        target_files = injected_files
+        if example_files:
+            wanted = set(example_files)
+            target_files = [p for p in injected_files if p in wanted]
+            missing = wanted - set(injected_files)
+            if missing:
+                self.print_step(
+                    "CorrectionSkipMissing",
+                    f"example_files not in injection manifest (ignored): {sorted(missing)}",
+                )
+
+        self.print_step(
+            "ResumeCorrection",
+            f"Running BioGuider on {len(target_files)} / {len(injected_files)} files",
+        )
+
+        gen = DocumentationGenerationManager(self.llm, self.step_callback)
+        out_dir = gen.run(
+            report_path=report_path,
+            repo_path=tmp_repo_path,
+            target_files=target_files or None,
+            max_files=len(target_files) if target_files else None,
+        )
+
+        # Rehydrate manifests from the on-disk file rather than memory.
+        with open(injection_manifest_path, "r", encoding="utf-8") as f:
+            manifest_payload = json.load(f)
+        manifests = manifest_payload.get("files", manifest_payload)
+        if target_files:
+            manifests = {k: v for k, v in manifests.items() if k in set(target_files)}
+
+        self.print_step("EvaluateFixes", "Evaluating resumed corrections...")
+        evaluator = UnifiedMetricsEvaluator(
+            llm=None,
+            detect_fp=self.config.detect_semantic_fp,
+        )
+        results = evaluator.evaluate_multiple_files(manifests, out_dir)
+
+        results_path = os.path.join(out_dir, "GEN_TEST_RESULTS.json")
+        with open(results_path, "w", encoding="utf-8") as f:
+            json.dump(results.to_dict(), f, indent=2)
+
+        shutil.copy(injection_manifest_path, os.path.join(out_dir, "INJECTION_MANIFEST.json"))
+
+        level = self._determine_level(min_per_category)
+        self._generate_report(results, out_dir, level)
+
+        self.print_step(
+            "CorrectionComplete",
+            f"Resumed correction finished; results in {out_dir}",
+        )
         return out_dir
 
     def run_quant_suite(

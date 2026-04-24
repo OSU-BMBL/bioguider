@@ -132,6 +132,7 @@ ERROR_CATEGORIES = {
         "contamination",
         "species_name",
         "gene_case",
+        "accession_id_prefix",
     ],
     "cli_config": [
         "param_name",
@@ -141,12 +142,53 @@ ERROR_CATEGORIES = {
         "boolean",
         "comment_typo",
     ],
+    "prose_code_consistency": [
+        "prose_code_pkg_version",
+        "prose_code_stat_test",
+        "prose_code_marker",
+        "prose_code_param",
+    ],
 }
 
 # All error categories as a flat set
 ALL_ERROR_CATEGORIES = frozenset(
     cat for cats in ERROR_CATEGORIES.values() for cat in cats
 )
+
+# Categories that are injected for realism but excluded from F1 / precision / recall.
+# Rationale: the BioGuider locator uses function names as anchors for finding
+# documentation context. If we mutate a function name, the locator cannot
+# re-establish context, so the error is structurally unfixable — scoring it
+# would penalise the fixer for a design constraint, not a true failure.
+# These errors still appear in per-category detail rows (pre-registered carve-out).
+UNSCORABLE_CATEGORIES = frozenset({
+    "function",
+})
+
+# Scorable categories are everything else (headline F1 denominator).
+SCORABLE_CATEGORIES = ALL_ERROR_CATEGORIES - UNSCORABLE_CATEGORIES
+
+# Total-error budget levels for the F1-vs-error-count gradient figure.
+# Each entry is the TARGET total scorable errors injected across the repo
+# at a single stress level. Consumed by BenchmarkManager.run_total_error_gradient.
+TOTAL_ERROR_LEVELS = [50, 100, 200, 300]
+
+
+def min_per_category_from_total(
+    target_total_errors: int,
+    n_files: int,
+    n_categories: int,
+) -> int:
+    """Translate a total-errors budget into a per-category minimum.
+
+    Injection hits N_files × N_categories category×file slots, but anchor
+    requirements mean only a fraction actually produce errors. So we compute
+    the per-slot target as an even spread and clamp to at least 1 (so every
+    applicable category still fires).
+    """
+    import math
+    denom = max(1, n_files * n_categories)
+    return max(1, math.ceil(target_total_errors / denom))
 
 
 # File category definitions

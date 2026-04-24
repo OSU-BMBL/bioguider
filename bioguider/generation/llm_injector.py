@@ -55,6 +55,15 @@ CLI/CONFIG ERROR CATEGORIES (inject all)
 - default_value: state a plausible but incorrect default value
 - path_hint: introduce a subtle path typo (e.g., `data/filtrd`)
 
+EXTERNAL-AUTHORITY ERROR CATEGORIES (inject only when a context anchor exists)
+- accession_id_prefix: swap an accession ID prefix so the namespace contradicts a nearby context word (e.g., prose says "series" but mutate `GSE123456` → `GSM123456`, or prose says "samples" but mutate `GSM123456` → `GSE123456`). Only inject when a context word (series/samples/experiment/run/study) appears within the same sentence as the accession ID. Otherwise skip and record in "skipped".
+
+PROSE-CODE CONSISTENCY ERROR CATEGORIES (inject ONLY when a matching code-block anchor exists; otherwise skip and record in "skipped" with reason "no_anchor")
+- prose_code_pkg_version: prose narrates a package major version that disagrees with the version pinned/loaded in a fenced code block (e.g., `library(Seurat)` with `sessionInfo()` showing `Seurat_5.0.1`, but prose says "Seurat v4"). Mutate the prose version only; leave code untouched.
+- prose_code_stat_test: prose narrates a statistical test name that disagrees with the function actually called in a fenced code block (e.g., code runs `wilcox.test(...)` or `FindMarkers(..., test.use="wilcox")`, but prose says "t-test"). Mutate the prose test name only.
+- prose_code_marker: prose names a cell-type marker gene that disagrees with the marker used in a fenced code block (e.g., code subsets on `CD8` via `subset(..., CD8 > 0)` or `features = c("CD8")`, but prose describes "CD4+ T cells"). Mutate the prose marker only.
+- prose_code_param: prose states an analysis hyperparameter value that disagrees with the value passed to the corresponding function call in a fenced code block (e.g., code runs `FindClusters(..., resolution = 0.5)`, but prose says "resolution of 0.6"). Mutate the prose value only.
+
 
 CONSTRAINTS
 - Keep edits minimal and local; **≥85% token overlap** with input.
@@ -106,11 +115,78 @@ OUTPUT (JSON only):
 """
 
 
-class LLMErrorInjector:
-    def __init__(self, llm: BaseChatOpenAI):
-        self.llm = llm
+_CODE_FENCE_RE = re.compile(r"```[^\n]*\n.*?```", re.DOTALL)
+_PKG_ANCHOR_RE = re.compile(
+    r"\b(Seurat|scanpy|SingleCellExperiment|DESeq2|edgeR|limma)[_=\s]+v?(\d+)(?:\.\d+)*",
+    re.I,
+)
+_STAT_TEST_ANCHOR_RE = re.compile(
+    r"\bwilcox(?:\.test|on)?\s*\(|"
+    r'test\.use\s*=\s*["\']wilcox["\']|'
+    r"\bt\.test\s*\(|"
+    r'test\.use\s*=\s*["\']t["\']',
+    re.I,
+)
+_MARKER_ANCHOR_RE = re.compile(
+    r'(?:features?\s*=\s*(?:c\(|\[)?\s*["\']([A-Z][A-Z0-9]{1,6})["\']|'
+    r"subset\([^)]*?\b([A-Z][A-Z0-9]{1,6})\s*[><=])"
+)
+_PARAM_ANCHOR_RE = re.compile(
+    r"(resolution|n[._]neighbors|perplexity|n[._]components|min[._]dist|spread)"
+    r"\s*=\s*(\d+\.?\d*)",
+    re.I,
+)
+_ACCESSION_CONTEXT_WORDS = ("series", "samples", "experiment", "run", "study", "geo")
 
-    def inject(self, readme_text: str, min_per_category: int = 3, preserve_keywords: list[str] | None = None, max_words: int = 450, project_terms: list[str] | None = None) -> Tuple[str, Dict[str, Any]]:
+
+class LLMErrorInjector:
+    def __init__(self, llm: BaseChatOpenAI, force_deterministic: bool = False):
+        """
+        Args:
+            llm: Language model used for the (non-deterministic) injection path.
+            force_deterministic: When True, skip the LLM call entirely and run
+                ``_deterministic_inject`` + ``_supplement_errors`` only. This
+                makes injection byte-identical across runs with the same seed,
+                which is required for fair cross-model benchmarks (each model
+                must see the same corrupted ground truth).
+        """
+        self.llm = llm
+        self.force_deterministic = force_deterministic
+
+    @staticmethod
+    def _extract_code_fragments(text: str) -> str:
+        """Return concatenated contents of fenced code blocks (the code-authority region)."""
+        return "\n".join(
+            m.group(0) for m in _CODE_FENCE_RE.finditer(text)
+        )
+
+    @staticmethod
+    def _prose_region(text: str) -> str:
+        """Return text with fenced code blocks stripped (the prose-only region)."""
+        return _CODE_FENCE_RE.sub("", text)
+
+    @staticmethod
+    def _record_skip(data: Dict[str, Any], category: str, reason: str) -> None:
+        data.setdefault("skipped", []).append({"category": category, "reason": reason})
+
+    def inject(self, readme_text: str, min_per_category: int = 3, preserve_keywords: list[str] | None = None, max_words: int = 450, project_terms: list[str] | None = None, force_deterministic: bool | None = None) -> Tuple[str, Dict[str, Any]]:
+        # Resolve the per-call override; fall back to instance default.
+        use_det = self.force_deterministic if force_deterministic is None else force_deterministic
+
+        if use_det:
+            # Skip the LLM entirely — deterministic inject + supplements only.
+            corrupted, data = self._deterministic_inject(readme_text)
+            corrupted, data = self._supplement_errors(
+                readme_text, corrupted, data, min_per_category, project_terms
+            )
+            if not self._check_code_blocks_preserved(readme_text, corrupted):
+                # Supplements broke fences — fall back to bare deterministic output.
+                corrupted, data = self._deterministic_inject(readme_text)
+            return corrupted, {
+                "errors": data.get("errors", []),
+                "skipped": data.get("skipped", []),
+            }
+
         conv = CommonConversation(self.llm)
         preserve_keywords = preserve_keywords or self._extract_preserve_keywords(readme_text)
         
@@ -155,6 +231,7 @@ class LLMErrorInjector:
         
         manifest = {
             "errors": data.get("errors", []),
+            "skipped": data.get("skipped", []),
         }
         return corrupted, manifest
     
@@ -313,7 +390,112 @@ class LLMErrorInjector:
         if "\n# " in text:
             text = text.replace("\n# ", "\n#", 1)
             errors.append({"id": "e_md_1", "category": "markdown_structure", "original_snippet": "\n# ", "mutated_snippet": "\n#", "rationale": "missing space in header"})
-        return text, {"errors": errors}
+        data: Dict[str, Any] = {"errors": errors}
+
+        # accession_id_prefix: swap GSE <-> GSM only when a context word (series/samples/...) sits near it
+        prose = self._prose_region(text)
+        acc_match = None
+        for m in re.finditer(r"\b(GSE|GSM)(\d{3,})\b", prose):
+            ctx_start = max(0, m.start() - 80)
+            ctx_end = min(len(prose), m.end() + 80)
+            if any(re.search(rf"\b{w}\b", prose[ctx_start:ctx_end], re.I) for w in _ACCESSION_CONTEXT_WORDS):
+                acc_match = m
+                break
+        if acc_match:
+            prefix = acc_match.group(1)
+            digits = acc_match.group(2)
+            orig_acc = prefix + digits
+            mut_acc = ("GSM" if prefix == "GSE" else "GSE") + digits
+            text = text.replace(orig_acc, mut_acc, 1)
+            errors.append({"id": "e_accession_1", "category": "accession_id_prefix", "original_snippet": orig_acc, "mutated_snippet": mut_acc, "rationale": "swapped accession namespace against surrounding context word"})
+        else:
+            self._record_skip(data, "accession_id_prefix", "no_context_anchor")
+
+        # prose_code_pkg_version: prose version disagrees with version pinned/loaded in a code fence
+        code = self._extract_code_fragments(text)
+        pkg_anchor = _PKG_ANCHOR_RE.search(code)
+        if pkg_anchor:
+            pkg_name = pkg_anchor.group(1)
+            code_ver = int(pkg_anchor.group(2))
+            prose_view = self._prose_region(text)
+            mp = re.search(rf"\b({re.escape(pkg_name)})\s+v?(\d+)(\.\d+)?\b", prose_view, re.I)
+            if mp and int(mp.group(2)) == code_ver:
+                new_v = code_ver - 1 if code_ver > 1 else code_ver + 1
+                orig_pv = mp.group(0)
+                mut_pv = f"{mp.group(1)} v{new_v}"
+                text = text.replace(orig_pv, mut_pv, 1)
+                errors.append({"id": "e_pkg_ver_1", "category": "prose_code_pkg_version", "original_snippet": orig_pv, "mutated_snippet": mut_pv, "rationale": f"prose version drifted from code-pinned {pkg_name} v{code_ver}"})
+            else:
+                self._record_skip(data, "prose_code_pkg_version", "no_prose_version_match")
+        else:
+            self._record_skip(data, "prose_code_pkg_version", "no_anchor")
+
+        # prose_code_stat_test: prose test name disagrees with fn called in a code fence
+        code = self._extract_code_fragments(text)
+        stat_anchor = _STAT_TEST_ANCHOR_RE.search(code)
+        if stat_anchor:
+            hit = stat_anchor.group(0).lower()
+            code_test = "wilcoxon" if "wilcox" in hit else "t-test"
+            prose_view = self._prose_region(text)
+            if code_test == "wilcoxon":
+                mp = re.search(r"\b(t[- ]test|Student'?s t|two-sample t)\b", prose_view, re.I)
+            else:
+                mp = re.search(r"\b(Wilcoxon(?: rank[- ]sum)?|Mann[- ]Whitney)\b", prose_view, re.I)
+            if mp:
+                orig_st = mp.group(0)
+                mut_st = "t-test" if code_test == "wilcoxon" else "Wilcoxon"
+                text = text.replace(orig_st, mut_st, 1)
+                errors.append({"id": "e_stat_1", "category": "prose_code_stat_test", "original_snippet": orig_st, "mutated_snippet": mut_st, "rationale": f"prose test name contradicts code-called {code_test}"})
+            else:
+                self._record_skip(data, "prose_code_stat_test", "no_prose_test_match")
+        else:
+            self._record_skip(data, "prose_code_stat_test", "no_anchor")
+
+        # prose_code_marker: prose marker disagrees with marker referenced in a code fence
+        code = self._extract_code_fragments(text)
+        marker_hit = _MARKER_ANCHOR_RE.search(code)
+        if marker_hit:
+            code_marker = marker_hit.group(1) or marker_hit.group(2)
+            swap_map = {"CD4": "CD8", "CD8": "CD4", "FOXP3": "RORC", "GATA3": "TBX21"}
+            if code_marker in swap_map:
+                prose_view = self._prose_region(text)
+                mp = re.search(rf"\b{re.escape(code_marker)}\b", prose_view)
+                if mp:
+                    orig_mk = mp.group(0)
+                    mut_mk = swap_map[code_marker]
+                    text = text.replace(orig_mk, mut_mk, 1)
+                    errors.append({"id": "e_marker_1", "category": "prose_code_marker", "original_snippet": orig_mk, "mutated_snippet": mut_mk, "rationale": f"prose marker contradicts code-referenced {code_marker}"})
+                else:
+                    self._record_skip(data, "prose_code_marker", "no_prose_marker_match")
+            else:
+                self._record_skip(data, "prose_code_marker", "unmapped_code_marker")
+        else:
+            self._record_skip(data, "prose_code_marker", "no_anchor")
+
+        # prose_code_param: prose hyperparameter disagrees with value in a code-fence function call
+        code = self._extract_code_fragments(text)
+        param_hit = _PARAM_ANCHOR_RE.search(code)
+        if param_hit:
+            param_name = param_hit.group(1)
+            code_val = param_hit.group(2)
+            prose_view = self._prose_region(text)
+            mp = re.search(rf"{re.escape(param_name)}\s+(?:of\s+|=\s*)?({re.escape(code_val)})\b", prose_view, re.I)
+            if mp:
+                try:
+                    num = float(code_val)
+                    new_val = f"{num + 0.1:.1f}" if "." in code_val else str(int(num) + 1)
+                except ValueError:
+                    new_val = code_val + "x"
+                orig_pm = mp.group(0)
+                mut_pm = orig_pm.replace(code_val, new_val, 1)
+                text = text.replace(orig_pm, mut_pm, 1)
+                errors.append({"id": "e_param_1", "category": "prose_code_param", "original_snippet": orig_pm, "mutated_snippet": mut_pm, "rationale": f"prose {param_name} value drifted from code-used {code_val}"})
+            else:
+                self._record_skip(data, "prose_code_param", "no_prose_value_match")
+        else:
+            self._record_skip(data, "prose_code_param", "no_anchor")
+
+        return text, data
 
     def _supplement_errors(self, baseline: str, corrupted: str, data: Dict[str, Any], min_per_category: int, project_terms: list[str] | None = None) -> Tuple[str, Dict[str, Any]]:
         errors: List[Dict[str, Any]] = data.get("errors", []) or []
@@ -562,7 +744,7 @@ class LLMErrorInjector:
                 # Skip project terms (handled above)
                 if project_terms and fname in project_terms:
                     continue
-                
+
                 if len(fname) > 3:
                     mut_name = fname[:-1]
                 else:
@@ -657,9 +839,122 @@ class LLMErrorInjector:
             errors.append({"id": f"e_code_sup_{len(errors)}", "category": "inline_code", "original_snippet": orig, "mutated_snippet": mut, "rationale": "removed inline code backticks"})
 
         # ============================================================
-        # NEW ERROR CATEGORIES for more diverse injection
+        # PROSE-CODE CONSISTENCY supplements (anchor-required)
         # ============================================================
-        
+
+        prose_view = self._prose_region(corrupted)
+        code_view = self._extract_code_fragments(baseline)
+
+        # prose_code_param — run BEFORE generic number supplements to claim anchored values
+        if need("prose_code_param") > 0:
+            param_hit = _PARAM_ANCHOR_RE.search(code_view)
+            if param_hit is None:
+                self._record_skip(data, "prose_code_param", "no_anchor")
+            else:
+                param_name = param_hit.group(1)
+                code_val = param_hit.group(2)
+                mp = re.search(rf"{re.escape(param_name)}\s+(?:of\s+|=\s*)?({re.escape(code_val)})\b", prose_view, re.I)
+                if mp is None:
+                    self._record_skip(data, "prose_code_param", "no_prose_value_match")
+                else:
+                    orig = mp.group(0)
+                    try:
+                        num = float(code_val)
+                        new_val = f"{num + 0.1:.1f}" if "." in code_val else str(int(num) + 1)
+                    except ValueError:
+                        new_val = code_val + "x"
+                    mut = orig.replace(code_val, new_val, 1)
+                    if orig in corrupted and orig not in corrupted_snippets and mut != orig:
+                        corrupted = corrupted.replace(orig, mut, 1)
+                        add_error("prose_code_param", orig, mut, f"prose {param_name} drifted from code-used {code_val}")
+
+        # prose_code_pkg_version
+        if need("prose_code_pkg_version") > 0:
+            pkg_anchor = _PKG_ANCHOR_RE.search(code_view)
+            if pkg_anchor is None:
+                self._record_skip(data, "prose_code_pkg_version", "no_anchor")
+            else:
+                pkg_name = pkg_anchor.group(1)
+                code_ver = int(pkg_anchor.group(2))
+                mp = re.search(rf"\b({re.escape(pkg_name)})\s+v?(\d+)(\.\d+)?\b", self._prose_region(corrupted), re.I)
+                if mp is None or int(mp.group(2)) != code_ver:
+                    self._record_skip(data, "prose_code_pkg_version", "no_prose_version_match")
+                else:
+                    orig = mp.group(0)
+                    new_v = code_ver - 1 if code_ver > 1 else code_ver + 1
+                    mut = f"{mp.group(1)} v{new_v}"
+                    if orig in corrupted and orig not in corrupted_snippets:
+                        corrupted = corrupted.replace(orig, mut, 1)
+                        add_error("prose_code_pkg_version", orig, mut, f"prose {pkg_name} version drifted from code-pinned v{code_ver}")
+
+        # prose_code_stat_test — run early so the prose test name isn't consumed by generic supplements
+        if need("prose_code_stat_test") > 0:
+            stat_anchor = _STAT_TEST_ANCHOR_RE.search(code_view)
+            if stat_anchor is None:
+                self._record_skip(data, "prose_code_stat_test", "no_anchor")
+            else:
+                hit = stat_anchor.group(0).lower()
+                code_test = "wilcoxon" if "wilcox" in hit else "t-test"
+                prose_now = self._prose_region(corrupted)
+                # Find the prose test NAME THAT MATCHES CODE so we can mutate it to the opposite
+                # (this creates the injected disagreement). Skip if prose already disagrees.
+                if code_test == "wilcoxon":
+                    mp = re.search(r"\b(Wilcoxon(?: rank[- ]sum)?|Mann[- ]Whitney)\b", prose_now, re.I)
+                    target = "t-test"
+                else:
+                    mp = re.search(r"\b(t[- ]test|Student'?s t|two-sample t)\b", prose_now, re.I)
+                    target = "Wilcoxon"
+                if mp is None:
+                    self._record_skip(data, "prose_code_stat_test", "no_prose_test_match")
+                else:
+                    orig = mp.group(0)
+                    if orig in corrupted and orig not in corrupted_snippets:
+                        corrupted = corrupted.replace(orig, target, 1)
+                        add_error("prose_code_stat_test", orig, target, f"mutated prose '{orig}' so it contradicts code-called {code_test}")
+
+        # prose_code_marker — run early so gene_case / bio_term don't consume the prose marker first
+        if need("prose_code_marker") > 0:
+            marker_hit = _MARKER_ANCHOR_RE.search(code_view)
+            if marker_hit is None:
+                self._record_skip(data, "prose_code_marker", "no_anchor")
+            else:
+                code_marker = marker_hit.group(1) or marker_hit.group(2)
+                swap_map = {"CD4": "CD8", "CD8": "CD4", "FOXP3": "RORC", "GATA3": "TBX21"}
+                if code_marker not in swap_map:
+                    self._record_skip(data, "prose_code_marker", "unmapped_code_marker")
+                else:
+                    prose_now = self._prose_region(corrupted)
+                    mp = re.search(rf"\b{re.escape(code_marker)}\b", prose_now)
+                    if mp is None:
+                        self._record_skip(data, "prose_code_marker", "no_prose_marker_match")
+                    else:
+                        orig = mp.group(0)
+                        mut = swap_map[code_marker]
+                        if orig in corrupted and orig not in corrupted_snippets:
+                            corrupted = corrupted.replace(orig, mut, 1)
+                            add_error("prose_code_marker", orig, mut, f"mutated prose marker {orig}->{mut} so it contradicts code-referenced {code_marker}")
+
+        # accession_id_prefix — run early so generic number/gene_case don't touch GSE/GSM digits
+        if need("accession_id_prefix") > 0:
+            prose_now = self._prose_region(corrupted)
+            acc_match = None
+            for m in re.finditer(r"\b(GSE|GSM)(\d{3,})\b", prose_now):
+                ctx_start = max(0, m.start() - 80)
+                ctx_end = min(len(prose_now), m.end() + 80)
+                if any(re.search(rf"\b{w}\b", prose_now[ctx_start:ctx_end], re.I) for w in _ACCESSION_CONTEXT_WORDS):
+                    acc_match = m
+                    break
+            if acc_match is None:
+                self._record_skip(data, "accession_id_prefix", "no_context_anchor")
+            else:
+                prefix = acc_match.group(1)
+                digits = acc_match.group(2)
+                orig = prefix + digits
+                mut = ("GSM" if prefix == "GSE" else "GSE") + digits
+                if orig in corrupted and orig not in corrupted_snippets:
+                    corrupted = corrupted.replace(orig, mut, 1)
+                    add_error("accession_id_prefix", orig, mut, "swapped accession namespace against surrounding context word")
+
         # number supplements - change numeric values
         number_attempts = 0
         while need("number") > 0 and number_attempts < min_per_category * 2:

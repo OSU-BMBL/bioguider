@@ -115,10 +115,34 @@ def format_prompt(name: str, **kwargs: Any) -> str:
     return get_prompt_loader().format(name, **kwargs)
 
 
+_EVALUATION_PROMPT_NAMES = {
+    "readme": "evaluation_readme",
+}
+
+
+def get_evaluation_prompt(category: str = "readme") -> str:
+    """Return the evaluation system prompt for a given doc category.
+
+    Stable public accessor used by BioGuider itself AND by the Claude-Code
+    comparison run — both systems must see identical prompt text so any
+    benchmark delta is attributable to the model, not prompt asymmetry.
+    """
+    try:
+        template_name = _EVALUATION_PROMPT_NAMES[category]
+    except KeyError as exc:
+        available = sorted(_EVALUATION_PROMPT_NAMES)
+        raise ValueError(
+            f"Unknown evaluation prompt category: {category!r}. "
+            f"Available: {available}"
+        ) from exc
+    return load_prompt(template_name)
+
+
 __all__ = [
     "PromptLoader",
     "PromptTemplate",
     "get_prompt_loader",
     "load_prompt",
     "format_prompt",
+    "get_evaluation_prompt",
 ]

@@ -93,13 +93,26 @@ class BenchmarkManager(BaseTestManager):
         tmp_repo_path: str,
         min_per_category: int,
         project_terms: Optional[List[str]] = None,
+        target_total_errors: Optional[int] = None,
     ) -> Dict[str, InjectionResult]:
         """
         Inject errors into multiple files in parallel.
 
         Overrides the sequential implementation in BaseTestManager
         for better performance with many files.
+
+        Args:
+            target_total_errors: When set, overrides ``min_per_category`` with
+                an even-spread derivation so the total injection across all
+                files targets roughly this many scorable errors. Used by the
+                50/100/200/300 gradient figure. ``min_per_category`` is still
+                the lower bound (always ≥1 per eligible slot).
         """
+        from bioguider.managers.config import (
+            SCORABLE_CATEGORIES,
+            min_per_category_from_total,
+        )
+
         all_results: Dict[str, InjectionResult] = {}
 
         # Flatten file list with categories
@@ -107,6 +120,18 @@ class BenchmarkManager(BaseTestManager):
         for category, files in file_selection.files_by_category.items():
             for fpath in files:
                 files_with_cats.append((fpath, category))
+
+        # Optional: translate a total-errors budget into a per-category minimum.
+        if target_total_errors is not None:
+            min_per_category = min_per_category_from_total(
+                target_total_errors=target_total_errors,
+                n_files=len(files_with_cats),
+                n_categories=len(SCORABLE_CATEGORIES),
+            )
+            self.print_step(
+                "BudgetTranslate",
+                f"target_total_errors={target_total_errors} -> min_per_category={min_per_category}",
+            )
 
         self.print_step(
             "InjectErrors",
@@ -267,6 +292,115 @@ class BenchmarkManager(BaseTestManager):
         self._save_stress_test_results(results, benchmark_dir)
 
         self.print_step("StressTestComplete", f"Results saved to {benchmark_dir}")
+        return results
+
+    # =========================================================================
+    # Total-Error Gradient (F1-vs-error-count figure)
+    # =========================================================================
+
+    def run_total_error_gradient(
+        self,
+        report_path: str,
+        baseline_repo_path: str,
+        output_base_path: str,
+        total_levels: Optional[List[int]] = None,
+    ) -> Dict[int, StressTestResult]:
+        """
+        Run the F1-vs-error-count gradient benchmark.
+
+        Same flow as ``run_stress_test`` but each ``level`` is interpreted as
+        the TARGET TOTAL scorable errors across the repo (not per-category).
+        This produces the 50/100/200/300 points on the vertical figure.
+        """
+        import time
+
+        from bioguider.managers.config import TOTAL_ERROR_LEVELS
+
+        if total_levels is None:
+            total_levels = TOTAL_ERROR_LEVELS
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        benchmark_dir = os.path.join(output_base_path, f"gradient_{timestamp}")
+        os.makedirs(benchmark_dir, exist_ok=True)
+
+        self.print_step(
+            "GradientStart", f"Testing total-error levels: {total_levels}"
+        )
+
+        file_selection = self.select_target_files(
+            baseline_repo_path, max_per_category=self.config.max_files_per_category
+        )
+
+        results: Dict[int, StressTestResult] = {}
+
+        for total in total_levels:
+            start_time = time.time()
+            self.print_step(
+                f"GradientLevel:{total}", f"Starting with target_total={total}"
+            )
+
+            level_dir = os.path.join(benchmark_dir, f"total_{total}")
+            tmp_repo_path = os.path.join(level_dir, "tmp_repo")
+
+            self.prepare_tmp_repo(baseline_repo_path, tmp_repo_path)
+            project_terms = self.extract_project_terms(tmp_repo_path)
+
+            # Inject with a TOTAL budget (min_per_category is derived inside).
+            injection_results = self.inject_errors_parallel(
+                file_selection,
+                tmp_repo_path,
+                min_per_category=1,  # floor; real value derived from target_total_errors
+                project_terms=project_terms,
+                target_total_errors=total,
+            )
+
+            self.save_injection_manifest(
+                injection_results, level_dir, "BENCHMARK_MANIFEST.json"
+            )
+
+            injected_files = (
+                list(injection_results.keys())
+                if self.config.limit_generation_files
+                else None
+            )
+            max_files = len(injected_files) if injected_files else None
+
+            gen = DocumentationGenerationManager(self.llm, self.step_callback)
+            out_dir = gen.run(
+                report_path=report_path,
+                repo_path=tmp_repo_path,
+                target_files=injected_files,
+                max_files=max_files,
+            )
+
+            self.print_step("EvaluateFixes", "Computing benchmark metrics...")
+            manifests = self.convert_injections_to_manifests(injection_results)
+            evaluator = UnifiedMetricsEvaluator(
+                llm=self.llm if self.config.detect_semantic_fp else None,
+                detect_fp=self.config.detect_semantic_fp,
+            )
+            eval_result = evaluator.evaluate_multiple_files(manifests, out_dir)
+
+            duration = time.time() - start_time
+
+            results[total] = StressTestResult(
+                error_count=total,
+                evaluation_result=eval_result,
+                output_dir=level_dir,
+                duration_seconds=duration,
+            )
+
+            self._save_level_results(results[total], level_dir)
+
+            # Use the scorable F1 as the headline when available (D2 field).
+            f1 = getattr(eval_result, "f1_score_scorable", eval_result.f1_score)
+            self.print_step(
+                f"GradientLevelComplete:{total}",
+                f"F1_scorable={f1:.3f}, FixRate={eval_result.fix_rate:.3f}",
+            )
+
+        self._save_stress_test_results(results, benchmark_dir)
+        self.print_step("GradientComplete", f"Results saved to {benchmark_dir}")
         return results
 
     # =========================================================================
