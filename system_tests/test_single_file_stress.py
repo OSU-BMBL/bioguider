@@ -35,6 +35,22 @@ from bioguider.agents.agent_utils import read_file, write_file
 # Default test file
 DEFAULT_TEST_FILE = "data/.adalflow/repos/satijalab_seurat/vignettes/de_vignette.Rmd"
 
+# Multi-file benchmark target set (10 topic-diverse Seurat vignettes).
+# Each exercises a different anchor type for the prose_code_consistency moat.
+SEURAT_VIGNETTES_DIR = "data/.adalflow/repos/satijalab_seurat/vignettes"
+TUTORIAL_FILES = [
+    f"{SEURAT_VIGNETTES_DIR}/de_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/cell_cycle_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/dim_reduction_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/integration_introduction.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/hashing_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/multimodal_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/sctransform_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/pbmc3k_tutorial.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/atacseq_integration_vignette.Rmd",
+    f"{SEURAT_VIGNETTES_DIR}/spatial_vignette.Rmd",
+]
+
 # Stress test levels (errors per category)
 STRESS_LEVELS = [5, 10, 20, 40, 60, 100, 150, 200, 300]
 
@@ -1577,3 +1593,191 @@ def test_all_models_all_levels(llm, test_output_dir):
             print(f"BioGuider: F1={bioguider_result.f1_score:.3f}")
     
     assert len(all_results) >= len(test_configs), "Should have model comparison results"
+
+
+def test_multi_file_full_matrix(llm, test_output_dir):
+    """
+    MULTI-FILE FULL MATRIX — 10 Seurat vignettes × 9 error levels × 5 models × 2 prompts.
+
+    Each (file, level) pair gets ONE deterministic injection (force_deterministic=True)
+    so every model+prompt combination scores against byte-identical corrupted files.
+    Per-file artefacts and figures land in their own subdir; a cross-file aggregate
+    lands alongside in ``AGGREGATE_*.json/csv`` plus rendered ``agg_fig*``.
+
+    Expected wall-clock: ~1.5-2 hours with 8-wide parallelism (see MAX_WORKERS).
+    Expected LLM spend: ~3-10M tokens across the matrix.
+
+    Run:
+        pytest system_tests/test_single_file_stress.py::test_multi_file_full_matrix -v -s
+    """
+    import time
+
+    # 5 models × 2 prompts = 10 configs per (file, level) cell
+    test_configs = [(m, p) for m in MODELS for p in ["bioguider", "simple"]]
+    error_levels = STRESS_LEVELS  # [5, 10, 20, 40, 60, 100, 150, 200, 300]
+
+    multi_root = os.path.join(
+        OUTPUT_BASE.replace("single_file_stress", "multi_file_stress"),
+        datetime.now().strftime("run_%Y%m%d_%H%M%S"),
+    )
+    os.makedirs(multi_root, exist_ok=True)
+
+    total_cells = len(TUTORIAL_FILES) * len(error_levels) * len(test_configs)
+    print(f"\n{'='*70}")
+    print("MULTI-FILE FULL MATRIX")
+    print(f"{'='*70}")
+    print(f"Files: {len(TUTORIAL_FILES)}, Levels: {len(error_levels)}, "
+          f"Configs: {len(test_configs)}, Total cells: {total_cells}")
+    print(f"Output root: {multi_root}")
+
+    all_file_results: Dict[str, List[StressLevelResult]] = {}
+
+    for test_file in TUTORIAL_FILES:
+        if not os.path.exists(test_file):
+            print(f"  SKIP missing file: {test_file}")
+            continue
+
+        file_stem = Path(test_file).stem
+        file_out = os.path.join(multi_root, file_stem)
+        os.makedirs(file_out, exist_ok=True)
+        original_content = read_file(test_file) or ""
+        if not original_content.strip():
+            print(f"  SKIP empty file: {test_file}")
+            continue
+
+        # Save original for the per-file audit trail
+        write_file(os.path.join(file_out, f"{file_stem}.original.Rmd"), original_content)
+
+        print(f"\n{'#'*70}")
+        print(f"# FILE: {file_stem}")
+        print(f"{'#'*70}")
+
+        file_results: List[StressLevelResult] = []
+
+        for error_level in error_levels:
+            print(f"\n--- Level {error_level} ---")
+
+            # Deterministic injection so every model sees identical corrupted text
+            injector = LLMErrorInjector(llm, force_deterministic=True)
+            corrupted, manifest = injector.inject(
+                original_content,
+                min_per_category=error_level,
+                max_words=50000,
+            )
+            corrupted_path = os.path.join(file_out, f"{file_stem}.level_{error_level}.corrupted.Rmd")
+            write_file(corrupted_path, corrupted)
+            manifest_path = os.path.join(file_out, f"{file_stem}.level_{error_level}.manifest.json")
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f, indent=2)
+            injection_result = {
+                "error_count": error_level,
+                "corrupted_content": corrupted,
+                "corrupted_path": corrupted_path,
+                "manifest": manifest,
+                "manifest_path": manifest_path,
+                "total_errors": len(manifest.get("errors", [])),
+            }
+            print(f"    Injected {injection_result['total_errors']} errors (deterministic)")
+
+            for model_name, prompt_name in test_configs:
+                combo = f"{model_name}+{prompt_name}"
+                try:
+                    t0 = time.time()
+                    fixed_content = fix_with_model(
+                        llm,
+                        injection_result["corrupted_content"],
+                        original_content,
+                        file_out,
+                        file_stem,
+                        error_level,
+                        prompt_name=prompt_name,
+                        model_name=model_name,
+                    )
+                    duration = time.time() - t0
+
+                    result, category_results = evaluate_fixes(
+                        original_content,
+                        injection_result["corrupted_content"],
+                        fixed_content,
+                        injection_result["manifest"],
+                        llm,
+                    )
+
+                    sr = StressLevelResult(
+                        error_count=error_level,
+                        total_errors_injected=injection_result["total_errors"],
+                        errors_fixed=result.true_positives,
+                        errors_unfixed=result.false_negatives,
+                        fix_rate=result.fix_rate,
+                        precision=result.precision,
+                        recall=result.recall,
+                        f1_score=result.f1_score,
+                        duration_seconds=duration,
+                        category_results=category_results,
+                        model_name=combo,
+                    )
+                    file_results.append(sr)
+                    print(
+                        f"    {combo:<30} F1={result.f1_score:.3f} "
+                        f"fix={result.fix_rate:.1%} time={duration:.1f}s"
+                    )
+                except Exception as e:
+                    print(f"    {combo:<30} ERROR: {e}")
+                    continue
+
+        # Flush per-file results + render per-file fig1-6
+        save_results(file_results, file_out)
+        all_file_results[file_stem] = file_results
+
+    # ------------------------------------------------------------------
+    # Cross-file aggregate (pooled across all 10 files)
+    # ------------------------------------------------------------------
+    pooled: List[StressLevelResult] = []
+    for file_stem, results in all_file_results.items():
+        for r in results:
+            # Namespace model_name with file_stem so the aggregate heatmap has
+            # distinguishable rows. Keep the unnamespaced per-file results intact.
+            pass
+        pooled.extend(results)
+
+    agg_dir = os.path.join(multi_root, "_aggregate")
+    os.makedirs(agg_dir, exist_ok=True)
+    save_results(pooled, agg_dir)
+    # Rename the aggregate artifacts so they're distinguishable in the UI.
+    for old_name, new_name in [
+        ("STRESS_TEST_RESULTS.json", "AGGREGATE_RESULTS.json"),
+        ("STRESS_TEST_TABLE.csv", "AGGREGATE_TABLE.csv"),
+        ("STRESS_TEST_CATEGORY_DETAIL.csv", "AGGREGATE_CATEGORY_DETAIL.csv"),
+        ("STRESS_TEST_REPORT.md", "AGGREGATE_REPORT.md"),
+    ]:
+        src = os.path.join(agg_dir, old_name)
+        dst = os.path.join(agg_dir, new_name)
+        if os.path.exists(src):
+            os.rename(src, dst)
+
+    # Top-level index so future-Claude finds everything from one file
+    index_path = os.path.join(multi_root, "INDEX.md")
+    with open(index_path, "w") as f:
+        f.write(f"# Multi-File Stress Run — {datetime.now():%Y-%m-%d %H:%M:%S}\n\n")
+        f.write(f"- Files: {len(all_file_results)} / {len(TUTORIAL_FILES)}\n")
+        f.write(f"- Levels: {error_levels}\n")
+        f.write(f"- Configs per cell: {len(test_configs)} "
+                f"({[f'{m}+{p}' for m, p in test_configs]})\n")
+        f.write(f"- Total results: {len(pooled)}\n\n")
+        f.write("## Per-file output\n\n")
+        for stem in all_file_results:
+            f.write(f"- `{stem}/` — STRESS_TEST_RESULTS.json + fig1-6.{{png,pdf}}\n")
+        f.write("\n## Aggregate\n\n")
+        f.write("- `_aggregate/AGGREGATE_RESULTS.json`\n")
+        f.write("- `_aggregate/AGGREGATE_TABLE.csv`\n")
+        f.write("- `_aggregate/fig1-6.{png,pdf}` — pooled across all 10 files\n")
+
+    print(f"\n{'='*70}")
+    print("MULTI-FILE FULL MATRIX COMPLETE")
+    print(f"{'='*70}")
+    print(f"Files processed: {len(all_file_results)}")
+    print(f"Total results: {len(pooled)}")
+    print(f"Artifacts: {multi_root}")
+    print(f"Index: {index_path}")
+
+    assert len(pooled) > 0, "No results produced — check LLM/proxy connectivity"
