@@ -180,3 +180,6 @@ data/
 tests/data/
 
 bioguider_debug/
+
+# Meeting recordings & transcripts
+Meeting/
