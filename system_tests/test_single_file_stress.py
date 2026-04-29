@@ -95,6 +95,11 @@ class StressLevelResult:
     model_name: str = "bioguider"  # Model used for fixing
     false_positives: int = 0  # From BenchmarkResult.false_positives — exact integer, not derived
 
+    # Token usage from the LLM fix call
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
     # Scorable variants — UNSCORABLE_CATEGORIES excluded. Populated by
     # ``_populate_scorable`` from ``category_results`` before save. Kept
     # optional so legacy callers that don't populate category_results still
@@ -312,10 +317,7 @@ PROMPTS = {
 MODELS = {
     "gpt-5.4":   {"type": "litellm", "model": "gpt-5.4"},
     "kimi-k2.5": {"type": "litellm", "model": "kimi-k2.5"},
-    # "glm-5": dropped from this run — consistently stalls ≥3 min per call on
-    # full Rmd vignettes, blocking ThreadPoolExecutor.shutdown(wait=True). Keep
-    # the entry in the routing doc; can re-enable later with a longer timeout
-    # or a narrower input set.
+    "glm-5":     {"type": "litellm", "model": "glm-5"},
     "gpt-oss":   {"type": "litellm", "model": "gpt-oss-120b"},
     "gpt-4o":    {"type": "litellm", "model": "gpt-4o"},
 }
@@ -347,10 +349,13 @@ def print_models():
     wait=wait_exponential(multiplier=2, min=4, max=60),
     retry=retry_if_exception_type(RateLimitError),
 )
-def _invoke_with_retry(llm: ChatOpenAI, prompt: str) -> str:
-    """Invoke an LLM with exponential-backoff retry on RateLimitError."""
-    response = llm.invoke(prompt)
-    return response.content if hasattr(response, "content") else str(response)
+def _invoke_with_retry(llm: ChatOpenAI, prompt: str):
+    """Invoke an LLM with exponential-backoff retry on RateLimitError.
+
+    Returns the raw AIMessage so callers can inspect response_metadata for
+    token usage.
+    """
+    return llm.invoke(prompt)
 
 
 def fix_with_model(
@@ -362,10 +367,10 @@ def fix_with_model(
     error_count: int,
     prompt_name: str = "bioguider",
     model_name: str = "gpt4o",
-) -> str:
+) -> Tuple[str, Dict[str, int]]:
     """
     Fix corrupted content using specified model and prompt combination.
-    
+
     Args:
         llm: Language model to use (for Azure OpenAI)
         corrupted_content: Content with errors
@@ -375,8 +380,10 @@ def fix_with_model(
         error_count: Error level being tested
         prompt_name: Name of prompt to use ("bioguider", "simple", "gpt_basic")
         model_name: Name of model ("gpt4o", "qwen3_30b", etc.)
-    
-    Returns fixed content.
+
+    Returns:
+        (fixed_content, token_usage) where token_usage is a dict with keys
+        prompt_tokens, completion_tokens, total_tokens (all int, default 0).
     """
     if prompt_name in PROMPTS:
         prompt_base = PROMPTS[prompt_name]["prompt"]
@@ -387,6 +394,8 @@ def fix_with_model(
 
     model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
     model_id = model_config.get("model", model_name)
+
+    token_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     try:
         # timeout=120 + max_retries=1 so a slow backend fails in ~2 min instead
@@ -399,7 +408,14 @@ def fix_with_model(
             timeout=120,
             max_retries=1,
         )
-        fixed_content = _invoke_with_retry(llm_override, prompt)
+        response = _invoke_with_retry(llm_override, prompt)
+        fixed_content = response.content if hasattr(response, "content") else str(response)
+
+        # Extract token usage from response metadata
+        usage = getattr(response, "response_metadata", {}).get("token_usage", {})
+        token_usage["prompt_tokens"] = int(usage.get("prompt_tokens", 0))
+        token_usage["completion_tokens"] = int(usage.get("completion_tokens", 0))
+        token_usage["total_tokens"] = int(usage.get("total_tokens", 0))
 
         # Clean up LLM wrapper text and markdown code fences
         lines = fixed_content.split('\n')
@@ -426,19 +442,22 @@ def fix_with_model(
     except Exception as e:
         print(f"  Error fixing content: {e}")
         fixed_content = corrupted_content
-    
+
     # Save fixed file with model and prompt name in filename
     fixed_path = os.path.join(output_dir, f"{file_basename}.level_{error_count}.{model_name}_{prompt_name}.fixed.Rmd")
     write_file(fixed_path, fixed_content)
-    
-    return fixed_content
+
+    return fixed_content, token_usage
 
 
 # Backward compatibility alias
 def fix_with_bioguider(llm, corrupted_content, original_content, output_dir, file_basename, error_count):
     """Legacy function - uses BioGuider prompt with GPT-4o."""
-    return fix_with_model(llm, corrupted_content, original_content, output_dir,
-                          file_basename, error_count, prompt_name="bioguider", model_name="gpt4o")
+    fixed_content, _token_usage = fix_with_model(
+        llm, corrupted_content, original_content, output_dir,
+        file_basename, error_count, prompt_name="bioguider", model_name="gpt4o"
+    )
+    return fixed_content
 
 
 import threading  # noqa: E402 — placed here because module-level imports above are clustered elsewhere
@@ -639,7 +658,7 @@ def run_stress_level(
     print(f"  [Level {error_count}] Fixing with {model_desc} using {prompt_name} prompt...")
     
     # Fix with specified model/prompt
-    fixed_content = fix_with_model(
+    fixed_content, token_info = fix_with_model(
         llm,
         injection_result["corrupted_content"],
         original_content,
@@ -680,7 +699,10 @@ def run_stress_level(
         f1_score=result.f1_score,
         duration_seconds=duration,
         category_results=category_results,
-        model_name=combo_name  # Include both model and prompt name
+        model_name=combo_name,  # Include both model and prompt name
+        prompt_tokens=token_info.get("prompt_tokens", 0),
+        completion_tokens=token_info.get("completion_tokens", 0),
+        total_tokens=token_info.get("total_tokens", 0),
     )
 
 
@@ -813,7 +835,8 @@ def save_results(results: List[StressLevelResult], output_dir: str):
             "fix_rate_scorable", "precision_scorable", "recall_scorable", "f1_score_scorable",
             "total_injected_content", "fixed_content", "f1_score_content",
             "total_injected_hygiene", "fixed_hygiene", "f1_score_hygiene",
-            "duration_s"
+            "duration_s",
+            "prompt_tokens", "completion_tokens", "total_tokens",
         ])
         for r in results:
             writer.writerow([
@@ -825,7 +848,8 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 round(r.recall_scorable, 4), round(r.f1_score_scorable, 4),
                 r.total_injected_content, r.fixed_content, round(r.f1_score_content, 4),
                 r.total_injected_hygiene, r.fixed_hygiene, round(r.f1_score_hygiene, 4),
-                round(r.duration_seconds, 2)
+                round(r.duration_seconds, 2),
+                r.prompt_tokens, r.completion_tokens, r.total_tokens,
             ])
     
     # CSV format - detailed category breakdown (for figures)
@@ -1146,7 +1170,7 @@ def test_multi_model_comparison(llm, test_output_dir):
         print(f"    Prompt: {prompt_desc}...")
         
         try:
-            fixed_content = fix_with_model(
+            fixed_content, _ = fix_with_model(
                 llm,
                 injection_result["corrupted_content"],
                 original_content,
@@ -1258,7 +1282,7 @@ def test_model_comparison(llm, test_output_dir):
     for prompt_name in ["bioguider", "simple"]:
         print(f"\n--- Testing GPT-4o with {prompt_name} prompt ---")
         
-        fixed_content = fix_with_model(
+        fixed_content, _ = fix_with_model(
             llm,
             injection_result["corrupted_content"],
             original_content,
@@ -1408,7 +1432,7 @@ def test_all_models_all_levels(llm, test_output_dir):
             try:
                 start_time = time.time()
                 
-                fixed_content = fix_with_model(
+                fixed_content, _ = fix_with_model(
                     llm,
                     injection_result["corrupted_content"],
                     original_content,
@@ -1537,7 +1561,7 @@ def test_all_models_all_levels(llm, test_output_dir):
         try:
             start_time = time.time()
             
-            fixed_content = fix_with_model(
+            fixed_content, _ = fix_with_model(
                 llm,
                 injection_result["corrupted_content"],
                 original_content,
@@ -1602,7 +1626,7 @@ def test_all_models_all_levels(llm, test_output_dir):
         try:
             start_time = time.time()
             
-            fixed_content = fix_with_model(
+            fixed_content, _ = fix_with_model(
                 llm,
                 injection_result["corrupted_content"],
                 original_content,
@@ -1782,7 +1806,7 @@ def test_multi_file_full_matrix(llm, test_output_dir):
                 combo = f"{model_name}+{prompt_name}"
                 t0 = time.time()
                 try:
-                    fixed_content = fix_with_model(
+                    fixed_content, _ = fix_with_model(
                         llm,
                         injection_result["corrupted_content"],
                         original_content,
@@ -1922,3 +1946,309 @@ def test_multi_file_full_matrix(llm, test_output_dir):
     print(f"Index: {index_path}")
 
     assert len(pooled) > 0, "No results produced — check LLM/proxy connectivity"
+
+
+# ============================================================================
+# SKILL COMPARISON TESTS (Workstream B)
+# ============================================================================
+
+def _write_skill_comparison_csv(rows: List[Dict[str, Any]], csv_path: str) -> None:
+    """Write skill comparison rows to CSV.
+
+    Columns: file_stem, model, skill, error_count, total_injected, fixed,
+    unfixed, fix_rate, f1_score, f1_score_scorable, f1_score_content,
+    f1_score_hygiene, duration_s.
+    """
+    fieldnames = [
+        "file_stem", "model", "skill", "error_count", "total_injected",
+        "fixed", "unfixed", "fix_rate", "f1_score", "f1_score_scorable",
+        "f1_score_content", "f1_score_hygiene", "duration_s",
+    ]
+    with open(csv_path, "w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+@pytest.mark.slow
+def test_skill_comparison(llm, test_output_dir):
+    """Compare BioGuider prompt vs skill_generic prompt on a single Seurat vignette.
+
+    Uses error_count=30 with force_deterministic=True so both skills see
+    identical corrupted text. Results land in SKILL_COMPARISON.csv inside
+    the standard test_output_dir.
+
+    Run:
+        pytest system_tests/test_single_file_stress.py::test_skill_comparison -v -s
+    """
+    import time
+
+    # Pick the first valid vignette from TUTORIAL_FILES.
+    test_file = None
+    for candidate in TUTORIAL_FILES:
+        if os.path.exists(candidate):
+            test_file = candidate
+            break
+
+    if test_file is None:
+        pytest.skip("No Seurat vignettes found — clone satijalab/seurat first")
+
+    original_content = read_file(test_file) or ""
+    if not original_content.strip():
+        pytest.skip(f"Vignette is empty: {test_file}")
+
+    file_stem = Path(test_file).stem
+    error_count = 30
+    model_name = next(iter(MODELS))  # first model in MODELS dict
+    skills = ["bioguider", "skill_generic"]
+
+    print(f"\n{'='*70}")
+    print("SKILL COMPARISON TEST")
+    print(f"{'='*70}")
+    print(f"File: {test_file}")
+    print(f"Model: {model_name}")
+    print(f"Error count: {error_count}")
+    print(f"Skills: {skills}")
+
+    # One deterministic injection shared across both skills.
+    injector = LLMErrorInjector(llm, force_deterministic=True)
+    corrupted, manifest = injector.inject(
+        original_content,
+        min_per_category=error_count,
+        max_words=50000,
+    )
+    corrupted_path = os.path.join(test_output_dir, f"{file_stem}.level_{error_count}.corrupted.Rmd")
+    write_file(corrupted_path, corrupted)
+    manifest_path = os.path.join(test_output_dir, f"{file_stem}.level_{error_count}.manifest.json")
+    with open(manifest_path, "w") as fh:
+        json.dump(manifest, fh, indent=2)
+
+    total_injected = len(manifest.get("errors", []))
+    print(f"Injected {total_injected} errors (deterministic)")
+
+    csv_rows: List[Dict[str, Any]] = []
+
+    for skill in skills:
+        print(f"\n--- Skill: {skill} ---")
+        t0 = time.time()
+
+        fixed_content, _ = fix_with_model(
+            llm,
+            corrupted,
+            original_content,
+            test_output_dir,
+            file_stem,
+            error_count,
+            prompt_name=skill,
+            model_name=model_name,
+        )
+        duration = time.time() - t0
+
+        result, category_results = evaluate_fixes(
+            original_content,
+            corrupted,
+            fixed_content,
+            manifest,
+            llm,
+        )
+
+        sr = StressLevelResult(
+            error_count=error_count,
+            total_errors_injected=total_injected,
+            errors_fixed=result.true_positives,
+            errors_unfixed=result.false_negatives,
+            fix_rate=result.fix_rate,
+            precision=result.precision,
+            recall=result.recall,
+            f1_score=result.f1_score,
+            duration_seconds=duration,
+            category_results=category_results,
+            model_name=f"{model_name}+{skill}",
+            false_positives=getattr(result, "false_positives", 0),
+        )
+        _populate_scorable(sr)
+
+        print(
+            f"  Fixed {sr.errors_fixed}/{total_injected} "
+            f"fix_rate={sr.fix_rate:.1%} F1={sr.f1_score:.3f} "
+            f"F1_scorable={sr.f1_score_scorable:.3f} time={duration:.1f}s"
+        )
+
+        csv_rows.append({
+            "file_stem": file_stem,
+            "model": model_name,
+            "skill": skill,
+            "error_count": error_count,
+            "total_injected": total_injected,
+            "fixed": sr.errors_fixed,
+            "unfixed": sr.errors_unfixed,
+            "fix_rate": round(sr.fix_rate, 4),
+            "f1_score": round(sr.f1_score, 4),
+            "f1_score_scorable": round(sr.f1_score_scorable, 4),
+            "f1_score_content": round(sr.f1_score_content, 4),
+            "f1_score_hygiene": round(sr.f1_score_hygiene, 4),
+            "duration_s": round(duration, 2),
+        })
+
+    csv_path = os.path.join(test_output_dir, "SKILL_COMPARISON.csv")
+    _write_skill_comparison_csv(csv_rows, csv_path)
+
+    print(f"\n{'='*70}")
+    print("SKILL COMPARISON SUMMARY")
+    print(f"{'='*70}")
+    print(f"{'Skill':<20} {'Fixed':<8} {'Fix Rate':<10} {'F1':<8} {'F1 Scorable':<12}")
+    print("-" * 70)
+    for row in csv_rows:
+        print(
+            f"{row['skill']:<20} {row['fixed']:<8} {row['fix_rate']:<10.1%} "
+            f"{row['f1_score']:<8.3f} {row['f1_score_scorable']:<12.3f}"
+        )
+    print(f"\nResults written to: {csv_path}")
+
+    assert len(csv_rows) == len(skills), "Should have one result row per skill"
+
+
+@pytest.mark.slow
+def test_skill_matrix(llm, test_output_dir):
+    """Skill matrix: 5 vignettes x 3 error levels x 2 skills x 1 model.
+
+    Each (file, level) cell uses a single deterministic injection so both
+    skills score against byte-identical corrupted text. Results land in
+    SKILL_MATRIX_TABLE.csv in the output directory.
+
+    Run:
+        pytest system_tests/test_single_file_stress.py::test_skill_matrix -v -s
+    """
+    import time
+
+    error_levels = [10, 30, 100]
+    skills = ["bioguider", "skill_generic"]
+    model_name = next(iter(MODELS))  # first model in MODELS dict
+
+    # Use first 5 vignettes that exist on disk.
+    available_files = [f for f in TUTORIAL_FILES if os.path.exists(f)][:5]
+    if not available_files:
+        pytest.skip("No Seurat vignettes found — clone satijalab/seurat first")
+
+    total_cells = len(available_files) * len(error_levels) * len(skills)
+    print(f"\n{'='*70}")
+    print("SKILL MATRIX TEST")
+    print(f"{'='*70}")
+    print(
+        f"Files: {len(available_files)}, Levels: {error_levels}, "
+        f"Skills: {skills}, Model: {model_name}, Total cells: {total_cells}"
+    )
+
+    csv_rows: List[Dict[str, Any]] = []
+
+    for test_file in available_files:
+        file_stem = Path(test_file).stem
+        original_content = read_file(test_file) or ""
+        if not original_content.strip():
+            print(f"  SKIP empty file: {test_file}")
+            continue
+
+        print(f"\n{'#'*70}")
+        print(f"# FILE: {file_stem}")
+        print(f"{'#'*70}")
+
+        for error_level in error_levels:
+            print(f"\n--- Level {error_level} ---")
+
+            # Deterministic injection shared across both skills for this cell.
+            injector = LLMErrorInjector(llm, force_deterministic=True)
+            corrupted, manifest = injector.inject(
+                original_content,
+                min_per_category=error_level,
+                max_words=50000,
+            )
+            corrupted_path = os.path.join(
+                test_output_dir,
+                f"{file_stem}.level_{error_level}.corrupted.Rmd",
+            )
+            write_file(corrupted_path, corrupted)
+            manifest_path = os.path.join(
+                test_output_dir,
+                f"{file_stem}.level_{error_level}.manifest.json",
+            )
+            with open(manifest_path, "w") as fh:
+                json.dump(manifest, fh, indent=2)
+
+            total_injected = len(manifest.get("errors", []))
+            print(f"    Injected {total_injected} errors (deterministic)")
+
+            for skill in skills:
+                t0 = time.time()
+
+                try:
+                    fixed_content, _ = fix_with_model(
+                        llm,
+                        corrupted,
+                        original_content,
+                        test_output_dir,
+                        file_stem,
+                        error_level,
+                        prompt_name=skill,
+                        model_name=model_name,
+                    )
+                    duration = time.time() - t0
+
+                    result, category_results = evaluate_fixes(
+                        original_content,
+                        corrupted,
+                        fixed_content,
+                        manifest,
+                        llm,
+                    )
+
+                    sr = StressLevelResult(
+                        error_count=error_level,
+                        total_errors_injected=total_injected,
+                        errors_fixed=result.true_positives,
+                        errors_unfixed=result.false_negatives,
+                        fix_rate=result.fix_rate,
+                        precision=result.precision,
+                        recall=result.recall,
+                        f1_score=result.f1_score,
+                        duration_seconds=duration,
+                        category_results=category_results,
+                        model_name=f"{model_name}+{skill}",
+                        false_positives=getattr(result, "false_positives", 0),
+                    )
+                    _populate_scorable(sr)
+
+                    print(
+                        f"    {skill:<20} F1={sr.f1_score:.3f} "
+                        f"F1s={sr.f1_score_scorable:.3f} "
+                        f"fix={sr.fix_rate:.1%} time={duration:.1f}s"
+                    )
+
+                    csv_rows.append({
+                        "file_stem": file_stem,
+                        "model": model_name,
+                        "skill": skill,
+                        "error_count": error_level,
+                        "total_injected": total_injected,
+                        "fixed": sr.errors_fixed,
+                        "unfixed": sr.errors_unfixed,
+                        "fix_rate": round(sr.fix_rate, 4),
+                        "f1_score": round(sr.f1_score, 4),
+                        "f1_score_scorable": round(sr.f1_score_scorable, 4),
+                        "f1_score_content": round(sr.f1_score_content, 4),
+                        "f1_score_hygiene": round(sr.f1_score_hygiene, 4),
+                        "duration_s": round(duration, 2),
+                    })
+
+                except Exception as e:
+                    print(f"    {skill:<20} ERROR: {e}")
+
+    csv_path = os.path.join(test_output_dir, "SKILL_MATRIX_TABLE.csv")
+    _write_skill_comparison_csv(csv_rows, csv_path)
+
+    print(f"\n{'='*70}")
+    print("SKILL MATRIX COMPLETE")
+    print(f"{'='*70}")
+    print(f"Total rows written: {len(csv_rows)}")
+    print(f"Results written to: {csv_path}")
+
+    assert len(csv_rows) > 0, "No results produced — check LLM/proxy connectivity"

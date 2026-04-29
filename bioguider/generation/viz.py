@@ -476,6 +476,96 @@ class _RescoredPlotter:
         ax.legend()
         self._save(fig, f"fig6_fixed_unfixed_{self.suffix}")
 
+    def fig_heatmap(self) -> None:
+        """Heatmap: rows=models, cols=error levels, cell=F1 score (metric_col)."""
+        models = sorted({r["model"] for r in self._rows})
+        error_counts = sorted({r["error_count"] for r in self._rows})
+
+        # Build lookup: (model, error_count) -> f1
+        lookup: dict = {}
+        for r in self._rows:
+            lookup[(r["model"], r["error_count"])] = r["f1"]
+
+        matrix = np.zeros((len(models), len(error_counts)))
+        for i, model in enumerate(models):
+            for j, ec in enumerate(error_counts):
+                matrix[i, j] = lookup.get((model, ec), 0.0)
+
+        fig, ax = plt.subplots(
+            figsize=(max(6, len(error_counts) * 0.9), max(3, len(models) * 0.7))
+        )
+        im = ax.imshow(matrix, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
+        ax.set_xticks(np.arange(len(error_counts)))
+        ax.set_yticks(np.arange(len(models)))
+        ax.set_xticklabels(error_counts, fontsize=8)
+        ax.set_yticklabels(models, fontsize=8)
+        ax.set_xlabel("Error Count")
+        ax.set_ylabel("Model")
+        for i in range(len(models)):
+            for j in range(len(error_counts)):
+                color = "black" if 0.25 < matrix[i, j] < 0.8 else "white"
+                ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center",
+                        fontsize=7, color=color)
+        plt.colorbar(im, ax=ax, label=self._label("F1 Score"))
+        ax.set_title(f"F1 Score Heatmap ({self.suffix})")
+        self._save(fig, f"heatmap_{self.suffix}")
+
+    def fig_skill_comparison(self, csv_path: PathLike, suffix: str = "skill") -> None:
+        """Grouped bar chart: x=error_count, bars=skill, y=F1 scorable.
+
+        Reads *csv_path* directly (must have a ``skill`` column plus the
+        standard columns written by ``_write_skill_comparison_csv``).
+        Saves ``fig_skill_comparison_{suffix}.{png,pdf}`` into ``self.out_dir``.
+        """
+        csv_path = Path(csv_path)
+        rows: list = []
+        with csv_path.open() as fh:
+            for row in csv.DictReader(fh):
+                try:
+                    rows.append(
+                        {
+                            "skill": row["skill"],
+                            "error_count": int(row["error_count"]),
+                            "f1_scorable": float(row.get("f1_score_scorable", 0.0)),
+                        }
+                    )
+                except (KeyError, ValueError):
+                    continue
+
+        if not rows:
+            return
+
+        skills = sorted({r["skill"] for r in rows})
+        error_counts = sorted({r["error_count"] for r in rows})
+
+        from collections import defaultdict as _dd
+
+        skill_data: dict = {s: _dd(list) for s in skills}
+        for r in rows:
+            skill_data[r["skill"]][r["error_count"]].append(r["f1_scorable"])
+
+        x = np.arange(len(error_counts))
+        n = len(skills)
+        width = 0.8 / n
+        offsets = np.linspace(-0.4 + width / 2, 0.4 - width / 2, n)
+
+        fig, ax = plt.subplots(figsize=(max(6, len(error_counts) * 1.2), 5))
+        for i, skill in enumerate(skills):
+            vals = [
+                float(np.mean(skill_data[skill][ec])) if skill_data[skill][ec] else 0.0
+                for ec in error_counts
+            ]
+            ax.bar(x + offsets[i], vals, width, label=skill)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(error_counts)
+        ax.set_xlabel("Error Count")
+        ax.set_ylabel("F1 Score (scorable)")
+        ax.set_title(f"Skill Comparison — F1 Scorable by Error Level ({suffix})")
+        ax.set_ylim(0, 1.1)
+        ax.legend(fontsize=8)
+        self._save(fig, f"fig_skill_comparison_{suffix}")
+
     def render_all(self) -> None:
         self.fig1()
         self.fig2()
@@ -483,6 +573,7 @@ class _RescoredPlotter:
         self.fig4()
         self.fig5()
         self.fig6()
+        self.fig_heatmap()
 
 
 def render_rescored_figures(
@@ -532,3 +623,52 @@ def render_rescored_figures(
             category_filter=category_filter,
         )
         agg_plotter.render_all()
+
+
+def render_heatmap(
+    csv_path: PathLike,
+    out_dir: PathLike,
+    metric_col: str = "f1_score",
+    suffix: str = "heatmap",
+) -> None:
+    """Render an F1 heatmap (rows=models, cols=error levels) from *csv_path*.
+
+    Writes ``heatmap_{suffix}.{png,pdf}`` into *out_dir*.
+
+    Args:
+        csv_path: Path to a STRESS_TEST_TABLE*.csv (or any rescored variant)
+                  that contains columns ``model``, ``error_count``, and
+                  *metric_col*.
+        out_dir:  Directory where the output images are saved.
+        metric_col: Column to use as the cell value (default ``f1_score``).
+        suffix:   File-name suffix for the output images.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    plotter = _RescoredPlotter(out_dir, csv_path, metric_col, suffix)
+    plotter.fig_heatmap()
+
+
+def render_skill_comparison(
+    csv_path: PathLike,
+    out_dir: PathLike,
+    suffix: str = "skill",
+) -> None:
+    """Render a grouped bar chart comparing skills from a SKILL_COMPARISON or
+    SKILL_MATRIX_TABLE CSV (must contain a ``skill`` column).
+
+    Detects the ``skill`` column automatically.  Writes
+    ``fig_skill_comparison_{suffix}.{png,pdf}`` into *out_dir*.
+
+    Args:
+        csv_path: Path to SKILL_COMPARISON.csv or SKILL_MATRIX_TABLE.csv.
+        out_dir:  Directory where output images are saved.
+        suffix:   File-name suffix appended to ``fig_skill_comparison_``.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # _RescoredPlotter needs a valid metric_col for its _load(); we pass a
+    # dummy placeholder and rely only on fig_skill_comparison which reads
+    # csv_path directly without going through _load().
+    plotter = _RescoredPlotter(out_dir, csv_path, "f1_score", suffix)
+    plotter.fig_skill_comparison(csv_path, suffix=suffix)
