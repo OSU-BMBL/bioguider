@@ -10,7 +10,7 @@ from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.utils.utils import increase_token_usage
 from bioguider.agents.agent_utils import get_llm
 
-load_dotenv()
+load_dotenv(override=True)
 
 def get_openai():
     return ChatOpenAI(
