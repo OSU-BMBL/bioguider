@@ -173,6 +173,8 @@ class BenchmarkPlotter:
 
         x = np.arange(len(error_counts))
         n = len(models_sorted)
+        if n == 0:
+            return
         width = 0.8 / n
         offsets = np.linspace(-0.4 + width / 2, 0.4 - width / 2, n)
 
@@ -426,6 +428,8 @@ class _RescoredPlotter:
             model_fr[r["model"]][r["error_count"]] = r["fix_rate"]
         x = np.arange(len(error_counts))
         n = len(models_sorted)
+        if n == 0:
+            return
         width = 0.8 / n
         offsets = np.linspace(-0.4 + width / 2, 0.4 - width / 2, n)
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -480,6 +484,8 @@ class _RescoredPlotter:
         """Heatmap: rows=models, cols=error levels, cell=F1 score (metric_col)."""
         models = sorted({r["model"] for r in self._rows})
         error_counts = sorted({r["error_count"] for r in self._rows})
+        if not models or not error_counts:
+            return
 
         # Build lookup: (model, error_count) -> f1
         lookup: dict = {}
