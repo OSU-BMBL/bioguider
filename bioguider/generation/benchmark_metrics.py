@@ -13,7 +13,13 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.agents.common_conversation import CommonConversation
-from bioguider.managers.config import UNSCORABLE_CATEGORIES, compute_scorable_breakdown
+from bioguider.managers.config import (
+    UNSCORABLE_CATEGORIES,
+    CONTENT_CATEGORIES,
+    HYGIENE_CATEGORIES,
+    compute_scorable_breakdown,
+)
+from bioguider.generation.unified_metrics import _naked_count
 
 
 @dataclass
@@ -69,6 +75,14 @@ class BenchmarkResult:
     f1_score_scorable: float = 0.0
     fix_rate_scorable: float = 0.0
 
+    # Paper-table CONTENT vs HYGIENE split.
+    total_injected_content: int = 0
+    fixed_content: int = 0
+    f1_score_content: float = 0.0
+    total_injected_hygiene: int = 0
+    fixed_hygiene: int = 0
+    f1_score_hygiene: float = 0.0
+
     # Detailed breakdowns
     per_category: Dict[str, Dict[str, int]] = field(default_factory=dict)
     per_file: Dict[str, Dict[str, int]] = field(default_factory=dict)
@@ -116,7 +130,41 @@ class BenchmarkResult:
         self.recall_scorable = b["recall_scorable"]
         self.f1_score_scorable = b["f1_score_scorable"]
         self.fix_rate_scorable = b["fix_rate_scorable"]
-    
+
+        # CONTENT vs HYGIENE split. Precision mirrors the scorable precision
+        # (FPs are not attributed to a group); recall is group-local.
+        fixed_c = sum(
+            1 for e in self.error_details
+            if e.category in CONTENT_CATEGORIES and e.is_fixed
+        )
+        total_c = sum(
+            1 for e in self.error_details
+            if e.category in CONTENT_CATEGORIES
+        )
+        fixed_h = sum(
+            1 for e in self.error_details
+            if e.category in HYGIENE_CATEGORIES and e.is_fixed
+        )
+        total_h = sum(
+            1 for e in self.error_details
+            if e.category in HYGIENE_CATEGORIES
+        )
+        recall_c = fixed_c / total_c if total_c > 0 else 0.0
+        recall_h = fixed_h / total_h if total_h > 0 else 0.0
+        prec_s = self.precision_scorable
+        self.total_injected_content = total_c
+        self.fixed_content = fixed_c
+        self.f1_score_content = (
+            2 * prec_s * recall_c / (prec_s + recall_c)
+            if (prec_s + recall_c) > 0 else 0.0
+        )
+        self.total_injected_hygiene = total_h
+        self.fixed_hygiene = fixed_h
+        self.f1_score_hygiene = (
+            2 * prec_s * recall_h / (prec_s + recall_h)
+            if (prec_s + recall_h) > 0 else 0.0
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -139,6 +187,12 @@ class BenchmarkResult:
             "recall_scorable": round(self.recall_scorable, 4),
             "f1_score_scorable": round(self.f1_score_scorable, 4),
             "fix_rate_scorable": round(self.fix_rate_scorable, 4),
+            "total_injected_content": self.total_injected_content,
+            "fixed_content": self.fixed_content,
+            "f1_score_content": round(self.f1_score_content, 4),
+            "total_injected_hygiene": self.total_injected_hygiene,
+            "fixed_hygiene": self.fixed_hygiene,
+            "f1_score_hygiene": round(self.f1_score_hygiene, 4),
             "per_category": self.per_category,
             "per_file": self.per_file,
             "error_details": [
@@ -463,10 +517,10 @@ class BenchmarkEvaluator:
         
         elif category == "inline_code":
             raw = mut.strip('`') if mut else ""
-            rewrapped = f"`{raw}`" if raw else ""
-            if raw and rewrapped and rewrapped in revised and mut not in revised:
-                return True, "fixed_to_valid"
-            return False, "unchanged"
+            if not raw:
+                return False, "unchanged"
+            is_fixed = _naked_count(revised, raw) < _naked_count(corrupted, raw)
+            return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
         
         elif category in ("emphasis", "code_lang_tag"):
             is_fixed = mut and mut not in revised

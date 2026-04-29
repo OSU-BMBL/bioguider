@@ -25,6 +25,7 @@ from openai import RateLimitError
 
 from bioguider.generation.llm_injector import LLMErrorInjector
 from bioguider.generation.benchmark_metrics import BenchmarkEvaluator, BenchmarkResult
+from bioguider.generation.unified_metrics import _naked_count
 from bioguider.agents.agent_utils import read_file, write_file
 
 
@@ -92,6 +93,7 @@ class StressLevelResult:
     duration_seconds: float
     category_results: List[CategoryResult] = None  # Per-category breakdown
     model_name: str = "bioguider"  # Model used for fixing
+    false_positives: int = 0  # From BenchmarkResult.false_positives — exact integer, not derived
 
     # Scorable variants — UNSCORABLE_CATEGORIES excluded. Populated by
     # ``_populate_scorable`` from ``category_results`` before save. Kept
@@ -105,6 +107,16 @@ class StressLevelResult:
     recall_scorable: float = 0.0
     f1_score_scorable: float = 0.0
 
+    # Paper-table CONTENT vs HYGIENE split (see managers/config.py
+    # CONTENT_CATEGORIES / HYGIENE_CATEGORIES). Precision mirrors the scorable
+    # precision (FPs are category-agnostic); recall/F1 are group-local.
+    total_injected_content: int = 0
+    fixed_content: int = 0
+    f1_score_content: float = 0.0
+    total_injected_hygiene: int = 0
+    fixed_hygiene: int = 0
+    f1_score_hygiene: float = 0.0
+
 
 def _populate_scorable(r: "StressLevelResult") -> None:
     """Fill in the scorable fields from the per-category breakdown.
@@ -114,18 +126,22 @@ def _populate_scorable(r: "StressLevelResult") -> None:
     UnifiedMetricsEvaluator.EvaluationResult stay in sync on the
     carve-out story (function bucket injected, not in denominator).
     """
-    from bioguider.managers.config import UNSCORABLE_CATEGORIES
+    from bioguider.managers.config import (
+        UNSCORABLE_CATEGORIES,
+        CONTENT_CATEGORIES,
+        HYGIENE_CATEGORIES,
+    )
 
     cats = r.category_results or []
     fixed_s = sum(c.fixed for c in cats if c.category not in UNSCORABLE_CATEGORIES)
     unfixed_s = sum(c.unfixed for c in cats if c.category not in UNSCORABLE_CATEGORIES)
     injected_s = fixed_s + unfixed_s
 
-    # FPs are not category-attributed in this pipeline; mirror the headline
-    # pseudo-FP count (derived from precision). If precision==1.0 and
-    # recall<1.0, FP==0, so scorable precision tracks fix_rate exactly.
-    tp_plus_fp = r.errors_fixed / r.precision if r.precision > 0 else r.errors_fixed
-    fp_count = max(0, tp_plus_fp - r.errors_fixed)
+    # FPs are not category-attributed in this pipeline. Use the exact integer
+    # from BenchmarkResult.false_positives (threaded through StressLevelResult)
+    # rather than reverse-dividing from the rounded precision float — the
+    # rounded division introduced off-by-one errors at low TP counts.
+    fp_count = int(r.false_positives)
 
     r.total_errors_injected_scorable = injected_s
     r.errors_fixed_scorable = fixed_s
@@ -139,6 +155,28 @@ def _populate_scorable(r: "StressLevelResult") -> None:
         if (r.precision_scorable + r.recall_scorable) > 0
         else 0.0
     )
+
+    # CONTENT vs HYGIENE split. Precision mirrors the scorable precision
+    # (FPs are not attributed to a group); recall is group-local.
+    fixed_c = sum(c.fixed for c in cats if c.category in CONTENT_CATEGORIES)
+    unfixed_c = sum(c.unfixed for c in cats if c.category in CONTENT_CATEGORIES)
+    injected_c = fixed_c + unfixed_c
+    fixed_h = sum(c.fixed for c in cats if c.category in HYGIENE_CATEGORIES)
+    unfixed_h = sum(c.unfixed for c in cats if c.category in HYGIENE_CATEGORIES)
+    injected_h = fixed_h + unfixed_h
+
+    recall_c = fixed_c / injected_c if injected_c > 0 else 0.0
+    recall_h = fixed_h / injected_h if injected_h > 0 else 0.0
+    prec_s = r.precision_scorable
+    f1_c = 2 * prec_s * recall_c / (prec_s + recall_c) if (prec_s + recall_c) > 0 else 0.0
+    f1_h = 2 * prec_s * recall_h / (prec_s + recall_h) if (prec_s + recall_h) > 0 else 0.0
+
+    r.total_injected_content = injected_c
+    r.fixed_content = fixed_c
+    r.f1_score_content = f1_c
+    r.total_injected_hygiene = injected_h
+    r.fixed_hygiene = fixed_h
+    r.f1_score_hygiene = f1_h
 
 
 # ============================================================================
@@ -189,28 +227,33 @@ def inject_errors_at_level(
 # ============================================================================
 
 # BioGuider's comprehensive error-fixing prompt (domain-specific guidance)
-BIOGUIDER_PROMPT = """You are an expert document proofreader and error corrector for bioinformatics documentation.
+BIOGUIDER_PROMPT = """You are an expert document proofreader for bioinformatics documentation.
 
-Your task is to FIX ALL ERRORS in the following document. The document has been corrupted with:
-- Typos and misspellings (e.g., "documnetation" should be "documentation")
-- Truncated words (e.g., "Seura" should be "Seurat", "expre" should be "expression")
-- Broken links (missing parts of URLs like "https//" should be "https://")
-- Incorrect gene/protein names (wrong capitalization, misspellings)
-- Incorrect species names (e.g., "humna" should be "human")
-- Broken markdown formatting (headers, lists)
-- Corrupted YAML frontmatter
-- Changed boolean values (TRUE/FALSE swapped)
-- Changed numeric values
+Your task is to FIX ERRORS in the following document. The document contains
+a mix of legitimate content and introduced errors. Restore the document to
+its intended form without inventing new content.
 
-CRITICAL RULES:
-1. FIX every typo, truncated word, and misspelling you find
-2. RESTORE broken URLs to their correct form
-3. FIX gene names to proper capitalization (e.g., "brca1" -> "BRCA1")
-4. PRESERVE all code blocks exactly - do not modify R code inside code fences
-5. FIX the YAML header if it's corrupted (restore proper formatting)
-6. Do NOT add new content - only fix existing errors
-7. Do NOT remove any sections
-8. Output the COMPLETE fixed document
+GROUND TRUTH
+- The code blocks (R, Python, shell inside ``` fences) are the AUTHORITY for
+  what the software actually does: package versions, statistical test calls,
+  marker genes, hyperparameter values. If the prose contradicts the adjacent
+  code, the prose is wrong — fix the prose to match the code.
+- The document's own internal cross-references are a secondary authority:
+  section headers, accession IDs, function names, and URLs that appear in
+  more than one place should agree across occurrences.
+
+CRITICAL RULES
+1. PRESERVE all code blocks exactly — do not modify text inside ``` fences.
+2. PRESERVE the YAML frontmatter, section headers, and section order.
+3. When prose disagrees with a code block about a factual claim (package
+   version, test name, marker gene, parameter value, accession ID),
+   rewrite the PROSE to match the CODE — not the other way around.
+4. Only change text that is demonstrably wrong. Do not rewrite prose that
+   is grammatical and internally consistent.
+5. Do NOT add new content, new sections, new citations, or new code.
+6. Do NOT remove any sections or code blocks.
+7. Output the COMPLETE fixed document as markdown, verbatim except for the
+   fixes you made.
 
 CORRUPTED DOCUMENT TO FIX:
 """
@@ -250,7 +293,10 @@ PROMPTS = {
 MODELS = {
     "gpt-5.4":   {"type": "litellm", "model": "gpt-5.4"},
     "kimi-k2.5": {"type": "litellm", "model": "kimi-k2.5"},
-    "glm-5":     {"type": "litellm", "model": "glm-5"},
+    # "glm-5": dropped from this run — consistently stalls ≥3 min per call on
+    # full Rmd vignettes, blocking ThreadPoolExecutor.shutdown(wait=True). Keep
+    # the entry in the routing doc; can re-enable later with a longer timeout
+    # or a narrower input set.
     "gpt-oss":   {"type": "litellm", "model": "gpt-oss-120b"},
     "gpt-4o":    {"type": "litellm", "model": "gpt-4o"},
 }
@@ -324,10 +370,15 @@ def fix_with_model(
     model_id = model_config.get("model", model_name)
 
     try:
+        # timeout=120 + max_retries=1 so a slow backend fails in ~2 min instead
+        # of blocking the ThreadPoolExecutor for 5-10 min across LangChain
+        # exponential backoff. Inner _invoke_with_retry still handles RateLimit.
         llm_override = ChatOpenAI(
             model=model_id,
             api_key=os.environ.get("OPENAI_API_KEY"),
             base_url=os.environ.get("OPENAI_BASE_URL"),
+            timeout=120,
+            max_retries=1,
         )
         fixed_content = _invoke_with_retry(llm_override, prompt)
 
@@ -371,16 +422,24 @@ def fix_with_bioguider(llm, corrupted_content, original_content, output_dir, fil
                           file_basename, error_count, prompt_name="bioguider", model_name="gpt4o")
 
 
+import threading  # noqa: E402 — placed here because module-level imports above are clustered elsewhere
+_SEMANTIC_MATCH_CACHE: Dict[str, bool] = {}
+_SEMANTIC_MATCH_LOCK = threading.Lock()
+
+
 def _semantic_match(orig: str, fixed_context: str, llm=None) -> bool:
-    """LLM judge: does fixed_context correctly use term 'orig'? Falls back to exact check."""
+    """LLM judge: does fixed_context correctly use term 'orig'? Falls back to exact check.
+
+    Thread-safe cache (required because the parallel inner loop in
+    test_multi_file_full_matrix can call this from up to 5 threads concurrently).
+    """
     import hashlib
     if llm is None:
         return orig in fixed_context
     cache_key = hashlib.md5(f"{orig}:{fixed_context[:500]}".encode()).hexdigest()
-    if not hasattr(_semantic_match, "_cache"):
-        _semantic_match._cache = {}
-    if cache_key in _semantic_match._cache:
-        return _semantic_match._cache[cache_key]
+    with _SEMANTIC_MATCH_LOCK:
+        if cache_key in _SEMANTIC_MATCH_CACHE:
+            return _SEMANTIC_MATCH_CACHE[cache_key]
     try:
         prompt = (
             f"Does the following text correctly use the term '{orig}'? "
@@ -390,7 +449,8 @@ def _semantic_match(orig: str, fixed_context: str, llm=None) -> bool:
         result = "YES" in (resp.content if hasattr(resp, "content") else str(resp)).upper()
     except Exception:
         result = orig in fixed_context
-    _semantic_match._cache[cache_key] = result
+    with _SEMANTIC_MATCH_LOCK:
+        _SEMANTIC_MATCH_CACHE[cache_key] = result
     return result
 
 
@@ -468,10 +528,11 @@ def evaluate_fixes(
             is_fixed = count_md_issues(fixed_content) < count_md_issues(corrupted_content)
         
         elif cat == "inline_code":
-            # Fixed if rewrapped version present and mutated gone
             raw = mut.strip('`') if mut else ""
-            rewrapped = f"`{raw}`" if raw else ""
-            is_fixed = raw and rewrapped and rewrapped in fixed_content and mut not in fixed_content
+            if not raw:
+                is_fixed = False
+            else:
+                is_fixed = _naked_count(fixed_content, raw) < _naked_count(corrupted_content, raw)
         
         elif cat == "duplicate":
             # Fixed if fewer duplicates after
@@ -693,6 +754,12 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 "precision_scorable": round(r.precision_scorable, 4),
                 "recall_scorable": round(r.recall_scorable, 4),
                 "f1_score_scorable": round(r.f1_score_scorable, 4),
+                "total_injected_content": r.total_injected_content,
+                "fixed_content": r.fixed_content,
+                "f1_score_content": round(r.f1_score_content, 4),
+                "total_injected_hygiene": r.total_injected_hygiene,
+                "fixed_hygiene": r.fixed_hygiene,
+                "f1_score_hygiene": round(r.f1_score_hygiene, 4),
                 "duration_seconds": round(r.duration_seconds, 2),
                 "category_breakdown": [
                     {
@@ -725,6 +792,8 @@ def save_results(results: List[StressLevelResult], output_dir: str):
             "fix_rate", "precision", "recall", "f1_score",
             "total_injected_scorable", "fixed_scorable", "unfixed_scorable",
             "fix_rate_scorable", "precision_scorable", "recall_scorable", "f1_score_scorable",
+            "total_injected_content", "fixed_content", "f1_score_content",
+            "total_injected_hygiene", "fixed_hygiene", "f1_score_hygiene",
             "duration_s"
         ])
         for r in results:
@@ -735,6 +804,8 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 r.total_errors_injected_scorable, r.errors_fixed_scorable, r.errors_unfixed_scorable,
                 round(r.fix_rate_scorable, 4), round(r.precision_scorable, 4),
                 round(r.recall_scorable, 4), round(r.f1_score_scorable, 4),
+                r.total_injected_content, r.fixed_content, round(r.f1_score_content, 4),
+                r.total_injected_hygiene, r.fixed_hygiene, round(r.f1_score_hygiene, 4),
                 round(r.duration_seconds, 2)
             ])
     
@@ -1597,23 +1668,28 @@ def test_all_models_all_levels(llm, test_output_dir):
 
 def test_multi_file_full_matrix(llm, test_output_dir):
     """
-    MULTI-FILE FULL MATRIX — 10 Seurat vignettes × 9 error levels × 5 models × 2 prompts.
+    MULTI-FILE MATRIX — 10 Seurat vignettes × 9 error levels × 5 models × 1 prompt (bioguider).
+
+    Initial-round shape (450 cells total). The simple-prompt ablation was dropped;
+    the bioguider prompt is the only correction prompt in this pass.
 
     Each (file, level) pair gets ONE deterministic injection (force_deterministic=True)
-    so every model+prompt combination scores against byte-identical corrupted files.
-    Per-file artefacts and figures land in their own subdir; a cross-file aggregate
-    lands alongside in ``AGGREGATE_*.json/csv`` plus rendered ``agg_fig*``.
+    so every model scores against byte-identical corrupted files. The 5 model configs
+    within each (file, level) cell run through a ThreadPoolExecutor so LLM latency is
+    paid once per level rather than five times. Per-file artefacts and figures land in
+    their own subdir; a cross-file aggregate lands in
+    ``_aggregate/AGGREGATE_*.json/csv`` plus rendered ``fig*``.
 
-    Expected wall-clock: ~1.5-2 hours with 8-wide parallelism (see MAX_WORKERS).
-    Expected LLM spend: ~3-10M tokens across the matrix.
+    Expected wall-clock: ~1.5-2 hours with 5-wide parallel configs.
+    Expected LLM spend: ~2-5M tokens across the matrix.
 
     Run:
         pytest system_tests/test_single_file_stress.py::test_multi_file_full_matrix -v -s
     """
     import time
 
-    # 5 models × 2 prompts = 10 configs per (file, level) cell
-    test_configs = [(m, p) for m in MODELS for p in ["bioguider", "simple"]]
+    # 5 models × 1 prompt = 5 configs per (file, level) cell
+    test_configs = [(m, "bioguider") for m in MODELS]
     error_levels = STRESS_LEVELS  # [5, 10, 20, 40, 60, 100, 150, 200, 300]
 
     multi_root = os.path.join(
@@ -1679,10 +1755,14 @@ def test_multi_file_full_matrix(llm, test_output_dir):
             }
             print(f"    Injected {injection_result['total_errors']} errors (deterministic)")
 
-            for model_name, prompt_name in test_configs:
+            def _run_one(model_name: str, prompt_name: str):
+                """Run a single (model, prompt) correction + evaluation. Thread-safe:
+                writes per-model filenames; all shared state access is via
+                GIL-protected list.append and dataclass construction.
+                """
                 combo = f"{model_name}+{prompt_name}"
+                t0 = time.time()
                 try:
-                    t0 = time.time()
                     fixed_content = fix_with_model(
                         llm,
                         injection_result["corrupted_content"],
@@ -1702,7 +1782,6 @@ def test_multi_file_full_matrix(llm, test_output_dir):
                         injection_result["manifest"],
                         llm,
                     )
-
                     sr = StressLevelResult(
                         error_count=error_level,
                         total_errors_injected=injection_result["total_errors"],
@@ -1715,19 +1794,62 @@ def test_multi_file_full_matrix(llm, test_output_dir):
                         duration_seconds=duration,
                         category_results=category_results,
                         model_name=combo,
+                        false_positives=getattr(result, "false_positives", 0),
                     )
                     file_results.append(sr)
                     print(
                         f"    {combo:<30} F1={result.f1_score:.3f} "
                         f"fix={result.fix_rate:.1%} time={duration:.1f}s"
                     )
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     print(f"    {combo:<30} ERROR: {e}")
-                    continue
+
+            # Parallelise the 5 model configs — they're independent and the
+            # LiteLLM proxy tolerates 5 concurrent chat completions. Gives
+            # ~5x speedup on the dominant per-config latency.
+            with ThreadPoolExecutor(max_workers=len(test_configs)) as pool:
+                futures = [
+                    pool.submit(_run_one, model_name, prompt_name)
+                    for model_name, prompt_name in test_configs
+                ]
+                for _ in as_completed(futures):
+                    pass
 
         # Flush per-file results + render per-file fig1-6
         save_results(file_results, file_out)
         all_file_results[file_stem] = file_results
+
+        # Abort rule — after the FIRST file only, halt if the moat story is empty.
+        # (Per the plan: if prose_code_* never injected AND no scorable wins, the
+        # anchor regexes aren't matching this repo's idioms — surface now rather
+        # than burn 9 more files of LLM spend.)
+        if len(all_file_results) == 1:
+            from bioguider.managers.config import UNSCORABLE_CATEGORIES
+
+            any_scorable_win = any(
+                getattr(r, "f1_score_scorable", r.f1_score) > 0.0
+                for r in file_results
+            )
+            moat_cats = {"prose_code_pkg_version", "prose_code_stat_test",
+                         "prose_code_marker", "prose_code_param", "accession_id_prefix"}
+            moat_hits = 0
+            for r in file_results:
+                for c in (r.category_results or []):
+                    if c.category in moat_cats:
+                        moat_hits += c.injected
+            print(f"\n[abort-check] after file '{file_stem}': "
+                  f"any_scorable_win={any_scorable_win}, moat_hits={moat_hits}")
+            if not any_scorable_win:
+                raise AssertionError(
+                    f"Abort: no scorable F1 > 0 on '{file_stem}'. "
+                    "Models aren't fixing anything — check prompt, proxy, or corrupted fences."
+                )
+            if moat_hits == 0:
+                print(f"[abort-check] WARNING: zero moat-category injections on '{file_stem}'. "
+                      "Anchor regexes may not match this repo's idioms. Continuing — "
+                      "figures will still render but the moat panel will be empty.")
+            # Re-derive unscorable filter is implicit; this just asserts we're not silently nil.
+            _ = UNSCORABLE_CATEGORIES  # referenced for side-effect of import validation
 
     # ------------------------------------------------------------------
     # Cross-file aggregate (pooled across all 10 files)

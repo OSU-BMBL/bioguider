@@ -124,12 +124,15 @@ _STAT_TEST_ANCHOR_RE = re.compile(
     r"\bwilcox(?:\.test|on)?\s*\(|"
     r'test\.use\s*=\s*["\']wilcox["\']|'
     r"\bt\.test\s*\(|"
-    r'test\.use\s*=\s*["\']t["\']',
+    r'test\.use\s*=\s*["\']t["\']|'
+    r"\bFind(?:All)?Markers\s*\(",   # Seurat idiom: default test.use is "wilcox"
     re.I,
 )
 _MARKER_ANCHOR_RE = re.compile(
     r'(?:features?\s*=\s*(?:c\(|\[)?\s*["\']([A-Z][A-Z0-9]{1,6})["\']|'
-    r"subset\([^)]*?\b([A-Z][A-Z0-9]{1,6})\s*[><=])"
+    r"subset\([^)]*?\b([A-Z][A-Z0-9]{1,6})\s*[><=]|"
+    # Seurat plotting idioms — marker gene appears as positional string arg
+    r'(?:FeaturePlot|VlnPlot|DotPlot|RidgePlot)\s*\([^,)]*,\s*(?:features?\s*=\s*)?["\']([A-Z][A-Z0-9]{1,6})["\'])'
 )
 _PARAM_ANCHOR_RE = re.compile(
     r"(resolution|n[._]neighbors|perplexity|n[._]components|min[._]dist|spread)"
@@ -435,7 +438,9 @@ class LLMErrorInjector:
         stat_anchor = _STAT_TEST_ANCHOR_RE.search(code)
         if stat_anchor:
             hit = stat_anchor.group(0).lower()
-            code_test = "wilcoxon" if "wilcox" in hit else "t-test"
+            # Seurat's FindMarkers / FindAllMarkers default to Wilcoxon when
+            # test.use is not specified, so treat them as wilcoxon anchors.
+            code_test = "wilcoxon" if ("wilcox" in hit or "findmarkers" in hit or "findallmarkers" in hit) else "t-test"
             prose_view = self._prose_region(text)
             if code_test == "wilcoxon":
                 mp = re.search(r"\b(t[- ]test|Student'?s t|two-sample t)\b", prose_view, re.I)
@@ -455,7 +460,8 @@ class LLMErrorInjector:
         code = self._extract_code_fragments(text)
         marker_hit = _MARKER_ANCHOR_RE.search(code)
         if marker_hit:
-            code_marker = marker_hit.group(1) or marker_hit.group(2)
+            # Group 1: features=c("X"); Group 2: subset(..., X >); Group 3: FeaturePlot/VlnPlot/...
+            code_marker = marker_hit.group(1) or marker_hit.group(2) or marker_hit.group(3)
             swap_map = {"CD4": "CD8", "CD8": "CD4", "FOXP3": "RORC", "GATA3": "TBX21"}
             if code_marker in swap_map:
                 prose_view = self._prose_region(text)
@@ -894,7 +900,8 @@ class LLMErrorInjector:
                 self._record_skip(data, "prose_code_stat_test", "no_anchor")
             else:
                 hit = stat_anchor.group(0).lower()
-                code_test = "wilcoxon" if "wilcox" in hit else "t-test"
+                # Seurat's FindMarkers / FindAllMarkers default to Wilcoxon.
+                code_test = "wilcoxon" if ("wilcox" in hit or "findmarkers" in hit or "findallmarkers" in hit) else "t-test"
                 prose_now = self._prose_region(corrupted)
                 # Find the prose test NAME THAT MATCHES CODE so we can mutate it to the opposite
                 # (this creates the injected disagreement). Skip if prose already disagrees.
@@ -918,7 +925,8 @@ class LLMErrorInjector:
             if marker_hit is None:
                 self._record_skip(data, "prose_code_marker", "no_anchor")
             else:
-                code_marker = marker_hit.group(1) or marker_hit.group(2)
+                # Group 1: features=c("X"); Group 2: subset(..., X >); Group 3: FeaturePlot/VlnPlot/...
+                code_marker = marker_hit.group(1) or marker_hit.group(2) or marker_hit.group(3)
                 swap_map = {"CD4": "CD8", "CD8": "CD4", "FOXP3": "RORC", "GATA3": "TBX21"}
                 if code_marker not in swap_map:
                     self._record_skip(data, "prose_code_marker", "unmapped_code_marker")
@@ -972,7 +980,7 @@ class LLMErrorInjector:
                         mut = str(int(num) + 1) if "." not in orig else str(num + 0.1)
                     else:
                         mut = str(num * 2) if num != 0 else "1"
-                except:
+                except (ValueError, TypeError):
                     continue
                 if mut == orig or mut in corrupted_snippets:
                     continue

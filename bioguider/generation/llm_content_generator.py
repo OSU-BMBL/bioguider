@@ -107,17 +107,9 @@ class LLMContentGenerator:
         Returns:
             Tuple of (continuation_content, token_usage)
         """
-        # Create LLM for continuation (uses 16k tokens by default)
-        from bioguider.agents.agent_utils import get_llm
-        import os
+        from bioguider.agents.agent_utils import get_openai
 
-        llm = get_llm(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            model_name=os.environ.get("OPENAI_MODEL", "gpt-4o"),
-            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-            api_version=os.environ.get("OPENAI_API_VERSION"),
-            azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
-        )
+        llm = get_openai()
 
         conv = CommonConversation(llm)
 
@@ -204,20 +196,12 @@ class LLMContentGenerator:
         context: str = "",
         original_content: str = None,
     ) -> tuple[str, dict]:
-        # Create LLM (uses 16k tokens by default - enough for any document)
-        from bioguider.agents.agent_utils import get_llm
+        from bioguider.agents.agent_utils import get_openai
         import os
         import json
         from datetime import datetime
 
-        # Get LLM with default 16k token limit
-        llm = get_llm(
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            model_name=os.environ.get("OPENAI_MODEL", "gpt-4o"),
-            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
-            api_version=os.environ.get("OPENAI_API_VERSION"),
-            azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
-        )
+        llm = get_openai()
 
         conv = CommonConversation(llm)
 

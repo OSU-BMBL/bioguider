@@ -243,3 +243,292 @@ class BenchmarkPlotter:
         self.fig4_fix_rate()
         self.fig5_response_time()
         self.fig6_fixed_unfixed()
+
+
+# ---------------------------------------------------------------------------
+# Rescored figure renderer — reads STRESS_TEST_TABLE_RESCORED.csv directly
+# ---------------------------------------------------------------------------
+
+class _RescoredPlotter:
+    """Render the six benchmark figures from a RESCORED CSV (no JSON needed).
+
+    The rescored CSV has columns: file_stem, model, error_count,
+    total_injected, fixed, unfixed, fix_rate, precision, recall,
+    f1_score, total_injected_scorable, fixed_scorable, f1_score_scorable,
+    total_injected_content, fixed_content, f1_score_content,
+    total_injected_hygiene, fixed_hygiene, f1_score_hygiene, duration_s.
+    """
+
+    def __init__(
+        self,
+        out_dir: PathLike,
+        csv_path: PathLike,
+        metric_col: str,
+        suffix: str,
+        category_filter: Optional[set] = None,
+    ):
+        self.out_dir = Path(out_dir)
+        self.metric_col = metric_col
+        self.suffix = suffix
+        self.category_filter = category_filter
+        self._rows = self._load(Path(csv_path))
+
+    def _load(self, csv_path: Path) -> list:
+        rows = []
+        with csv_path.open() as fh:
+            for row in csv.DictReader(fh):
+                rows.append(
+                    {
+                        "model": row["model"],
+                        "error_count": int(row["error_count"]),
+                        "f1": float(row.get(self.metric_col, 0.0)),
+                        "fix_rate": float(row.get("fix_rate", 0.0)),
+                        "fixed": int(row.get("fixed", 0)),
+                        "unfixed": int(row.get("unfixed", 0)),
+                        "duration_s": float(row.get("duration_s", 0.0)),
+                    }
+                )
+        return rows
+
+    def _save(self, fig: plt.Figure, name: str) -> None:
+        for ext in ("png", "pdf"):
+            fig.savefig(self.out_dir / f"{name}.{ext}")
+        plt.close(fig)
+
+    def _label(self, base: str) -> str:
+        return f"{base} ({self.metric_col})"
+
+    def fig1(self) -> None:
+        data: dict = defaultdict(dict)
+        for r in self._rows:
+            data[r["model"]][r["error_count"]] = r["f1"]
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for model, pts in sorted(data.items()):
+            xs = sorted(pts)
+            ax.plot(xs, [pts[x] for x in xs], marker="o", label=model)
+        ax.set_xlabel("Error Count")
+        ax.set_ylabel(self._label("F1 Score"))
+        ax.set_title(f"F1 Score by Error Level ({self.suffix})")
+        ax.set_ylim(0, 1.05)
+        ax.legend(loc="lower left", fontsize=8)
+        self._save(fig, f"fig1_f1_by_error_level_{self.suffix}")
+
+    def fig2(self) -> None:
+        model_vals: dict = defaultdict(list)
+        for r in self._rows:
+            model_vals[r["model"]].append(r["f1"])
+        models = sorted(model_vals, key=lambda m: -np.mean(model_vals[m]))
+        means = [float(np.mean(model_vals[m])) for m in models]
+        ci95 = [
+            1.96 * float(np.std(model_vals[m])) / np.sqrt(len(model_vals[m]))
+            if len(model_vals[m]) > 1
+            else 0.0
+            for m in models
+        ]
+        fig, ax = plt.subplots(figsize=(7, max(3, len(models) * 0.6)))
+        y_pos = np.arange(len(models))
+        ax.barh(y_pos, means, xerr=ci95, align="center", height=0.6, capsize=4)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(models, fontsize=9)
+        ax.set_xlabel(self._label("Mean F1 Score"))
+        ax.set_title(f"Average F1 Score by Model (±95 % CI) ({self.suffix})")
+        ax.set_xlim(0, 1.1)
+        self._save(fig, f"fig2_avg_f1_by_model_{self.suffix}")
+
+    def fig3(self) -> None:
+        """Per-category fix-rate heatmap, filtered to ``self.category_filter`` if set.
+
+        Reads sibling ``*_CATEGORY_DETAIL.csv`` (aggregate or per-vignette depending
+        on self.out_dir). Falls back to the placeholder mean-F1 bar if detail CSV
+        is missing.
+        """
+        detail_csv = self._locate_detail_csv()
+        if detail_csv is None or not detail_csv.exists():
+            # Fallback: placeholder bar chart
+            model_vals: dict = defaultdict(list)
+            for r in self._rows:
+                model_vals[r["model"]].append(r["f1"])
+            models = sorted(model_vals.keys())
+            means = [float(np.mean(model_vals[m])) for m in models]
+            fig, ax = plt.subplots(figsize=(max(6, len(models) * 1.5), 4))
+            ax.bar(models, means, color="#2563eb")
+            ax.set_ylim(0, 1.1)
+            ax.set_ylabel(self._label("Mean F1"))
+            ax.set_title(f"Mean F1 by Model — {self.suffix} (category detail CSV missing)")
+            ax.tick_params(axis="x", rotation=20)
+            self._save(fig, f"fig3_category_heatmap_{self.suffix}")
+            return
+
+        acc: dict = defaultdict(lambda: defaultdict(list))
+        with detail_csv.open() as fh:
+            for row in csv.DictReader(fh):
+                cat = row.get("category", "")
+                if self.category_filter is not None and cat not in self.category_filter:
+                    continue
+                try:
+                    fr = float(row.get("fix_rate", 0.0))
+                except (TypeError, ValueError):
+                    continue
+                acc[row["model"]][cat].append(fr)
+
+        if not acc:
+            # Filter matched no categories — render empty placeholder
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, f"No {self.suffix.upper()} categories injected in this run",
+                    ha="center", va="center", fontsize=11)
+            ax.set_axis_off()
+            self._save(fig, f"fig3_category_heatmap_{self.suffix}")
+            return
+
+        models = sorted(acc.keys())
+        categories = sorted({c for m in acc for c in acc[m]})
+        matrix = np.zeros((len(models), len(categories)))
+        for i, model in enumerate(models):
+            for j, cat in enumerate(categories):
+                vals = acc[model].get(cat, [])
+                matrix[i, j] = float(np.mean(vals)) if vals else 0.0
+
+        fig, ax = plt.subplots(
+            figsize=(max(8, len(categories) * 0.9), max(3, len(models) * 0.7))
+        )
+        im = ax.imshow(matrix, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
+        ax.set_xticks(np.arange(len(categories)))
+        ax.set_yticks(np.arange(len(models)))
+        ax.set_xticklabels(categories, rotation=45, ha="right", fontsize=8)
+        ax.set_yticklabels(models, fontsize=8)
+        for i in range(len(models)):
+            for j in range(len(categories)):
+                color = "black" if 0.25 < matrix[i, j] < 0.8 else "white"
+                ax.text(j, i, f"{matrix[i, j]:.2f}", ha="center", va="center",
+                        fontsize=6, color=color)
+        plt.colorbar(im, ax=ax, label="Fix Rate")
+        ax.set_title(f"Category Fix Rate Heatmap — {self.suffix.upper()} "
+                     f"({len(categories)} categories)")
+        self._save(fig, f"fig3_category_heatmap_{self.suffix}")
+
+    def _locate_detail_csv(self):
+        """Find the *_CATEGORY_DETAIL.csv sibling next to the aggregate or per-vignette CSV."""
+        # out_dir is either <run>/_aggregate/ or <run>/<stem>/
+        for name in ("AGGREGATE_CATEGORY_DETAIL.csv", "STRESS_TEST_CATEGORY_DETAIL.csv"):
+            candidate = self.out_dir / name
+            if candidate.exists():
+                return candidate
+        return None
+
+    def fig4(self) -> None:
+        models_sorted = sorted(
+            {r["model"] for r in self._rows},
+            key=lambda m: -np.mean([r["f1"] for r in self._rows if r["model"] == m]),
+        )
+        error_counts = sorted({r["error_count"] for r in self._rows})
+        model_fr: dict = {m: {} for m in models_sorted}
+        for r in self._rows:
+            model_fr[r["model"]][r["error_count"]] = r["fix_rate"]
+        x = np.arange(len(error_counts))
+        n = len(models_sorted)
+        width = 0.8 / n
+        offsets = np.linspace(-0.4 + width / 2, 0.4 - width / 2, n)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        for i, model in enumerate(models_sorted):
+            vals = [model_fr[model].get(ec, 0.0) for ec in error_counts]
+            ax.bar(x + offsets[i], vals, width, label=model)
+        ax.set_xticks(x)
+        ax.set_xticklabels(error_counts)
+        ax.set_xlabel("Error Count")
+        ax.set_ylabel(self._label("Fix Rate"))
+        ax.set_title(f"Fix Rate by Error Level and Model ({self.suffix})")
+        ax.set_ylim(0, 1.1)
+        ax.legend(fontsize=7)
+        self._save(fig, f"fig4_fix_rate_{self.suffix}")
+
+    def fig5(self) -> None:
+        data: dict = defaultdict(dict)
+        for r in self._rows:
+            data[r["model"]][r["error_count"]] = r["duration_s"]
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for model, pts in sorted(data.items()):
+            xs = sorted(pts)
+            ax.plot(xs, [pts[x] for x in xs], marker="s", label=model)
+        ax.set_xlabel("Error Count")
+        ax.set_ylabel("Duration (seconds)")
+        ax.set_title(f"Response Time by Error Level ({self.suffix})")
+        ax.legend(fontsize=8)
+        self._save(fig, f"fig5_response_time_{self.suffix}")
+
+    def fig6(self) -> None:
+        error_counts = sorted({r["error_count"] for r in self._rows})
+        median_level = error_counts[len(error_counts) // 2]
+        subset = sorted(
+            [r for r in self._rows if r["error_count"] == median_level],
+            key=lambda r: -r["f1"],
+        )
+        models = [r["model"] for r in subset]
+        fixed = [r["fixed"] for r in subset]
+        unfixed = [r["unfixed"] for r in subset]
+        x = np.arange(len(models))
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.bar(x, fixed, label="Fixed", color="#2ecc71")
+        ax.bar(x, unfixed, bottom=fixed, label="Unfixed", color="#e74c3c")
+        ax.set_xticks(x)
+        ax.set_xticklabels(models, rotation=30, ha="right", fontsize=8)
+        ax.set_ylabel("Error Count")
+        ax.set_title(f"Fixed vs Unfixed at Error Level {median_level} ({self.suffix})")
+        ax.legend()
+        self._save(fig, f"fig6_fixed_unfixed_{self.suffix}")
+
+    def render_all(self) -> None:
+        self.fig1()
+        self.fig2()
+        self.fig3()
+        self.fig4()
+        self.fig5()
+        self.fig6()
+
+
+def render_rescored_figures(
+    run_dir: PathLike,
+    metric_col: str = "f1_score_content",
+    suffix: str = "content",
+) -> None:
+    """Render six rescored figures for *run_dir* using *metric_col* as the F1 signal.
+
+    Reads ``STRESS_TEST_TABLE_RESCORED.csv`` from each per-vignette subdir and
+    ``AGGREGATE_TABLE_RESCORED.csv`` from ``_aggregate/``. Writes
+    ``fig{1..6}_<suffix>.{png,pdf}`` into each vignette dir and the aggregate dir.
+    Original ``fig{1..6}.{png,pdf}`` are never touched.
+
+    When ``suffix in {"content", "hygiene"}``, fig3 filters the category heatmap to
+    the matching ``CONTENT_CATEGORIES`` or ``HYGIENE_CATEGORIES`` set from
+    ``bioguider.managers.config``.
+    """
+    from bioguider.managers.config import CONTENT_CATEGORIES, HYGIENE_CATEGORIES
+
+    category_filter = None
+    if suffix == "content":
+        category_filter = set(CONTENT_CATEGORIES)
+    elif suffix == "hygiene":
+        category_filter = set(HYGIENE_CATEGORIES)
+
+    run_dir = Path(run_dir)
+    agg_csv = run_dir / "_aggregate" / "AGGREGATE_TABLE_RESCORED.csv"
+
+    stem_dirs = sorted(
+        d for d in run_dir.iterdir()
+        if d.is_dir() and d.name != "_aggregate"
+    )
+
+    for stem_dir in stem_dirs:
+        stem_csv = stem_dir / "STRESS_TEST_TABLE_RESCORED.csv"
+        if not stem_csv.exists():
+            continue
+        plotter = _RescoredPlotter(
+            stem_dir, stem_csv, metric_col, suffix, category_filter=category_filter
+        )
+        plotter.render_all()
+
+    if agg_csv.exists():
+        agg_plotter = _RescoredPlotter(
+            run_dir / "_aggregate", agg_csv, metric_col, suffix,
+            category_filter=category_filter,
+        )
+        agg_plotter.render_all()

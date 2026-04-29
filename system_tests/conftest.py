@@ -19,14 +19,15 @@ def get_openai():
     )
 
 
-def get_azure_openai():
+def get_litellm():
     return get_llm(
         api_key=os.environ.get("OPENAI_API_KEY", None),
         model_name=os.environ.get("OPENAI_MODEL", None),
         azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", None),
         api_version=os.environ.get("OPENAI_API_VERSION", None),
         azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME", None),
-        max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKEN", 16384)),  # Increased for tutorial generation
+        max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKEN", 16384)),
+        base_url=os.environ.get("OPENAI_BASE_URL", None),
     )
 
 
@@ -42,7 +43,7 @@ def get_deepseek():
 
 @pytest.fixture(scope="module")
 def llm():
-    return get_azure_openai()
+    return get_litellm()
 
 @pytest.fixture(scope="module")
 def project_structure():

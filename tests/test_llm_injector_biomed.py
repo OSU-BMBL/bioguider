@@ -151,6 +151,53 @@ class TestDeterministicInjectAnchored:
         assert expected.issubset(skipped_cats), f"Missing skips: {expected - skipped_cats}"
 
 
+class TestSeuratIdiomAnchors:
+    """Reviewer-requested: real Seurat idioms must fire the moat anchors.
+
+    Before the fix, _STAT_TEST_ANCHOR_RE only matched `wilcox.test(` / `t.test(`,
+    which Seurat vignettes never use (they call `FindMarkers()` which defaults
+    to Wilcoxon). Similarly _MARKER_ANCHOR_RE missed `FeaturePlot(..., "CD8")`.
+    """
+
+    FIXTURE_SEURAT_IDIOMS = """
+# Analysis
+
+We used Seurat v5 to find cluster markers via FindMarkers with the default
+Wilcoxon rank-sum test. CD8+ T cells were plotted.
+
+```r
+library(Seurat_5.0.1)
+markers <- FindMarkers(obj, ident.1 = "CD16 Mono", ident.2 = "CD14 Mono")
+FeaturePlot(obj, features = c("CD8", "CD4"))
+```
+"""
+
+    def test_findmarkers_fires_stat_test_anchor(self):
+        injector = LLMErrorInjector(MagicMock(), force_deterministic=True)
+        _, manifest = injector.inject(self.FIXTURE_SEURAT_IDIOMS, min_per_category=1)
+        cats = {e["category"] for e in manifest["errors"]}
+        assert "prose_code_stat_test" in cats, (
+            f"FindMarkers() should trigger prose_code_stat_test. Got: {cats}"
+        )
+
+    def test_feature_plot_fires_marker_anchor(self):
+        from bioguider.generation.llm_injector import _MARKER_ANCHOR_RE
+        # Bare regex probe — confirms Seurat plotting idioms are captured.
+        plotting = 'FeaturePlot(obj, features = c("CD8A", "CD4"))'
+        m = _MARKER_ANCHOR_RE.search(plotting)
+        assert m is not None
+        hit = m.group(1) or m.group(2) or m.group(3)
+        assert hit in {"CD8A", "CD4"}
+
+    def test_seurat_pkg_version_fires(self):
+        injector = LLMErrorInjector(MagicMock(), force_deterministic=True)
+        _, manifest = injector.inject(self.FIXTURE_SEURAT_IDIOMS, min_per_category=1)
+        cats = {e["category"] for e in manifest["errors"]}
+        assert "prose_code_pkg_version" in cats, (
+            f"Seurat_5.0.1 in code + 'Seurat v5' in prose should fire. Got: {cats}"
+        )
+
+
 class TestDroppedCategoriesAreGone:
     """AC: the un-benchmarkable old types must NEVER appear in a manifest."""
 

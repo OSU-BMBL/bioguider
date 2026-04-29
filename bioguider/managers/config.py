@@ -168,6 +168,64 @@ UNSCORABLE_CATEGORIES = frozenset({
 # Scorable categories are everything else (headline F1 denominator).
 SCORABLE_CATEGORIES = ALL_ERROR_CATEGORIES - UNSCORABLE_CATEGORIES
 
+# Category groups for paper-table breakdown (CONTENT vs HYGIENE).
+# Rationale for tricky placements:
+# - boolean -> HYGIENE: typically chunk options (echo=TRUE), display-only.
+# - default_value -> CONTENT: wrong default is wrong analysis semantics.
+# - path_hint -> HYGIENE: broken paths in prose are like broken links.
+# - code_lang_tag -> HYGIENE: fence tag doesn't change execution.
+# - All biology-group categories -> CONTENT: biological truth claims.
+# - contamination -> CONTENT: wrong mechanism is misinformation.
+CONTENT_CATEGORIES: frozenset = frozenset({
+    # text/code fidelity
+    "param_name", "gene_case", "bio_term", "species_name",
+    "accession_id_prefix",
+    "prose_code_pkg_version", "prose_code_stat_test",
+    "prose_code_marker", "prose_code_param",
+    "number",
+    # biology group -- scientifically meaningful
+    "gene_symbol_case", "species_swap", "ref_genome_mismatch",
+    "modality_confusion", "normalization_error", "umi_vs_read",
+    "batch_effect", "qc_threshold", "file_format", "strandedness",
+    "coordinates", "units_scale", "sample_type", "contamination",
+    # cli_config -- wrong default = wrong analysis
+    "default_value",
+})
+
+HYGIENE_CATEGORIES: frozenset = frozenset({
+    "typo", "comment_typo", "markdown_structure",
+    "inline_code", "link", "duplicate",
+    "boolean", "emphasis",
+    # structure group -- pure markdown formatting
+    "list_structure", "table_alignment", "section_title", "image_syntax",
+    # code group -- language-tag on fence is presentational
+    "code_lang_tag",
+    # cli_config -- path hint is like broken link
+    "path_hint",
+})
+
+
+def _validate_category_groups() -> None:
+    """Invariant: CONTENT, HYGIENE, UNSCORABLE partition ALL_ERROR_CATEGORIES."""
+    union = CONTENT_CATEGORIES | HYGIENE_CATEGORIES | UNSCORABLE_CATEGORIES
+    all_cats = set(ALL_ERROR_CATEGORIES)
+    overlap_ch = CONTENT_CATEGORIES & HYGIENE_CATEGORIES
+    overlap_cu = CONTENT_CATEGORIES & UNSCORABLE_CATEGORIES
+    overlap_hu = HYGIENE_CATEGORIES & UNSCORABLE_CATEGORIES
+    if overlap_ch or overlap_cu or overlap_hu:
+        raise ValueError(
+            f"category groups overlap: {overlap_ch | overlap_cu | overlap_hu}"
+        )
+    missing = all_cats - union
+    if missing:
+        raise ValueError(f"categories not assigned to any group: {missing}")
+    extra = union - all_cats
+    if extra:
+        raise ValueError(f"unknown categories in groups: {extra}")
+
+
+_validate_category_groups()
+
 # Total-error budget levels for the F1-vs-error-count gradient figure.
 # Each entry is the TARGET total scorable errors injected across the repo
 # at a single stress level. Consumed by BenchmarkManager.run_total_error_gradient.
@@ -249,6 +307,31 @@ def compute_scorable_breakdown(error_records, false_positives_total: int) -> dic
         "f1_score_scorable": f1,
         "fix_rate_scorable": fix_rate,
     }
+
+
+def compute_group_breakdown(errors, fixed_ids, group_set):
+    """Return (total_in_group, fixed_in_group) for errors whose category in group_set.
+
+    Accepts iterables of dataclass instances or dicts (shape mirrors
+    ``compute_scorable_breakdown``).
+    """
+    def _get(rec, attr):
+        if hasattr(rec, attr):
+            return getattr(rec, attr)
+        if isinstance(rec, dict):
+            return rec.get(attr)
+        return None
+
+    fixed_ids_set = set(fixed_ids) if fixed_ids is not None else set()
+    total = 0
+    fixed = 0
+    for e in errors:
+        if _get(e, "category") not in group_set:
+            continue
+        total += 1
+        if _get(e, "id") in fixed_ids_set:
+            fixed += 1
+    return total, fixed
 
 
 # File category definitions

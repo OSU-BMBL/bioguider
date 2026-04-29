@@ -22,7 +22,24 @@ try:
 except ImportError:
     BaseChatOpenAI = Any  # type: ignore
 
-from bioguider.managers.config import UNSCORABLE_CATEGORIES, compute_scorable_breakdown
+from bioguider.managers.config import (
+    UNSCORABLE_CATEGORIES,
+    CONTENT_CATEGORIES,
+    HYGIENE_CATEGORIES,
+    compute_scorable_breakdown,
+)
+
+
+def _naked_count(text: str, raw: str) -> int:
+    """Count occurrences of ``raw`` in ``text`` that are NOT backtick-wrapped.
+
+    A rewrap (``foo`` -> `` `foo` ``) registers as a fix under this counter
+    even though plain substring count is unchanged. Shared across the three
+    inline_code scorer sites so the same semantics apply everywhere.
+    """
+    if not raw:
+        return 0
+    return len(re.findall(r"(?<!`)" + re.escape(raw) + r"(?!`)", text))
 
 
 class FixStatus(str, Enum):
@@ -210,6 +227,14 @@ class EvaluationResult:
     f1_score_scorable: float = 0.0
     fix_rate_scorable: float = 0.0
 
+    # Paper-table CONTENT vs HYGIENE split.
+    total_injected_content: int = 0
+    fixed_content: int = 0
+    f1_score_content: float = 0.0
+    total_injected_hygiene: int = 0
+    fixed_hygiene: int = 0
+    f1_score_hygiene: float = 0.0
+
     # Detailed breakdowns
     per_category: Dict[str, CategoryMetrics] = field(default_factory=dict)
     per_file: Dict[str, FileMetrics] = field(default_factory=dict)
@@ -270,6 +295,40 @@ class EvaluationResult:
         self.f1_score_scorable = b["f1_score_scorable"]
         self.fix_rate_scorable = b["fix_rate_scorable"]
 
+        # CONTENT vs HYGIENE split. Precision mirrors the scorable precision
+        # (FPs are not attributed to a group); recall is group-local.
+        fixed_c = sum(
+            1 for e in self.error_evaluations
+            if e.category in CONTENT_CATEGORIES and e.is_fixed
+        )
+        total_c = sum(
+            1 for e in self.error_evaluations
+            if e.category in CONTENT_CATEGORIES
+        )
+        fixed_h = sum(
+            1 for e in self.error_evaluations
+            if e.category in HYGIENE_CATEGORIES and e.is_fixed
+        )
+        total_h = sum(
+            1 for e in self.error_evaluations
+            if e.category in HYGIENE_CATEGORIES
+        )
+        recall_c = fixed_c / total_c if total_c > 0 else 0.0
+        recall_h = fixed_h / total_h if total_h > 0 else 0.0
+        prec_s = self.precision_scorable
+        self.total_injected_content = total_c
+        self.fixed_content = fixed_c
+        self.f1_score_content = (
+            2 * prec_s * recall_c / (prec_s + recall_c)
+            if (prec_s + recall_c) > 0 else 0.0
+        )
+        self.total_injected_hygiene = total_h
+        self.fixed_hygiene = fixed_h
+        self.f1_score_hygiene = (
+            2 * prec_s * recall_h / (prec_s + recall_h)
+            if (prec_s + recall_h) > 0 else 0.0
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -293,6 +352,12 @@ class EvaluationResult:
             "recall_scorable": round(self.recall_scorable, 4),
             "f1_score_scorable": round(self.f1_score_scorable, 4),
             "fix_rate_scorable": round(self.fix_rate_scorable, 4),
+            "total_injected_content": self.total_injected_content,
+            "fixed_content": self.fixed_content,
+            "f1_score_content": round(self.f1_score_content, 4),
+            "total_injected_hygiene": self.total_injected_hygiene,
+            "fixed_hygiene": self.fixed_hygiene,
+            "f1_score_hygiene": round(self.f1_score_hygiene, 4),
             "per_category": {k: v.to_dict() for k, v in self.per_category.items()},
             "per_file": {k: v.to_dict() for k, v in self.per_file.items()},
             "error_evaluations": [e.to_dict() for e in self.error_evaluations],
@@ -525,10 +590,10 @@ class ErrorChecker:
         self, orig, mut, baseline, corrupted, revised
     ) -> Tuple[bool, FixStatus]:
         raw = mut.strip("`") if mut else ""
-        rewrapped = f"`{raw}`" if raw else ""
-        if raw and rewrapped and rewrapped in revised and mut not in revised:
-            return True, FixStatus.FIXED_TO_VALID
-        return False, FixStatus.UNCHANGED
+        if not raw:
+            return False, FixStatus.UNCHANGED
+        is_fixed = _naked_count(revised, raw) < _naked_count(corrupted, raw)
+        return is_fixed, FixStatus.FIXED_TO_VALID if is_fixed else FixStatus.UNCHANGED
 
     def _check_emphasis(
         self, orig, mut, baseline, corrupted, revised
