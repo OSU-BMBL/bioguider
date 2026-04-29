@@ -156,13 +156,17 @@ ALL_ERROR_CATEGORIES = frozenset(
 )
 
 # Categories that are injected for realism but excluded from F1 / precision / recall.
-# Rationale: the BioGuider locator uses function names as anchors for finding
-# documentation context. If we mutate a function name, the locator cannot
-# re-establish context, so the error is structurally unfixable — scoring it
-# would penalise the fixer for a design constraint, not a true failure.
+# - function: BioGuider locator uses function names as anchors; mutating them
+#   makes the error structurally unfixable.
+# - comment_typo: targets code comments inside fences; prose-only injection
+#   means these can no longer be injected without entering code blocks.
+# - code_lang_tag: modifies fence delimiters (code-adjacent); models should
+#   not touch fence syntax.
 # These errors still appear in per-category detail rows (pre-registered carve-out).
 UNSCORABLE_CATEGORIES = frozenset({
     "function",
+    "comment_typo",
+    "code_lang_tag",
 })
 
 # Scorable categories are everything else (headline F1 denominator).
@@ -193,13 +197,11 @@ CONTENT_CATEGORIES: frozenset = frozenset({
 })
 
 HYGIENE_CATEGORIES: frozenset = frozenset({
-    "typo", "comment_typo", "markdown_structure",
+    "typo", "markdown_structure",
     "inline_code", "link", "duplicate",
     "boolean", "emphasis",
     # structure group -- pure markdown formatting
     "list_structure", "table_alignment", "section_title", "image_syntax",
-    # code group -- language-tag on fence is presentational
-    "code_lang_tag",
     # cli_config -- path hint is like broken link
     "path_hint",
 })

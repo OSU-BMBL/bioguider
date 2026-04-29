@@ -169,6 +169,33 @@ class LLMErrorInjector:
         return _CODE_FENCE_RE.sub("", text)
 
     @staticmethod
+    def _fence_spans(text: str) -> List[Tuple[int, int]]:
+        """Return sorted list of (start, end) character spans for fenced code blocks."""
+        return [(m.start(), m.end()) for m in _CODE_FENCE_RE.finditer(text)]
+
+    @staticmethod
+    def _in_fence(pos: int, spans: List[Tuple[int, int]]) -> bool:
+        """Return True if character position ``pos`` falls inside any fence span."""
+        for start, end in spans:
+            if start <= pos < end:
+                return True
+            if start > pos:
+                break
+        return False
+
+    @staticmethod
+    def _replace_prose_only(text: str, old: str, new: str, spans: List[Tuple[int, int]]) -> str:
+        """Replace the first occurrence of ``old`` that is NOT inside a fence span."""
+        start = 0
+        while True:
+            idx = text.find(old, start)
+            if idx == -1:
+                return text  # no prose occurrence found — leave unchanged
+            if not LLMErrorInjector._in_fence(idx, spans):
+                return text[:idx] + new + text[idx + len(old):]
+            start = idx + 1
+
+    @staticmethod
     def _record_skip(data: Dict[str, Any], category: str, reason: str) -> None:
         data.setdefault("skipped", []).append({"category": category, "reason": reason})
 
@@ -509,25 +536,37 @@ class LLMErrorInjector:
         for e in errors:
             cat = e.get("category", "")
             cat_counts[cat] = cat_counts.get(cat, 0) + 1
-        
+
         # Track what's already been corrupted to avoid re-corruption
         corrupted_snippets: Set[str] = set()
         for e in errors:
             corrupted_snippets.add(e.get("original_snippet", ""))
             corrupted_snippets.add(e.get("mutated_snippet", ""))
 
+        # Pre-compute fence spans for prose-only replacement.
+        # Recomputed after each replacement to stay in sync with offsets.
+        fence_spans = self._fence_spans(corrupted)
+
         def need(cat: str) -> int:
             return max(0, min_per_category - cat_counts.get(cat, 0))
-        
+
+        def prose_replace(text: str, old: str, new: str) -> str:
+            """Replace first occurrence of ``old`` outside fenced code blocks."""
+            nonlocal fence_spans
+            result = self._replace_prose_only(text, old, new, fence_spans)
+            if result != text:
+                fence_spans = self._fence_spans(result)
+            return result
+
         def add_error(cat: str, orig: str, mut: str, rationale: str) -> bool:
             """Add error and update tracking. Returns True if added."""
             if orig in corrupted_snippets or mut in corrupted_snippets:
                 return False  # Already corrupted
             errors.append({
-                "id": f"e_{cat}_sup_{len(errors)}", 
-                "category": cat, 
-                "original_snippet": orig, 
-                "mutated_snippet": mut, 
+                "id": f"e_{cat}_sup_{len(errors)}",
+                "category": cat,
+                "original_snippet": orig,
+                "mutated_snippet": mut,
                 "rationale": rationale
             })
             cat_counts[cat] = cat_counts.get(cat, 0) + 1
@@ -607,7 +646,7 @@ class LLMErrorInjector:
                     if orig not in baseline:
                         continue
                     
-                    corrupted = corrupted.replace(orig, mut, 1)
+                    corrupted = prose_replace(corrupted, orig, mut)
                     rationale = f"{mutation_fn.__doc__.strip().lower()}"
                     if add_error("typo", orig, mut, rationale):
                         found = True
@@ -631,7 +670,7 @@ class LLMErrorInjector:
                     if mut == orig or mut in corrupted_snippets:
                         continue
                     
-                    corrupted = corrupted.replace(orig, mut, 1)
+                    corrupted = prose_replace(corrupted, orig, mut)
                     if add_error("typo", orig, mut, mutation_fn.__doc__.strip().lower()):
                         found = True
                         break
@@ -653,7 +692,7 @@ class LLMErrorInjector:
                     mut = orig.replace("http://", "http//", 1)
                 if mut == orig or mut in corrupted_snippets:
                     continue
-                corrupted = corrupted.replace(orig, mut, 1)
+                corrupted = prose_replace(corrupted, orig, mut)
                 if add_error("link", orig, mut, "scheme colon removed"):
                     found = True
                     break
@@ -692,7 +731,7 @@ class LLMErrorInjector:
                 mut = rep if orig.islower() else rep.title()
                 if mut in corrupted_snippets:
                     continue
-                corrupted = corrupted.replace(orig, mut, 1)
+                corrupted = prose_replace(corrupted, orig, mut)
                 add_error("bio_term", orig, mut, "common domain typo")
 
         # function supplements
@@ -730,7 +769,7 @@ class LLMErrorInjector:
                     if mut in corrupted_snippets:
                         continue
                     
-                    corrupted = corrupted.replace(orig, mut, 1)
+                    corrupted = prose_replace(corrupted, orig, mut)
                     if add_error("function", orig, mut, f"misspelled project function {term}"):
                         if force_project:
                             force_project = False
@@ -760,7 +799,7 @@ class LLMErrorInjector:
                 if mutated in corrupted_snippets:
                     continue
                 
-                corrupted = corrupted.replace(orig, mutated, 1)
+                corrupted = prose_replace(corrupted, orig, mutated)
                 if add_error("function", orig, mutated, "misspelled API name"):
                     found = True
                     break
@@ -778,7 +817,7 @@ class LLMErrorInjector:
                 # Remove one space after # symbols
                 mut = orig.rstrip() 
                 if mut != orig:
-                    corrupted = corrupted.replace(orig, mut, 1)
+                    corrupted = prose_replace(corrupted, orig, mut)
                     errors.append({"id": f"e_md_sup_{len(errors)}", "category": "markdown_structure", "original_snippet": orig.strip(), "mutated_snippet": mut.strip(), "rationale": "removed header space"})
                     continue
             # Try list indentation issues (safe)
@@ -787,7 +826,7 @@ class LLMErrorInjector:
                 orig = m.group(0)
                 # Change indentation slightly
                 mut = " " + orig.lstrip()  # reduce indent by 1
-                corrupted = corrupted.replace(orig, mut, 1)
+                corrupted = prose_replace(corrupted, orig, mut)
                 errors.append({"id": f"e_md_sup_{len(errors)}", "category": "markdown_structure", "original_snippet": orig, "mutated_snippet": mut, "rationale": "inconsistent list indent"})
                 continue
             # No more safe structural changes available
@@ -800,7 +839,7 @@ class LLMErrorInjector:
                 break
             orig = m.group(0)
             mut = orig.replace("- ", "-", 1)
-            corrupted = corrupted.replace(orig, mut, 1)
+            corrupted = prose_replace(corrupted, orig, mut)
             errors.append({"id": f"e_list_sup_{len(errors)}", "category": "list_structure", "original_snippet": orig, "mutated_snippet": mut, "rationale": "bullet missing space"})
 
         # section_title supplements
@@ -812,7 +851,7 @@ class LLMErrorInjector:
             mut = orig.replace("What is it?", "What is It?").replace("Install", "Installation")
             if mut == orig:
                 break
-            corrupted = corrupted.replace(orig, mut, 1)
+            corrupted = prose_replace(corrupted, orig, mut)
             errors.append({"id": f"e_title_sup_{len(errors)}", "category": "section_title", "original_snippet": orig, "mutated_snippet": mut, "rationale": "subtle title change"})
 
         # image_syntax supplements
@@ -822,7 +861,7 @@ class LLMErrorInjector:
                 break
             orig = m.group(0)
             mut = orig.replace("](", "] (")
-            corrupted = corrupted.replace(orig, mut, 1)
+            corrupted = prose_replace(corrupted, orig, mut)
             errors.append({"id": f"e_img_sup_{len(errors)}", "category": "image_syntax", "original_snippet": orig, "mutated_snippet": mut, "rationale": "broken image spacing"})
 
         # inline_code supplements
@@ -841,7 +880,7 @@ class LLMErrorInjector:
             if inner.startswith("{") or inner.startswith("```"):
                 continue
             mut = inner  # Remove surrounding backticks
-            corrupted = corrupted.replace(orig, mut, 1)
+            corrupted = prose_replace(corrupted, orig, mut)
             errors.append({"id": f"e_code_sup_{len(errors)}", "category": "inline_code", "original_snippet": orig, "mutated_snippet": mut, "rationale": "removed inline code backticks"})
 
         # ============================================================
@@ -871,7 +910,7 @@ class LLMErrorInjector:
                         new_val = code_val + "x"
                     mut = orig.replace(code_val, new_val, 1)
                     if orig in corrupted and orig not in corrupted_snippets and mut != orig:
-                        corrupted = corrupted.replace(orig, mut, 1)
+                        corrupted = prose_replace(corrupted, orig, mut)
                         add_error("prose_code_param", orig, mut, f"prose {param_name} drifted from code-used {code_val}")
 
         # prose_code_pkg_version
@@ -890,7 +929,7 @@ class LLMErrorInjector:
                     new_v = code_ver - 1 if code_ver > 1 else code_ver + 1
                     mut = f"{mp.group(1)} v{new_v}"
                     if orig in corrupted and orig not in corrupted_snippets:
-                        corrupted = corrupted.replace(orig, mut, 1)
+                        corrupted = prose_replace(corrupted, orig, mut)
                         add_error("prose_code_pkg_version", orig, mut, f"prose {pkg_name} version drifted from code-pinned v{code_ver}")
 
         # prose_code_stat_test — run early so the prose test name isn't consumed by generic supplements
@@ -916,7 +955,7 @@ class LLMErrorInjector:
                 else:
                     orig = mp.group(0)
                     if orig in corrupted and orig not in corrupted_snippets:
-                        corrupted = corrupted.replace(orig, target, 1)
+                        corrupted = prose_replace(corrupted, orig, target)
                         add_error("prose_code_stat_test", orig, target, f"mutated prose '{orig}' so it contradicts code-called {code_test}")
 
         # prose_code_marker — run early so gene_case / bio_term don't consume the prose marker first
@@ -939,7 +978,7 @@ class LLMErrorInjector:
                         orig = mp.group(0)
                         mut = swap_map[code_marker]
                         if orig in corrupted and orig not in corrupted_snippets:
-                            corrupted = corrupted.replace(orig, mut, 1)
+                            corrupted = prose_replace(corrupted, orig, mut)
                             add_error("prose_code_marker", orig, mut, f"mutated prose marker {orig}->{mut} so it contradicts code-referenced {code_marker}")
 
         # accession_id_prefix — run early so generic number/gene_case don't touch GSE/GSM digits
@@ -960,7 +999,7 @@ class LLMErrorInjector:
                 orig = prefix + digits
                 mut = ("GSM" if prefix == "GSE" else "GSE") + digits
                 if orig in corrupted and orig not in corrupted_snippets:
-                    corrupted = corrupted.replace(orig, mut, 1)
+                    corrupted = prose_replace(corrupted, orig, mut)
                     add_error("accession_id_prefix", orig, mut, "swapped accession namespace against surrounding context word")
 
         # number supplements - change numeric values
@@ -984,7 +1023,7 @@ class LLMErrorInjector:
                     continue
                 if mut == orig or mut in corrupted_snippets:
                     continue
-                corrupted = corrupted.replace(orig, mut, 1)
+                corrupted = prose_replace(corrupted, orig, mut)
                 if add_error("number", orig, mut, "changed numeric value"):
                     found = True
                     break
@@ -1009,7 +1048,7 @@ class LLMErrorInjector:
                 if orig in corrupted_snippets:
                     continue
                 mut = replacement
-                corrupted = corrupted.replace(orig, mut, 1)
+                corrupted = prose_replace(corrupted, orig, mut)
                 add_error("boolean", orig, mut, "flipped boolean value")
 
         # gene_case supplements - change gene symbol case (important in bioinformatics)
@@ -1032,7 +1071,7 @@ class LLMErrorInjector:
                 mut = orig.lower()
                 if mut == orig or mut in corrupted_snippets:
                     continue
-                corrupted = corrupted.replace(orig, mut, 1)
+                corrupted = prose_replace(corrupted, orig, mut)
                 if add_error("gene_case", orig, mut, "changed gene symbol case"):
                     found = True
                     break
@@ -1060,7 +1099,7 @@ class LLMErrorInjector:
                 # Replace in context
                 full_orig = m.group(0)
                 full_mut = full_orig.replace(param, mut, 1)
-                corrupted = corrupted.replace(full_orig, full_mut, 1)
+                corrupted = prose_replace(corrupted, full_orig, full_mut)
                 if add_error("param_name", orig, mut, "misspelled parameter name"):
                     found = True
                     break
@@ -1083,7 +1122,7 @@ class LLMErrorInjector:
                     mut = word[:-1]  # Truncate
                     if mut == word or mut in corrupted_snippets:
                         continue
-                    corrupted = corrupted.replace(word, mut, 1)
+                    corrupted = prose_replace(corrupted, word, mut)
                     if add_error("comment_typo", word, mut, "typo in comment"):
                         found = True
                         break
@@ -1103,7 +1142,7 @@ class LLMErrorInjector:
             if need("species_name") <= 0:
                 break
             if orig_sp in corrupted and orig_sp not in corrupted_snippets:
-                corrupted = corrupted.replace(orig_sp, mut_sp, 1)
+                corrupted = prose_replace(corrupted, orig_sp, mut_sp)
                 add_error("species_name", orig_sp, mut_sp, "misspelled species name")
 
         data["errors"] = errors

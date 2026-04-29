@@ -234,25 +234,24 @@ a mix of legitimate content and introduced errors. Restore the document to
 its intended form without inventing new content.
 
 GROUND TRUTH
-- The code blocks (R, Python, shell inside ``` fences) are the AUTHORITY for
+- Code blocks (R, Python, shell inside ``` fences) are the AUTHORITY for
   what the software actually does: package versions, statistical test calls,
-  marker genes, hyperparameter values. If the prose contradicts the adjacent
-  code, the prose is wrong — fix the prose to match the code.
-- The document's own internal cross-references are a secondary authority:
-  section headers, accession IDs, function names, and URLs that appear in
-  more than one place should agree across occurrences.
+  marker genes, hyperparameter values. Do not modify code blocks.
+- If prose contradicts a code block about a factual claim (package version,
+  test name, marker gene, parameter value, accession ID), rewrite the PROSE
+  to match the CODE — not the other way around.
+- Internal cross-references are a secondary authority: section headers,
+  accession IDs, function names, and URLs that appear in more than one
+  place should agree across occurrences.
 
 CRITICAL RULES
-1. PRESERVE all code blocks exactly — do not modify text inside ``` fences.
+1. Do NOT modify text inside ``` fences — code blocks are read-only.
 2. PRESERVE the YAML frontmatter, section headers, and section order.
-3. When prose disagrees with a code block about a factual claim (package
-   version, test name, marker gene, parameter value, accession ID),
-   rewrite the PROSE to match the CODE — not the other way around.
-4. Only change text that is demonstrably wrong. Do not rewrite prose that
+3. Only change text that is demonstrably wrong. Do not rewrite prose that
    is grammatical and internally consistent.
-5. Do NOT add new content, new sections, new citations, or new code.
-6. Do NOT remove any sections or code blocks.
-7. Output the COMPLETE fixed document as markdown, verbatim except for the
+4. Do NOT add new content, new sections, new citations, or new code.
+5. Do NOT remove any sections or code blocks.
+6. Output the COMPLETE fixed document as markdown, verbatim except for the
    fixes you made.
 
 CORRUPTED DOCUMENT TO FIX:
@@ -265,6 +264,22 @@ SIMPLE_PROMPT = """Fix all errors in this document and output the corrected vers
 
 # GPT no-guidance prompt - just asking to proofread
 GPT_BASIC_PROMPT = """Proofread and fix this document:
+
+"""
+
+# Skill 2 — generic prompt WITH evaluation criteria but NO structured guidance.
+# Mirrors what a user would ask ChatGPT if they knew the evaluation rubric
+# but had no BioGuider skill. Used for Purpose-2 benchmark (skill validation).
+SKILL_GENERIC_PROMPT = """I want to refine this bioinformatics documentation. Here are the
+evaluation criteria I will use to judge the result:
+
+1. Scientific accuracy (gene names, species, statistical tests, parameters)
+2. Markdown formatting (headers, lists, links, inline code, tables)
+3. Consistency between prose descriptions and code block contents
+4. Completeness of required sections (installation, usage, examples)
+
+Please improve this document based on these criteria. Fix any errors you
+find. Output the complete corrected document as markdown:
 
 """
 
@@ -281,7 +296,11 @@ PROMPTS = {
     "gpt_basic": {
         "prompt": GPT_BASIC_PROMPT,
         "description": "GPT Basic: Just 'proofread and fix'"
-    }
+    },
+    "skill_generic": {
+        "prompt": SKILL_GENERIC_PROMPT,
+        "description": "Skill 2: Evaluation criteria shared, no structured guidance"
+    },
 }
 
 # ============================================================================

@@ -120,7 +120,7 @@ class TestScorableMetricsSplit:
             "unscorable_categories",
         ):
             assert key in d, f"Missing in to_dict(): {key}"
-        assert d["unscorable_categories"] == ["function"]
+        assert set(d["unscorable_categories"]) == {"function", "comment_typo", "code_lang_tag"}
 
     def test_fp_mirror_into_scorable(self):
         evs = [_ev("typo", True, 1)]
@@ -190,7 +190,7 @@ class TestBenchmarkResultScorable:
             "unscorable_categories",
         ):
             assert k in d, f"Missing scorable key in BenchmarkResult.to_dict: {k}"
-        assert d["unscorable_categories"] == ["function"]
+        assert set(d["unscorable_categories"]) == {"function", "comment_typo", "code_lang_tag"}
 
 
 class TestSharedHelperParity:
