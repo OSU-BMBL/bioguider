@@ -96,11 +96,10 @@
 - 调查errors_fixed=40 vs sum(category.fixed)=46的差异来源
 - 修复或文档说明
 
-#### A.5: 重算E001/E002
-- 用修好的evaluator重新score已有的baseline/corrupted/revised文件
-- **不重跑LLM** — 直接读取outputs目录里的.fixed.Rmd文件重算
-- 产出: E001-v2 rescore CSV, E002-v2 rescore CSV
-- 确认: 模型排序是否变化、precision是否≠1.0
+#### A.5: 重算 → 重跑（升级后的策略）
+- 原计划：直接读取 outputs 目录里的 .fixed.Rmd 文件重新 score
+- **更新**：因为评分器改动较大（新增 protected region + collateral damage 两个独立 metric），且 prompt 也升级到 v3，简单 rescore 无法验证完整 pipeline。改为完整重跑（见 Step 4/5）
+- 旧 outputs 保留作为历史对比基线
 
 ### Track B: Prompt Ablation（新实验）
 

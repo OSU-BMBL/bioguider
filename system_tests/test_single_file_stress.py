@@ -10,13 +10,11 @@ Usage:
 import os
 import json
 import csv
-import re
-import shutil
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple
 
 import pytest
 from langchain_openai import ChatOpenAI
@@ -24,8 +22,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from openai import RateLimitError
 
 from bioguider.generation.llm_injector import LLMErrorInjector
-from bioguider.generation.benchmark_metrics import BenchmarkEvaluator, BenchmarkResult
-from bioguider.generation.unified_metrics import _naked_count
+from bioguider.generation.benchmark_metrics import BenchmarkEvaluator, check_protected_regions
 from bioguider.agents.agent_utils import read_file, write_file
 
 
@@ -121,6 +118,12 @@ class StressLevelResult:
     total_injected_hygiene: int = 0
     fixed_hygiene: int = 0
     f1_score_hygiene: float = 0.0
+
+    # Protected region violations (Hard FP) from check_protected_regions().
+    # Populated in run_stress_level from the BenchmarkResult fields.
+    code_fence_violations: int = 0
+    yaml_violations: int = 0
+    section_violations: int = 0
 
 
 def _populate_scorable(r: "StressLevelResult") -> None:
@@ -232,32 +235,30 @@ def inject_errors_at_level(
 # ============================================================================
 
 # BioGuider's comprehensive error-fixing prompt (domain-specific guidance)
-BIOGUIDER_PROMPT = """You are an expert document proofreader for bioinformatics documentation.
-
-Your task is to FIX ERRORS in the following document. The document contains
-a mix of legitimate content and introduced errors. Restore the document to
-its intended form without inventing new content.
+BIOGUIDER_PROMPT = """You are "BioGuider," fixing documentation for biomedical software.
 
 GROUND TRUTH
-- Code blocks (R, Python, shell inside ``` fences) are the AUTHORITY for
-  what the software actually does: package versions, statistical test calls,
-  marker genes, hyperparameter values. Do not modify code blocks.
-- If prose contradicts a code block about a factual claim (package version,
-  test name, marker gene, parameter value, accession ID), rewrite the PROSE
-  to match the CODE — not the other way around.
-- Internal cross-references are a secondary authority: section headers,
-  accession IDs, function names, and URLs that appear in more than one
-  place should agree across occurrences.
+- Code blocks (``` fences) are the AUTHORITY. If prose contradicts code
+  (package version, test name, marker gene, parameter value), fix the
+  PROSE to match the CODE.
 
-CRITICAL RULES
-1. Do NOT modify text inside ``` fences — code blocks are read-only.
-2. PRESERVE the YAML frontmatter, section headers, and section order.
-3. Only change text that is demonstrably wrong. Do not rewrite prose that
-   is grammatical and internally consistent.
-4. Do NOT add new content, new sections, new citations, or new code.
-5. Do NOT remove any sections or code blocks.
-6. Output the COMPLETE fixed document as markdown, verbatim except for the
-   fixes you made.
+EVALUATION DIMENSIONS (fix errors in all categories)
+1. Scientific accuracy: gene names, species, statistical tests, parameters,
+   accession IDs must be correct and consistent with code blocks
+2. Markdown formatting: headers, lists, links, inline code, tables,
+   image syntax must follow proper markdown
+3. Prose-code consistency: prose descriptions must agree with adjacent
+   code block contents (versions, function names, parameter values)
+4. Structure: section titles, YAML frontmatter must be correct
+
+HOW TO FIX (BioGuider methodology)
+- Scan the entire document systematically, dimension by dimension
+- Use code blocks as the source of truth for factual claims
+- Fix typos, broken links, wrong gene names, incorrect numbers
+- Restore proper markdown formatting
+- Do NOT add new content or remove existing sections
+- Do NOT modify text inside ``` fences
+- Output the COMPLETE fixed document as markdown
 
 CORRUPTED DOCUMENT TO FIX:
 """
@@ -275,17 +276,7 @@ GPT_BASIC_PROMPT = """Proofread and fix this document:
 # Skill 2 — generic prompt WITH evaluation criteria but NO structured guidance.
 # Mirrors what a user would ask ChatGPT if they knew the evaluation rubric
 # but had no BioGuider skill. Used for Purpose-2 benchmark (skill validation).
-SKILL_GENERIC_PROMPT = """I want to refine this bioinformatics documentation. Here are the
-evaluation criteria I will use to judge the result:
-
-1. Scientific accuracy (gene names, species, statistical tests, parameters)
-2. Markdown formatting (headers, lists, links, inline code, tables)
-3. Consistency between prose descriptions and code block contents
-4. Completeness of required sections (installation, usage, examples)
-
-Please improve this document based on these criteria. Fix any errors you
-find. Output the complete corrected document as markdown:
-
+SKILL_GENERIC_PROMPT = """Fix all errors in this document and output the corrected version:
 """
 
 # Available prompts for comparison
@@ -366,7 +357,7 @@ def fix_with_model(
     file_basename: str,
     error_count: int,
     prompt_name: str = "bioguider",
-    model_name: str = "gpt4o",
+    model_name: str = "gpt-4o",
 ) -> Tuple[str, Dict[str, int]]:
     """
     Fix corrupted content using specified model and prompt combination.
@@ -379,7 +370,7 @@ def fix_with_model(
         file_basename: Base name for output files
         error_count: Error level being tested
         prompt_name: Name of prompt to use ("bioguider", "simple", "gpt_basic")
-        model_name: Name of model ("gpt4o", "qwen3_30b", etc.)
+        model_name: Name of model ("gpt-4o", "qwen3_30b", etc.)
 
     Returns:
         (fixed_content, token_usage) where token_usage is a dict with keys
@@ -455,41 +446,10 @@ def fix_with_bioguider(llm, corrupted_content, original_content, output_dir, fil
     """Legacy function - uses BioGuider prompt with GPT-4o."""
     fixed_content, _token_usage = fix_with_model(
         llm, corrupted_content, original_content, output_dir,
-        file_basename, error_count, prompt_name="bioguider", model_name="gpt4o"
+        file_basename, error_count, prompt_name="bioguider", model_name="gpt-4o"
     )
     return fixed_content
 
-
-import threading  # noqa: E402 — placed here because module-level imports above are clustered elsewhere
-_SEMANTIC_MATCH_CACHE: Dict[str, bool] = {}
-_SEMANTIC_MATCH_LOCK = threading.Lock()
-
-
-def _semantic_match(orig: str, fixed_context: str, llm=None) -> bool:
-    """LLM judge: does fixed_context correctly use term 'orig'? Falls back to exact check.
-
-    Thread-safe cache (required because the parallel inner loop in
-    test_multi_file_full_matrix can call this from up to 5 threads concurrently).
-    """
-    import hashlib
-    if llm is None:
-        return orig in fixed_context
-    cache_key = hashlib.md5(f"{orig}:{fixed_context[:500]}".encode()).hexdigest()
-    with _SEMANTIC_MATCH_LOCK:
-        if cache_key in _SEMANTIC_MATCH_CACHE:
-            return _SEMANTIC_MATCH_CACHE[cache_key]
-    try:
-        prompt = (
-            f"Does the following text correctly use the term '{orig}'? "
-            f"Answer YES or NO only.\n\nText:\n{fixed_context[:500]}"
-        )
-        resp = llm.invoke(prompt)
-        result = "YES" in (resp.content if hasattr(resp, "content") else str(resp)).upper()
-    except Exception:
-        result = orig in fixed_context
-    with _SEMANTIC_MATCH_LOCK:
-        _SEMANTIC_MATCH_CACHE[cache_key] = result
-    return result
 
 
 def evaluate_fixes(
@@ -522,110 +482,43 @@ def evaluate_fixes(
         error_count=len(manifest.get("errors", [])),
         file_count=1
     )
-    
-    # Calculate per-category results using SAME logic as BenchmarkEvaluator
-    category_results = []
-    errors = manifest.get("errors", [])
-    
-    # Group errors by category
+
+    # Set protected region violations (Hard FP)
+    protection = check_protected_regions(original_content, fixed_content)
+    result.code_fence_violations = protection["code_fence_violations"]
+    result.yaml_violations = protection["yaml_violations"]
+    result.section_violations = protection["section_violations"]
+
+    # Derive per-category breakdown directly from error_metrics that
+    # BenchmarkEvaluator already computed above.  Previously this block
+    # re-evaluated each error with a hand-rolled if/elif chain that diverged
+    # from BenchmarkEvaluator._check_error_fixed(), causing the headline
+    # `errors_fixed` (= result.true_positives) and the per-category `fixed`
+    # sums to disagree.  Using the same error_metrics object guarantees both
+    # counts are identical.
     from collections import Counter
-    category_counts = Counter(e.get("category", "unknown") for e in errors)
-    
-    # Count fixed vs unfixed per category
-    category_fixed = Counter()
-    category_unfixed = Counter()
-    
-    for e in errors:
-        cat = e.get("category", "unknown")
-        orig = e.get("original_snippet", "")
-        mut = e.get("mutated_snippet", "")
-        
-        # Use same logic as BenchmarkEvaluator._check_error_fixed()
-        is_fixed = False
-        
-        if cat in ("typo", "bio_term", "function"):
-            # Fixed if: original in revised, OR neither in revised (rewritten)
-            if orig and orig in fixed_content:
-                is_fixed = True
-            elif mut and mut in fixed_content:
-                is_fixed = False
-            else:
-                is_fixed = True  # Neither found = rewritten = fixed
-        
-        elif cat == "link":
-            # Fixed if any well-formed link exists
-            is_fixed = bool(re.search(r"\[[^\]]+\]\([^\s)]+\)", fixed_content))
-        
-        elif cat == "markdown_structure":
-            # Fixed if fewer markdown issues after
-            def count_md_issues(text):
-                issues = 0
-                issues += len(re.findall(r"^#{1,6}[^\s#]", text, re.M))  # Header without space
-                issues += len(re.findall(r"^[-*][^\s]", text, re.M))  # List without space
-                return issues
-            is_fixed = count_md_issues(fixed_content) < count_md_issues(corrupted_content)
-        
-        elif cat == "inline_code":
-            raw = mut.strip('`') if mut else ""
-            if not raw:
-                is_fixed = False
-            else:
-                is_fixed = _naked_count(fixed_content, raw) < _naked_count(corrupted_content, raw)
-        
-        elif cat == "duplicate":
-            # Fixed if fewer duplicates after
-            is_fixed = fixed_content.count(mut) < corrupted_content.count(mut) if mut else False
-        
-        elif cat in ("number", "boolean", "param_name", "comment_typo", "species_name", "gene_case"):
-            # For these: fixed if original restored OR mutated removed OR rewritten
-            if orig and orig in fixed_content:
-                is_fixed = True
-            elif mut and mut in fixed_content:
-                is_fixed = False
-            else:
-                is_fixed = True  # Neither found = rewritten
-
-        elif cat in ("reproducibility_drift", "analysis_hyperparam", "annotation_id_space"):
-            # Exact-string match: same shape as number branch
-            if orig and orig in fixed_content:
-                is_fixed = True
-            elif mut and mut in fixed_content:
-                is_fixed = False
-            else:
-                is_fixed = True  # Neither found = rewritten
-
-        elif cat in ("stat_test_misnaming", "celltype_marker"):
-            # Semantic match: use LLM judge when literal check is ambiguous
-            if orig and orig in fixed_content:
-                is_fixed = True
-            elif mut and mut not in fixed_content:
-                is_fixed = True
-            else:
-                is_fixed = _semantic_match(orig, fixed_content, llm)
-
+    cat_fixed: Counter = Counter()
+    cat_unfixed: Counter = Counter()
+    for em in error_metrics:
+        if em.is_fixed:
+            cat_fixed[em.category] += 1
         else:
-            # Default: mutated gone or original restored
-            is_fixed = (mut and mut not in fixed_content) or (orig and orig in fixed_content)
-        
-        if is_fixed:
-            category_fixed[cat] += 1
-        else:
-            category_unfixed[cat] += 1
-    
-    for cat in sorted(category_counts.keys()):
-        injected = category_counts[cat]
-        fixed = category_fixed[cat]
-        unfixed = category_unfixed[cat]
+            cat_unfixed[em.category] += 1
+    all_cats = sorted(set(cat_fixed) | set(cat_unfixed))
+    category_results = []
+    for cat in all_cats:
+        fixed = cat_fixed[cat]
+        unfixed = cat_unfixed[cat]
+        injected = fixed + unfixed
         fix_rate = fixed / injected if injected > 0 else 0.0
-        
         category_results.append(CategoryResult(
             category=cat,
             injected=injected,
             fixed=fixed,
             unfixed=unfixed,
-            fix_rate=fix_rate
+            fix_rate=fix_rate,
         ))
-    
+
     return result, category_results
 
 
@@ -636,7 +529,7 @@ def run_stress_level(
     output_dir: str,
     file_basename: str,
     prompt_name: str = "bioguider",
-    model_name: str = "gpt4o",
+    model_name: str = "gpt-4o",
 ) -> StressLevelResult:
     """
     Run a single stress test level.
@@ -654,7 +547,6 @@ def run_stress_level(
     print(f"  [Level {error_count}] Injected {injection_result['total_errors']} errors")
     
     model_desc = MODELS.get(model_name, {}).get("description", model_name)
-    prompt_desc = PROMPTS.get(prompt_name, {}).get("description", prompt_name)
     print(f"  [Level {error_count}] Fixing with {model_desc} using {prompt_name} prompt...")
     
     # Fix with specified model/prompt
@@ -700,6 +592,10 @@ def run_stress_level(
         duration_seconds=duration,
         category_results=category_results,
         model_name=combo_name,  # Include both model and prompt name
+        false_positives=result.false_positives,
+        code_fence_violations=result.code_fence_violations,
+        yaml_violations=result.yaml_violations,
+        section_violations=result.section_violations,
         prompt_tokens=token_info.get("prompt_tokens", 0),
         completion_tokens=token_info.get("completion_tokens", 0),
         total_tokens=token_info.get("total_tokens", 0),
@@ -801,6 +697,10 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 "total_injected_hygiene": r.total_injected_hygiene,
                 "fixed_hygiene": r.fixed_hygiene,
                 "f1_score_hygiene": round(r.f1_score_hygiene, 4),
+                "false_positives": r.false_positives,
+                "code_fence_violations": r.code_fence_violations,
+                "yaml_violations": r.yaml_violations,
+                "section_violations": r.section_violations,
                 "duration_seconds": round(r.duration_seconds, 2),
                 "category_breakdown": [
                     {
@@ -835,6 +735,7 @@ def save_results(results: List[StressLevelResult], output_dir: str):
             "fix_rate_scorable", "precision_scorable", "recall_scorable", "f1_score_scorable",
             "total_injected_content", "fixed_content", "f1_score_content",
             "total_injected_hygiene", "fixed_hygiene", "f1_score_hygiene",
+            "false_positives", "code_fence_violations", "yaml_violations", "section_violations",
             "duration_s",
             "prompt_tokens", "completion_tokens", "total_tokens",
         ])
@@ -848,6 +749,7 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 round(r.recall_scorable, 4), round(r.f1_score_scorable, 4),
                 r.total_injected_content, r.fixed_content, round(r.f1_score_content, 4),
                 r.total_injected_hygiene, r.fixed_hygiene, round(r.f1_score_hygiene, 4),
+                r.false_positives, r.code_fence_violations, r.yaml_violations, r.section_violations,
                 round(r.duration_seconds, 2),
                 r.prompt_tokens, r.completion_tokens, r.total_tokens,
             ])
@@ -934,7 +836,7 @@ def save_results(results: List[StressLevelResult], output_dir: str):
     with open(md_path, 'w') as f:
         f.writelines(md_lines)
     
-    print(f"\nResults saved to:")
+    print("\nResults saved to:")
     print(f"  - {json_path}")
     print(f"  - {csv_path}")
     print(f"  - {md_path}")
@@ -1099,11 +1001,11 @@ pytest system_tests/test_single_file_stress.py::test_evaluate_model_comparison -
     with open(instructions_path, 'w') as f:
         f.write(instructions)
     
-    print(f"\nPrepared files for model comparison:")
+    print("\nPrepared files for model comparison:")
     print(f"  - Corrupted file: {injection_result['corrupted_path']}")
     print(f"  - Errors: {injection_result['total_errors']}")
     print(f"  - Instructions: {instructions_path}")
-    print(f"\nFix with each model and save to fixed_{{model}}/ directories")
+    print("\nFix with each model and save to fixed_{model}/ directories")
 
 
 def test_multi_model_comparison(llm, test_output_dir):
@@ -1153,8 +1055,8 @@ def test_multi_model_comparison(llm, test_output_dir):
     
     # Define test configurations: (model_name, prompt_name)
     test_configs = [
-        ("gpt4o", "bioguider"),      # GPT-4o with BioGuider prompt (should be best)
-        ("gpt4o", "simple"),         # GPT-4o with simple prompt
+        ("gpt-4o", "bioguider"),      # GPT-4o with BioGuider prompt (should be best)
+        ("gpt-4o", "simple"),         # GPT-4o with simple prompt
         ("claude_sonnet", "simple"), # Claude Sonnet with simple prompt
         ("qwen3_30b", "simple"),     # Qwen 30B (balanced) with simple
         ("gpt_oss_20b", "simple"),   # GPT-OSS 20B with simple
@@ -1267,7 +1169,7 @@ def test_model_comparison(llm, test_output_dir):
     print(f"Error level: {error_level}")
     
     # Inject errors once
-    print(f"\nInjecting errors...")
+    print("\nInjecting errors...")
     injection_result = inject_errors_at_level(
         llm, original_content, error_level, test_output_dir, file_basename
     )
@@ -1290,7 +1192,7 @@ def test_model_comparison(llm, test_output_dir):
             file_basename,
             error_level,
             prompt_name=prompt_name,
-            model_name="gpt4o"
+            model_name="gpt-4o"
         )
         
         # Evaluate
@@ -1302,7 +1204,7 @@ def test_model_comparison(llm, test_output_dir):
             llm
         )
         
-        combo_name = f"gpt4o+{prompt_name}"
+        combo_name = f"gpt-4o+{prompt_name}"
         stress_result = StressLevelResult(
             error_count=error_level,
             total_errors_injected=injection_result["total_errors"],
@@ -1355,23 +1257,10 @@ def test_full_benchmark(llm, test_output_dir):
     FULL BENCHMARK - Two parts:
     1. Model comparison: All models at 30 errors
     2. Stress test: BioGuider only from 10 to 300 errors
+
+    Not yet implemented — superseded by test_all_models_all_levels.
     """
-    test_file = DEFAULT_TEST_FILE
-    
-    if not os.path.exists(test_file):
-        pytest.skip(f"Test file not found: {test_file}")
-    
-    original_content = read_file(test_file)
-    file_basename = Path(test_file).stem
-    
-    # Part 1: Model comparison at 30 errors only
-    model_comparison_level = 30
-    
-    # Part 2: Stress test levels (BioGuider only)
-    stress_levels = [10, 20, 40, 60, 100, 150, 200, 300]
-    
-    # All models with bioguider prompt + one simple-prompt baseline
-    test_configs = [(m, "bioguider") for m in MODELS] + [("gpt-5.4", "simple")]
+    pytest.skip("Not implemented — use test_all_models_all_levels instead")
 
 
 def test_all_models_all_levels(llm, test_output_dir):
@@ -1487,7 +1376,7 @@ def test_all_models_all_levels(llm, test_output_dir):
     models = list(set(r.model_name for r in all_results))
     models.sort()
     
-    print(f"\n--- AVERAGE PERFORMANCE BY MODEL ---")
+    print("\n--- AVERAGE PERFORMANCE BY MODEL ---")
     print(f"{'Model':<25} | {'Avg F1':>8} | {'Avg Fix%':>8} | {'Tests':>6}")
     print("-" * 55)
     
@@ -1504,7 +1393,7 @@ def test_all_models_all_levels(llm, test_output_dir):
     print(f"\n✓ Best overall: {best_model} (Avg F1={model_avg[best_model]:.3f})")
     
     # Create pivot table by level
-    print(f"\n--- F1 SCORE BY MODEL AND ERROR LEVEL ---")
+    print("\n--- F1 SCORE BY MODEL AND ERROR LEVEL ---")
     header = f"{'Model':<25} |"
     for level in error_levels:
         header += f" {level:>6} |"
@@ -1522,191 +1411,6 @@ def test_all_models_all_levels(llm, test_output_dir):
         print(row)
     
     assert len(all_results) >= len(test_configs), "Should have results for all models"
-    
-    print_prompts()
-    print_models()
-    
-    print(f"\n{'='*70}")
-    print("FULL BENCHMARK")
-    print(f"{'='*70}")
-    print(f"File: {test_file}")
-    print(f"Part 1: Model comparison at {model_comparison_level} errors")
-    print(f"Part 2: BioGuider stress test: {stress_levels}")
-    
-    # Save original
-    write_file(os.path.join(test_output_dir, f"{file_basename}.original.Rmd"), original_content)
-    
-    all_results = []
-    import time
-    
-    # =========================================================================
-    # PART 1: Model comparison at 30 errors
-    # =========================================================================
-    print(f"\n{'='*70}")
-    print(f"PART 1: MODEL COMPARISON @ {model_comparison_level} ERRORS")
-    print(f"{'='*70}")
-    
-    # Inject errors for model comparison
-    print(f"Injecting {model_comparison_level} errors per category...")
-    injection_result = inject_errors_at_level(
-        llm, original_content, model_comparison_level, test_output_dir, file_basename
-    )
-    print(f"Total injected: {injection_result['total_errors']} errors")
-    
-    # Test all models
-    for model_name, prompt_name in test_configs:
-        combo_name = f"{model_name}+{prompt_name}"
-        print(f"\n--- {combo_name} ---")
-        
-        try:
-            start_time = time.time()
-            
-            fixed_content, _ = fix_with_model(
-                llm,
-                injection_result["corrupted_content"],
-                original_content,
-                test_output_dir,
-                file_basename,
-                model_comparison_level,
-                prompt_name=prompt_name,
-                model_name=model_name
-            )
-            
-            duration = time.time() - start_time
-            
-            result, category_results = evaluate_fixes(
-                original_content,
-                injection_result["corrupted_content"],
-                fixed_content,
-                injection_result["manifest"],
-                llm
-            )
-            
-            stress_result = StressLevelResult(
-                error_count=model_comparison_level,
-                total_errors_injected=injection_result["total_errors"],
-                errors_fixed=result.true_positives,
-                errors_unfixed=result.false_negatives,
-                fix_rate=result.fix_rate,
-                precision=result.precision,
-                recall=result.recall,
-                f1_score=result.f1_score,
-                duration_seconds=duration,
-                category_results=category_results,
-                model_name=combo_name
-            )
-            
-            all_results.append(stress_result)
-            print(f"    Fixed {result.true_positives}/{injection_result['total_errors']} "
-                  f"({result.fix_rate:.1%}), F1={result.f1_score:.3f}, Time={duration:.1f}s")
-                  
-        except Exception as e:
-            print(f"    ERROR: {e}")
-            continue
-    
-    # Save model comparison results
-    save_results(all_results, test_output_dir)
-    
-    # =========================================================================
-    # PART 2: BioGuider stress test (10-300 errors)
-    # =========================================================================
-    print(f"\n{'='*70}")
-    print("PART 2: BIOGUIDER STRESS TEST (10-300 errors)")
-    print(f"{'='*70}")
-    
-    for error_level in stress_levels:
-        print(f"\n--- BioGuider @ Level {error_level} ---")
-        
-        # Inject errors for this level
-        injection_result = inject_errors_at_level(
-            llm, original_content, error_level, test_output_dir, file_basename
-        )
-        print(f"    Injected: {injection_result['total_errors']} errors")
-        
-        try:
-            start_time = time.time()
-            
-            fixed_content, _ = fix_with_model(
-                llm,
-                injection_result["corrupted_content"],
-                original_content,
-                test_output_dir,
-                file_basename,
-                error_level,
-                prompt_name="bioguider",
-                model_name="gpt4o"
-            )
-            
-            duration = time.time() - start_time
-            
-            result, category_results = evaluate_fixes(
-                original_content,
-                injection_result["corrupted_content"],
-                fixed_content,
-                injection_result["manifest"],
-                llm
-            )
-            
-            stress_result = StressLevelResult(
-                error_count=error_level,
-                total_errors_injected=injection_result["total_errors"],
-                errors_fixed=result.true_positives,
-                errors_unfixed=result.false_negatives,
-                fix_rate=result.fix_rate,
-                precision=result.precision,
-                recall=result.recall,
-                f1_score=result.f1_score,
-                duration_seconds=duration,
-                category_results=category_results,
-                model_name="gpt4o+bioguider"
-            )
-            
-            all_results.append(stress_result)
-            print(f"    Fixed {result.true_positives}/{injection_result['total_errors']} "
-                  f"({result.fix_rate:.1%}), F1={result.f1_score:.3f}, Time={duration:.1f}s")
-                  
-        except Exception as e:
-            print(f"    ERROR: {e}")
-            continue
-        
-        # Save after each level
-        save_results(all_results, test_output_dir)
-    
-    # Final summary
-    print(f"\n{'='*70}")
-    print("FULL BENCHMARK SUMMARY")
-    print(f"{'='*70}")
-    
-    # Part 1 results: Model comparison at 30 errors
-    model_comp_results = [r for r in all_results if r.error_count == model_comparison_level]
-    print(f"\n--- MODEL COMPARISON @ {model_comparison_level} errors ---")
-    print(f"{'Model':<25} | {'Fixed':>6} | {'F1':>8} | {'FixRate':>8}")
-    print("-" * 55)
-    for r in sorted(model_comp_results, key=lambda x: x.f1_score, reverse=True):
-        print(f"{r.model_name:<25} | {r.errors_fixed:>6} | {r.f1_score:>8.3f} | {r.fix_rate:>7.1%}")
-    
-    # Part 2 results: BioGuider stress test
-    stress_results = [r for r in all_results if r.error_count != model_comparison_level]
-    if stress_results:
-        print(f"\n--- BIOGUIDER STRESS TEST ---")
-        print(f"{'Errors':>8} | {'Fixed':>6} | {'F1':>8} | {'FixRate':>8}")
-        print("-" * 40)
-        for r in sorted(stress_results, key=lambda x: x.error_count):
-            print(f"{r.error_count:>8} | {r.errors_fixed:>6} | {r.f1_score:>8.3f} | {r.fix_rate:>7.1%}")
-    
-    # Check if BioGuider is best in model comparison
-    if model_comp_results:
-        best = max(model_comp_results, key=lambda x: x.f1_score)
-        bioguider_result = next((r for r in model_comp_results if "bioguider" in r.model_name), None)
-        
-        print(f"\n{'='*70}")
-        if bioguider_result and bioguider_result == best:
-            print(f"✓ BioGuider is BEST with F1={bioguider_result.f1_score:.3f}")
-        elif bioguider_result:
-            print(f"Best: {best.model_name} (F1={best.f1_score:.3f})")
-            print(f"BioGuider: F1={bioguider_result.f1_score:.3f}")
-    
-    assert len(all_results) >= len(test_configs), "Should have model comparison results"
 
 
 def test_multi_file_full_matrix(llm, test_output_dir):
@@ -1962,7 +1666,10 @@ def _write_skill_comparison_csv(rows: List[Dict[str, Any]], csv_path: str) -> No
     fieldnames = [
         "file_stem", "model", "skill", "error_count", "total_injected",
         "fixed", "unfixed", "fix_rate", "f1_score", "f1_score_scorable",
-        "f1_score_content", "f1_score_hygiene", "duration_s",
+        "f1_score_content", "f1_score_hygiene",
+        "false_positives", "code_fence_violations", "yaml_violations",
+        "section_violations",
+        "duration_s",
     ]
     with open(csv_path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=fieldnames)
@@ -1999,7 +1706,7 @@ def test_skill_comparison(llm, test_output_dir):
 
     file_stem = Path(test_file).stem
     error_count = 30
-    model_name = next(iter(MODELS))  # first model in MODELS dict
+    model_name = "gpt-4o"
     skills = ["bioguider", "skill_generic"]
 
     print(f"\n{'='*70}")
@@ -2065,6 +1772,9 @@ def test_skill_comparison(llm, test_output_dir):
             category_results=category_results,
             model_name=f"{model_name}+{skill}",
             false_positives=getattr(result, "false_positives", 0),
+            code_fence_violations=getattr(result, "code_fence_violations", 0),
+            yaml_violations=getattr(result, "yaml_violations", 0),
+            section_violations=getattr(result, "section_violations", 0),
         )
         _populate_scorable(sr)
 
@@ -2087,6 +1797,10 @@ def test_skill_comparison(llm, test_output_dir):
             "f1_score_scorable": round(sr.f1_score_scorable, 4),
             "f1_score_content": round(sr.f1_score_content, 4),
             "f1_score_hygiene": round(sr.f1_score_hygiene, 4),
+            "false_positives": sr.false_positives,
+            "code_fence_violations": sr.code_fence_violations,
+            "yaml_violations": sr.yaml_violations,
+            "section_violations": sr.section_violations,
             "duration_s": round(duration, 2),
         })
 
@@ -2123,7 +1837,7 @@ def test_skill_matrix(llm, test_output_dir):
 
     error_levels = [10, 30, 100]
     skills = ["bioguider", "skill_generic"]
-    model_name = next(iter(MODELS))  # first model in MODELS dict
+    model_name = "gpt-4o"
 
     # Use first 5 vignettes that exist on disk.
     available_files = [f for f in TUTORIAL_FILES if os.path.exists(f)][:5]
@@ -2214,6 +1928,9 @@ def test_skill_matrix(llm, test_output_dir):
                         category_results=category_results,
                         model_name=f"{model_name}+{skill}",
                         false_positives=getattr(result, "false_positives", 0),
+                        code_fence_violations=getattr(result, "code_fence_violations", 0),
+                        yaml_violations=getattr(result, "yaml_violations", 0),
+                        section_violations=getattr(result, "section_violations", 0),
                     )
                     _populate_scorable(sr)
 
@@ -2236,6 +1953,10 @@ def test_skill_matrix(llm, test_output_dir):
                         "f1_score_scorable": round(sr.f1_score_scorable, 4),
                         "f1_score_content": round(sr.f1_score_content, 4),
                         "f1_score_hygiene": round(sr.f1_score_hygiene, 4),
+                        "false_positives": sr.false_positives,
+                        "code_fence_violations": sr.code_fence_violations,
+                        "yaml_violations": sr.yaml_violations,
+                        "section_violations": sr.section_violations,
                         "duration_s": round(duration, 2),
                     })
 

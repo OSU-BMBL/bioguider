@@ -22,6 +22,117 @@ from bioguider.managers.config import (
 from bioguider.generation.unified_metrics import _naked_count
 
 
+def check_protected_regions(baseline: str, revised: str) -> dict:
+    """Return violation counts for code fences, YAML frontmatter, and section headers."""
+    # Code fence comparison
+    fence_pattern = r'(```[^\n]*\n.*?```)'
+    baseline_fences = re.findall(fence_pattern, baseline, re.DOTALL)
+    revised_fences = re.findall(fence_pattern, revised, re.DOTALL)
+    if len(baseline_fences) != len(revised_fences):
+        code_fence_violations = abs(len(baseline_fences) - len(revised_fences))
+    else:
+        code_fence_violations = sum(
+            1 for b, r in zip(baseline_fences, revised_fences) if b != r
+        )
+
+    # YAML frontmatter comparison
+    yaml_pattern = r'\A---\n(.*?)\n---'
+    baseline_yaml = re.search(yaml_pattern, baseline, re.DOTALL)
+    revised_yaml = re.search(yaml_pattern, revised, re.DOTALL)
+    if baseline_yaml is None and revised_yaml is None:
+        yaml_violations = 0
+    elif baseline_yaml is None or revised_yaml is None:
+        yaml_violations = 1
+    else:
+        yaml_violations = 0 if baseline_yaml.group(1) == revised_yaml.group(1) else 1
+
+    # Section header comparison
+    header_pattern = r'^#{1,6}\s+.+$'
+    baseline_headers = re.findall(header_pattern, baseline, re.MULTILINE)
+    revised_headers = re.findall(header_pattern, revised, re.MULTILINE)
+    if baseline_headers == revised_headers:
+        section_violations = 0
+    else:
+        # Count differing positions plus any count difference
+        common_len = min(len(baseline_headers), len(revised_headers))
+        section_violations = abs(len(baseline_headers) - len(revised_headers)) + sum(
+            1 for b, r in zip(baseline_headers[:common_len], revised_headers[:common_len]) if b != r
+        )
+
+    return {
+        "code_fence_violations": code_fence_violations,
+        "yaml_violations": yaml_violations,
+        "section_violations": section_violations,
+    }
+
+
+def count_collateral_damage(baseline: str, revised: str, errors: list) -> list:
+    """Find prose changes outside injected error regions and protected areas."""
+    baseline_lines = baseline.splitlines()
+    revised_lines = revised.splitlines()
+
+    # Pre-build set of line indices inside code fences or YAML frontmatter
+    def _protected_indices(lines: list) -> set:
+        protected = set()
+        in_fence = False
+        in_yaml = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if i == 0 and stripped == '---':
+                in_yaml = True
+                protected.add(i)
+                continue
+            if in_yaml:
+                protected.add(i)
+                if stripped == '---':
+                    in_yaml = False
+                continue
+            if stripped.startswith('```'):
+                protected.add(i)
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                protected.add(i)
+        return protected
+
+    baseline_protected = _protected_indices(baseline_lines)
+
+    matcher = SequenceMatcher(None, baseline_lines, revised_lines)
+    collateral = []
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            continue
+
+        changed_baseline = "\n".join(baseline_lines[i1:i2])
+        changed_revised = "\n".join(revised_lines[j1:j2])
+
+        # Exclusion 1: overlap with an injected error snippet
+        is_error_related = False
+        for err in errors:
+            orig = err.get("original_snippet", "")
+            mut = err.get("mutated_snippet", "")
+            if orig and orig in changed_baseline:
+                is_error_related = True
+                break
+            if mut and mut in changed_baseline:
+                is_error_related = True
+                break
+        if is_error_related:
+            continue
+
+        # Exclusion 2: all changed baseline lines are inside protected regions
+        if i1 < i2 and all(idx in baseline_protected for idx in range(i1, i2)):
+            continue
+
+        collateral.append({
+            "original": changed_baseline,
+            "changed": changed_revised,
+        })
+
+    return collateral
+
+
 @dataclass
 class ErrorMetrics:
     """Metrics for a single error evaluation."""
@@ -82,6 +193,11 @@ class BenchmarkResult:
     total_injected_hygiene: int = 0
     fixed_hygiene: int = 0
     f1_score_hygiene: float = 0.0
+
+    # Protected region violations (Hard FP) from check_protected_regions()
+    code_fence_violations: int = 0
+    yaml_violations: int = 0
+    section_violations: int = 0
 
     # Detailed breakdowns
     per_category: Dict[str, Dict[str, int]] = field(default_factory=dict)
@@ -437,13 +553,27 @@ class BenchmarkEvaluator:
                 status=status,
             ))
         
-        # Detect false positives if LLM available and enabled
+        # Deterministic FP: collateral damage (always computed, no LLM needed)
         false_positives = []
+        collateral_changes = count_collateral_damage(
+            baseline, revised, injection_manifest.get("errors", [])
+        )
+        for change in collateral_changes:
+            false_positives.append(FalsePositive(
+                file_path=file_path,
+                change_description="Collateral prose change",
+                severity="harmful",
+                original_text=change["original"][:200],
+                changed_text=change["changed"][:200],
+            ))
+
+        # Semantic FP: optional, needs LLM (additive)
         if detect_semantic_fp and self.fp_detector:
-            false_positives = self.fp_detector.detect_false_positives(
+            semantic_fps = self.fp_detector.detect_false_positives(
                 baseline, revised, injection_manifest.get("errors", []), file_path
             )
-        
+            false_positives.extend(semantic_fps)
+
         return error_metrics, false_positives
     
     def _check_error_fixed(
@@ -471,8 +601,13 @@ class BenchmarkEvaluator:
                 return True, "fixed_to_valid"
         
         elif category == "link":
-            wellformed = re.search(r"\[[^\]]+\]\([^\s)]+\)", revised) is not None
-            return wellformed, "fixed_to_valid" if wellformed else "unchanged"
+            if orig and orig in revised:
+                return True, "fixed_to_baseline"
+            elif mut and mut in revised:
+                return False, "unchanged"
+            else:
+                # Neither original nor mutated snippet present — link was rewritten
+                return True, "rewritten"
         
         elif category == "duplicate":
             dup_before = corrupted.count(mut) if mut else 0
