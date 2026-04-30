@@ -233,6 +233,88 @@ Fix all errors in this document and output the corrected version:
 - 标注旧E001/E002为deprecated
 - 记录新结果
 
+### Step 7: Publication Figures（R ggplot2）
+
+用R ggplot2制作论文级别的图，基于Step 4/5的结果CSV。
+
+#### Fig 1: Model Selection Heatmap
+- 数据源: `AGGREGATE_TABLE.csv`
+- 行=模型（5个），列=错误级别（9个），色块=F1 scorable
+- 附带注释：每格显示F1值（2位小数）
+- 配色：RdYlGn渐变，0→红，1→绿
+- 会议要求："一张图就够了，一个heatmap搞定"
+
+#### Fig 2: CONTENT vs HYGIENE分面
+- 同样的heatmap但分成两个panel
+- Panel A: F1 content（科学准确性）
+- Panel B: F1 hygiene（格式/排版）
+- 展示"所有模型CONTENT都~0.92，差异在HYGIENE"
+
+#### Fig 3: Skill Comparison
+- 数据源: `SKILL_MATRIX_TABLE.csv`
+- Grouped bar chart: x=错误级别, 两组bar=BioGuider vs Generic
+- y=F1 scorable, error bars=跨文件标准差
+- 副图/注释: duration对比（BioGuider应该更快）
+
+#### Fig 4: F1 Degradation Curve
+- Line plot: x=错误数量, y=F1 scorable
+- 一条线per模型，展示随错误增多F1如何衰减
+- 所有模型从~0.8衰减到~0.65，排序稳定
+
+#### 技术要求
+- R脚本放在 `scripts/benchmark_figures.R`
+- 读取 `outputs/` 下的CSV
+- 输出PDF + PNG（300 dpi）到 `outputs/figures/`
+- ggplot2 + cowplot/patchwork组合多panel
+- 字体: Arial, 8-10pt
+- 配色: viridis或自定义学术配色
+- 图宽: single column (85mm) 或 double column (170mm)
+
+### Step 8: Benchmark方法学文档
+
+写一个清晰的方法学描述文档，讲清楚benchmark这一块的来龙去脉。
+面向论文Methods section + Supplementary，不是技术文档。
+
+#### 内容大纲
+
+**1. 为什么需要这个Benchmark**
+- 现有LLM可以直接修文档，但怎么知道它改得对不对？
+- 需要一个受控的实验：注入已知错误 → 让模型修 → 量化修复能力
+- 类似于软件工程的mutation testing思想
+
+**2. 错误注入设计**
+- 36个错误类别，分CONTENT（科学准确性22个）和HYGIENE（格式11个）
+- 为什么这样分：CONTENT是"改错了会误导研究者"，HYGIENE是"格式不好但不影响科学理解"
+- Prose-only注入：只在文本区域注入，代码块作为ground truth不动
+- 确定性注入：同一篇文档注入结果完全一致，确保模型间公平比较
+
+**3. 为什么选这些模型**
+- 覆盖闭源（GPT-4o, GPT-5.4, Kimi）和开源（GLM-5, GPT-OSS）
+- 都通过同一个LiteLLM proxy路由，消除基础设施差异
+- 选择标准：可用性、成本、领域相关性
+
+**4. 评价指标**
+- F1 = precision × recall 的调和平均
+- Precision：模型做的改动里多少是真的在修错误（vs 乱改）
+- Recall：注入的错误里多少被修好了
+- Protected region violations：模型有没有碰不该碰的地方（代码块、YAML）
+- 为什么不只看accuracy/fix_rate：因为一个什么都改的模型recall高但precision低
+
+**5. Skill对比设计**
+- BioGuider prompt：结构化的修改指导（评价维度 + 方法论 + 代码作为权威）
+- Generic prompt：一句话"Fix all errors"
+- 为什么这样设计：测的是"领域知识指导"的价值，不是"AI能不能修文档"
+- 两者用同一个模型（gpt-4o），同一套注入，同一个evaluator
+
+#### 文档位置
+- `docs/BENCHMARK_METHODS.md` — 完整版（Supplementary材料）
+- 论文Methods section从这里提炼
+
+#### 风格
+- 不要技术细节（不提文件名、函数名、行号）
+- 写给reviewer看：为什么这样设计、有什么trade-off、局限性是什么
+- 中英双语版本（中文先写理清思路，英文用于论文）
+
 ## 工作量估计
 
 | Step | 工作量 | 类型 |
@@ -243,7 +325,9 @@ Fix all errors in this document and output the corrected version:
 | Step 4: 重跑E001 | ~12h | LLM（可后台） |
 | Step 5: 跑E002/E003 | ~35min | LLM |
 | Step 6: 更新日志 | ~15min | 文档 |
-| **合计** | **~2h代码 + ~13h LLM** | |
+| Step 7: Publication Figures | ~2h | R代码 |
+| Step 8: Benchmark方法学文档 | ~1.5h | 写作 |
+| **合计** | **~5.5h人工 + ~13h LLM** | |
 
 ## Changelog
 
