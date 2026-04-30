@@ -177,7 +177,6 @@ Fix all errors in this document and output the corrected version:
 
 ## 不改的东西
 
-- E001模型排序：方向性可信（同prompt同FP偏差），只需重算绝对值
 - 评分体系四大类分数：冻结
 - 单Repo选模型：论文注明局限性
 - 完整pipeline对比：太花时间，prompt对比是会议决定
@@ -192,25 +191,59 @@ Fix all errors in this document and output the corrected version:
 3. **Protected region**: 有safety violation计数且非全0
 4. **link类别**: fix_rate < 1.0（有区分力）
 5. **可解释**: 每个模型/prompt的胜负可以归因到具体的category差异
+6. **Smoke test通过**: minimal test产出合理的F1值（非全0非全1）
 
 **研究假设**（不是验收条件）：
 - BioGuider F1 ≥ Generic F1
 - BioGuider duration < Generic duration
 - BioGuider protected region violations < Generic violations
 
+## 执行顺序
+
+底层改动大，全部重跑确保数据一致。
+
+### Step 1: 修Evaluator代码（~1.5h）
+可并行：
+- A.1 Protected region metric（30min）
+- A.2 确定性FP检测器（45min，依赖A.1）
+- A.3 link scorer（15min）
+- A.4 Headline/Category调查（15min）
+
+### Step 2: 改Prompt + 实验参数（~15min）
+- B.1 写入BioGuider v3 prompt + Generic改为一句话（SIMPLE_PROMPT）
+- B.2 skill test锁定 `model_name="gpt-4o"`
+
+### Step 3: Smoke Test验证（~5min）
+- 跑 `test_single_file_stress_minimal` — 1个文件、1个模型、1个级别
+- 确认：precision ≠ 1.0，link fix_rate < 1.0，protected region有计数
+- **不通过则不进入Step 4**
+
+### Step 4: 重跑E001 — 模型选择（~12h LLM）
+- `test_multi_file_full_matrix` — 10文件×9级别×5模型 = 450次
+- 全部用修好的evaluator + BioGuider v3 prompt
+- 产出新的AGGREGATE_TABLE.csv + heatmap
+
+### Step 5: 跑E002/E003 — Skill比较（~35min LLM）
+- E002-v2: 1文件, gpt-4o, BioGuider v3 vs 一句话
+- E003: 5文件×3级别×2 prompts, gpt-4o
+- 产出SKILL_COMPARISON.csv + SKILL_MATRIX_TABLE.csv
+
+### Step 6: 更新实验日志
+- 更新 `docs/EXPERIMENT_LOG.md`
+- 标注旧E001/E002为deprecated
+- 记录新结果
+
 ## 工作量估计
 
-| Track | Phase | 工作量 | 依赖 |
-|-------|-------|--------|------|
-| A | A.1 Protected region metric | 30min | 无 |
-| A | A.2 确定性FP检测器 | 45min | A.1 |
-| A | A.3 link scorer | 15min | 无 |
-| A | A.4 Headline/Category调查 | 15min | 无 |
-| A | A.5 重算E001/E002 | 15min（无LLM） | A.1-A.4 |
-| B | B.1 Prompt v3 + 一句话 | 10min | 无 |
-| B | B.2 锁定gpt-4o | 2min | 无 |
-| B | B.3 运行E002-v2 + E003 | 35min（LLM） | Track A + B.1-B.2 |
-| | **合计** | **~3小时** | |
+| Step | 工作量 | 类型 |
+|------|--------|------|
+| Step 1: 修Evaluator | ~1.5h | 代码 |
+| Step 2: 改Prompt | ~15min | 代码 |
+| Step 3: Smoke Test | ~5min | LLM |
+| Step 4: 重跑E001 | ~12h | LLM（可后台） |
+| Step 5: 跑E002/E003 | ~35min | LLM |
+| Step 6: 更新日志 | ~15min | 文档 |
+| **合计** | **~2h代码 + ~13h LLM** | |
 
 ## Changelog
 
