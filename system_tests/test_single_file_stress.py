@@ -306,11 +306,23 @@ PROMPTS = {
 # Available models — all routed through LiteLLM proxy (OPENAI_BASE_URL)
 # gpt-oss model id: verify via `curl $OPENAI_BASE_URL/models` if routing fails
 MODELS = {
-    "gpt-5.4":   {"type": "litellm", "model": "gpt-5.4"},
-    "kimi-k2.5": {"type": "litellm", "model": "kimi-k2.5"},
-    "glm-5":     {"type": "litellm", "model": "glm-5"},
-    "gpt-oss":   {"type": "litellm", "model": "gpt-oss-120b"},
-    "gpt-4o":    {"type": "litellm", "model": "gpt-4o"},
+    # OpenAI family — verified-real on the LiteLLM proxy
+    "gpt-4o":          {"type": "litellm", "model": "gpt-4o"},
+    "gpt-5.2":         {"type": "litellm", "model": "gpt-5.2"},
+    "gpt-5.3-codex":   {"type": "litellm", "model": "gpt-5.3-codex"},
+    "gpt-5.4":         {"type": "litellm", "model": "gpt-5.4"},
+    "gpt-5.4-nano":    {"type": "litellm", "model": "gpt-5.4-nano"},
+    # Open weights
+    "gpt-oss":         {"type": "litellm", "model": "gpt-oss-120b"},
+    # Moonshot Kimi
+    "kimi-k2.5":       {"type": "litellm", "model": "kimi-k2.5"},
+    "kimi-k2.6":       {"type": "litellm", "model": "kimi-k2.6"},
+    # Zhipu
+    "glm-5":           {"type": "litellm", "model": "glm-5"},
+    # Minimax
+    "minimax-m2.5":    {"type": "litellm", "model": "minimax-m2.5"},
+    # DeepSeek (real — v3.2 on the proxy is mis-aliased to Claude, do NOT use)
+    "deepseek-v4-flash": {"type": "litellm", "model": "deepseek-v4-flash"},
 }
 
 def print_prompts():
