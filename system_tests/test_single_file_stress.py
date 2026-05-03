@@ -36,6 +36,7 @@ DEFAULT_TEST_FILE = "data/.adalflow/repos/satijalab_seurat/vignettes/de_vignette
 # Multi-file benchmark target set (10 topic-diverse Seurat vignettes).
 # Each exercises a different anchor type for the prose_code_consistency moat.
 SEURAT_VIGNETTES_DIR = "data/.adalflow/repos/satijalab_seurat/vignettes"
+SEURAT_REPO_PATH = str(Path(SEURAT_VIGNETTES_DIR).parent)
 TUTORIAL_FILES = [
     f"{SEURAT_VIGNETTES_DIR}/de_vignette.Rmd",
     f"{SEURAT_VIGNETTES_DIR}/cell_cycle_vignette.Rmd",
@@ -381,13 +382,26 @@ def fix_with_model(
         output_dir: Where to save results
         file_basename: Base name for output files
         error_count: Error level being tested
-        prompt_name: Name of prompt to use ("bioguider", "simple", "gpt_basic")
+        prompt_name: Name of prompt to use ("bioguider", "simple", "gpt_basic", etc.)
         model_name: Name of model ("gpt-4o", "qwen3_30b", etc.)
 
     Returns:
         (fixed_content, token_usage) where token_usage is a dict with keys
         prompt_tokens, completion_tokens, total_tokens (all int, default 0).
     """
+    model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
+    model_id = model_config.get("model", model_name)
+    token_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+    llm_override = ChatOpenAI(
+        model=model_id,
+        api_key=os.environ.get("OPENAI_API_KEY"),
+        base_url=os.environ.get("OPENAI_BASE_URL"),
+        timeout=120,
+        max_retries=1,
+    )
+
+    # ── Prompt-based path ─────────────────────────────────────────────────────
     if prompt_name in PROMPTS:
         prompt_base = PROMPTS[prompt_name]["prompt"]
     else:
@@ -395,22 +409,7 @@ def fix_with_model(
 
     prompt = prompt_base + corrupted_content + "\n\nOUTPUT THE COMPLETE FIXED DOCUMENT:"
 
-    model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
-    model_id = model_config.get("model", model_name)
-
-    token_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-
     try:
-        # timeout=120 + max_retries=1 so a slow backend fails in ~2 min instead
-        # of blocking the ThreadPoolExecutor for 5-10 min across LangChain
-        # exponential backoff. Inner _invoke_with_retry still handles RateLimit.
-        llm_override = ChatOpenAI(
-            model=model_id,
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            base_url=os.environ.get("OPENAI_BASE_URL"),
-            timeout=120,
-            max_retries=1,
-        )
         response = _invoke_with_retry(llm_override, prompt)
         fixed_content = response.content if hasattr(response, "content") else str(response)
 
@@ -1660,6 +1659,193 @@ def test_multi_file_full_matrix(llm, test_output_dir):
     print(f"Total results: {len(pooled)}")
     print(f"Artifacts: {multi_root}")
     print(f"Index: {index_path}")
+
+    assert len(pooled) > 0, "No results produced — check LLM/proxy connectivity"
+
+
+# ============================================================================
+# BIOGUIDER PIPELINE BENCHMARK (evaluate + generate with real BioGuider logic)
+# ============================================================================
+
+def test_bioguider_pipeline_matrix(llm, test_output_dir):
+    """
+    BioGuider-pipeline benchmark — same matrix shape as test_multi_file_full_matrix
+    but replaces the prompt-only LLM call with the full BioGuider evaluate+generate
+    pipeline for every model.
+
+    Matrix: 10 vignettes × 9 error levels × N models = N×90 cells.
+
+    Key difference from test_multi_file_full_matrix:
+    - DocumentPipeline.prepare_repo() is called ONCE before the model loop.
+      It builds CodeStructureDb (AST) and SummarizedFilesDb from the Seurat repo.
+      Both are LLM-independent, so a single pipeline is shared across all models.
+    - Each cell calls DocumentPipeline.evaluate_and_refine_document(llm=model_llm)
+      so the per-model LLM is used for evaluation + generation, while the repo
+      databases are reused.
+
+    Outputs land in outputs/bioguider_pipeline_stress/run_<TS>/ with the same
+    file layout as test_multi_file_full_matrix so the same analysis scripts apply.
+
+    Run:
+        pytest system_tests/test_single_file_stress.py::test_bioguider_pipeline_matrix -v -s
+    """
+    import time
+    from bioguider.generation.document_pipeline import DocumentPipeline
+    from bioguider.utils.constants import EvaluationTypeEnum
+
+    error_levels = STRESS_LEVELS
+
+    # ── Prepare shared pipeline once ─────────────────────────────────────────
+    print(f"\nPreparing shared DocumentPipeline from {SEURAT_REPO_PATH} ...")
+    shared_pipeline = DocumentPipeline(SEURAT_REPO_PATH).prepare_repo(llm)
+    print("DocumentPipeline ready (CodeStructureDb + SummarizedFilesDb built).")
+
+    multi_root = os.path.join(
+        OUTPUT_BASE.replace("single_file_stress", "bioguider_pipeline_stress"),
+        datetime.now().strftime("run_%Y%m%d_%H%M%S"),
+    )
+    os.makedirs(multi_root, exist_ok=True)
+
+    total_cells = len(TUTORIAL_FILES) * len(error_levels) * len(MODELS)
+    print(f"\n{'='*70}")
+    print("BIOGUIDER PIPELINE MATRIX")
+    print(f"{'='*70}")
+    print(f"Files: {len(TUTORIAL_FILES)}, Levels: {len(error_levels)}, "
+          f"Models: {len(MODELS)}, Total cells: {total_cells}")
+    print(f"Output root: {multi_root}")
+
+    all_file_results: Dict[str, List[StressLevelResult]] = {}
+
+    for test_file in TUTORIAL_FILES:
+        if not os.path.exists(test_file):
+            print(f"  SKIP missing file: {test_file}")
+            continue
+
+        file_stem = Path(test_file).stem
+        file_out = os.path.join(multi_root, file_stem)
+        os.makedirs(file_out, exist_ok=True)
+        original_content = read_file(test_file) or ""
+        if not original_content.strip():
+            print(f"  SKIP empty file: {test_file}")
+            continue
+
+        write_file(os.path.join(file_out, f"{file_stem}.original.Rmd"), original_content)
+
+        print(f"\n{'#'*70}")
+        print(f"# FILE: {file_stem}")
+        print(f"{'#'*70}")
+
+        file_results: List[StressLevelResult] = []
+
+        for error_level in error_levels:
+            print(f"\n--- Level {error_level} ---")
+
+            # Deterministic injection — every model sees the same corrupted text
+            injector = LLMErrorInjector(llm, force_deterministic=True)
+            corrupted, manifest = injector.inject(
+                original_content,
+                min_per_category=error_level,
+                max_words=50000,
+            )
+            corrupted_filename = f"{file_stem}.level_{error_level}.corrupted.Rmd"
+            corrupted_path = os.path.join(file_out, corrupted_filename)
+            write_file(corrupted_path, corrupted)
+            manifest_path = os.path.join(file_out, f"{file_stem}.level_{error_level}.manifest.json")
+            with open(manifest_path, "w") as f:
+                json.dump(manifest, f, indent=2)
+            total_injected = len(manifest.get("errors", []))
+            print(f"    Injected {total_injected} errors (deterministic)")
+
+            def _run_one_pipeline(model_name: str):
+                combo = f"{model_name}+bioguider_pipeline"
+                t0 = time.time()
+                try:
+                    model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
+                    model_id = model_config.get("model", model_name)
+                    model_llm = ChatOpenAI(
+                        model=model_id,
+                        api_key=os.environ.get("OPENAI_API_KEY"),
+                        base_url=os.environ.get("OPENAI_BASE_URL"),
+                        timeout=120,
+                        max_retries=1,
+                    )
+
+                    _, fixed_content = shared_pipeline.evaluate_and_refine_document(
+                        llm=model_llm,
+                        doc_repo_path=file_out,
+                        doc_path=corrupted_filename,
+                        eval_type=EvaluationTypeEnum.TUTORIAL,
+                    )
+                    duration = time.time() - t0
+
+                    fixed_path = os.path.join(
+                        file_out,
+                        f"{file_stem}.level_{error_level}.{model_name}_bioguider_pipeline.fixed.Rmd",
+                    )
+                    write_file(fixed_path, fixed_content)
+
+                    result, category_results = evaluate_fixes(
+                        original_content,
+                        corrupted,
+                        fixed_content,
+                        manifest,
+                        llm,
+                    )
+                    sr = StressLevelResult(
+                        error_count=error_level,
+                        total_errors_injected=total_injected,
+                        errors_fixed=result.true_positives,
+                        errors_unfixed=result.false_negatives,
+                        fix_rate=result.fix_rate,
+                        precision=result.precision,
+                        recall=result.recall,
+                        f1_score=result.f1_score,
+                        duration_seconds=duration,
+                        category_results=category_results,
+                        model_name=combo,
+                        false_positives=getattr(result, "false_positives", 0),
+                    )
+                    file_results.append(sr)
+                    print(
+                        f"    {combo:<40} F1={result.f1_score:.3f} "
+                        f"fix={result.fix_rate:.1%} time={duration:.1f}s"
+                    )
+                except Exception as e:  # noqa: BLE001
+                    print(f"    {combo:<40} ERROR: {e}")
+
+            with ThreadPoolExecutor(max_workers=len(MODELS)) as pool:
+                futures = [pool.submit(_run_one_pipeline, m) for m in MODELS]
+                for _ in as_completed(futures):
+                    pass
+
+        save_results(file_results, file_out)
+        all_file_results[file_stem] = file_results
+
+    # ── Cross-file aggregate ──────────────────────────────────────────────────
+    pooled: List[StressLevelResult] = []
+    for results in all_file_results.values():
+        pooled.extend(results)
+
+    agg_dir = os.path.join(multi_root, "_aggregate")
+    os.makedirs(agg_dir, exist_ok=True)
+    save_results(pooled, agg_dir)
+    for old_name, new_name in [
+        ("STRESS_TEST_RESULTS.json", "AGGREGATE_RESULTS.json"),
+        ("STRESS_TEST_TABLE.csv", "AGGREGATE_TABLE.csv"),
+        ("STRESS_TEST_CATEGORY_DETAIL.csv", "AGGREGATE_CATEGORY_DETAIL.csv"),
+        ("STRESS_TEST_REPORT.md", "AGGREGATE_REPORT.md"),
+    ]:
+        src = os.path.join(agg_dir, old_name)
+        dst = os.path.join(agg_dir, new_name)
+        if os.path.exists(src):
+            os.rename(src, dst)
+
+    print(f"\n{'='*70}")
+    print("BIOGUIDER PIPELINE MATRIX COMPLETE")
+    print(f"{'='*70}")
+    print(f"Files processed: {len(all_file_results)}")
+    print(f"Total results: {len(pooled)}")
+    print(f"Artifacts: {multi_root}")
 
     assert len(pooled) > 0, "No results produced — check LLM/proxy connectivity"
 

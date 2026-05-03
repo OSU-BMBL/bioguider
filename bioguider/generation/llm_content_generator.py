@@ -196,12 +196,11 @@ class LLMContentGenerator:
         context: str = "",
         original_content: str = None,
     ) -> tuple[str, dict]:
-        from bioguider.agents.agent_utils import get_openai
         import os
         import json
         from datetime import datetime
 
-        llm = get_openai()
+        llm = self.llm
 
         conv = CommonConversation(llm)
 

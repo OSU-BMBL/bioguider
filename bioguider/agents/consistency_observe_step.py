@@ -83,7 +83,19 @@ class ConsistencyObserveStep(PEOCommonStep):
         domain = state["domain"]
         code_definition = ""
         for row in all_query_rows:
-            content = f"name: {row['name']}\nfile_path: {row['path']}\nparent: {row['parent']}\nparameters: {row['params']}\ndoc_string: {row['doc_string']}"
+            mismatch_note = ""
+            if row.get("possible_name_mismatch"):
+                doc_ref = row.get("doc_referenced_as", "unknown")
+                match_type = row.get("match_type", "unknown")
+                mismatch_note = (
+                    f"\n[NOTE: The documentation referenced '{doc_ref}' but no exact match "
+                    f"was found. This entry is a fuzzy match ({match_type}) for the actual "
+                    f"name '{row['name']}'. Possible name error in the documentation.]"
+                )
+            content = (
+                f"name: {row['name']}\nfile_path: {row['path']}\nparent: {row['parent']}\n"
+                f"parameters: {row['params']}\ndoc_string: {row['doc_string']}{mismatch_note}"
+            )
             code_definition += content
             code_definition += "\n\n\n"
         return ChatPromptTemplate.from_template(CONSISTENCY_OBSERVE_SYSTEM_PROMPT).format(

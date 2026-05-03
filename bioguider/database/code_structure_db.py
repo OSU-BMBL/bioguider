@@ -87,9 +87,19 @@ WHERE name = ? AND parent = ? AND path = ?;
 """
 
 code_structure_select_by_name_and_parent_query = f"""
-SELECT id, name, path, start_lineno, end_lineno, parent, doc_string, params, reference_to, reference_by, datetime 
-FROM {CODE_STRUCTURE_TABLE_NAME} 
+SELECT id, name, path, start_lineno, end_lineno, parent, doc_string, params, reference_to, reference_by, datetime
+FROM {CODE_STRUCTURE_TABLE_NAME}
 WHERE name = ? AND parent = ?;
+"""
+
+code_structure_select_by_name_like_query = f"""
+SELECT id, name, path, start_lineno, end_lineno, parent, doc_string, params, reference_to, reference_by, datetime
+FROM {CODE_STRUCTURE_TABLE_NAME}
+WHERE name LIKE ?;
+"""
+
+code_structure_select_all_names_query = f"""
+SELECT DISTINCT name FROM {CODE_STRUCTURE_TABLE_NAME};
 """
 
 class CodeStructureDb:
@@ -465,6 +475,61 @@ class CodeStructureDb:
                 }
                 for row in rows
             ]
+        except Exception as e:
+            logging.error(e)
+            return []
+        finally:
+            self.connection.close()
+            self.connection = None
+
+    def select_by_name_like(self, name: str) -> List[Dict[str, Any]]:
+        """Select all code structures whose name contains the given substring (case-insensitive LIKE)."""
+        res = self._connect_to_db()
+        if not res:
+            return []
+        res = self._ensure_tables()
+        if not res:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(code_structure_select_by_name_like_query, (f"%{name}%",))
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "path": row[2],
+                    "start_lineno": row[3],
+                    "end_lineno": row[4],
+                    "parent": row[5],
+                    "doc_string": row[6],
+                    "params": row[7],
+                    "reference_to": row[8],
+                    "reference_by": row[9],
+                    "datetime": row[10],
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            logging.error(e)
+            return []
+        finally:
+            self.connection.close()
+            self.connection = None
+
+    def select_all_names(self) -> List[str]:
+        """Return all distinct function/class names stored in the database."""
+        res = self._connect_to_db()
+        if not res:
+            return []
+        res = self._ensure_tables()
+        if not res:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(code_structure_select_all_names_query)
+            rows = cursor.fetchall()
+            return [row[0] for row in rows]
         except Exception as e:
             logging.error(e)
             return []
