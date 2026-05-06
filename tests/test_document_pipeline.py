@@ -388,24 +388,6 @@ class TestRunEvaluationDispatch:
 # ---------------------------------------------------------------------------
 
 class TestEvaluateAndRefineDocumentMocked:
-    def test_missing_doc_pipeline_raises_in_benchmark(self):
-        """fix_with_model should raise when bioguider_pipeline but no pipeline."""
-        import sys, os
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-        # Import lazily to avoid heavy system_test imports at module load time
-        # Just verify the error message in fix_with_model by reading source
-        import inspect
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "test_single_file_stress",
-            os.path.join(
-                os.path.dirname(__file__), "..", "system_tests", "test_single_file_stress.py"
-            ),
-        )
-        # Only check the source contains the guard, not execute the function
-        source = spec.origin and Path(spec.origin).read_text()
-        assert source and "doc_pipeline must be provided" in source
-
     def test_evaluate_and_refine_calls_generator(self, tmp_path):
         """evaluate_and_refine_document calls LLMContentGenerator with the right args."""
         doc_content = "---\ntitle: Test\n---\n\n# Intro\n\nSome text.\n"

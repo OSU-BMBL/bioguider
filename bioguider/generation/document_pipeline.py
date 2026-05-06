@@ -1,3 +1,5 @@
+import json
+import os
 from pathlib import Path
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
@@ -63,6 +65,7 @@ class DocumentPipeline:
         doc_repo_path: str,
         doc_path: str,
         eval_type: EvaluationTypeEnum,
+        report_output_path: str | None = None,
     ) -> tuple[dict, str]:
         """
         Evaluate a document then generate a refined version.
@@ -72,6 +75,7 @@ class DocumentPipeline:
             doc_repo_path: Directory that contains the document on disk.
             doc_path: Filename relative to doc_repo_path.
             eval_type: Which BioGuider evaluation task to run.
+            report_output_path: If given, write the evaluation report JSON here.
 
         Returns:
             (merged_report, refined_content)
@@ -98,6 +102,11 @@ class DocumentPipeline:
         )
 
         merged_report = _build_merged_report(eval_results, doc_path, eval_type)
+
+        if report_output_path:
+            os.makedirs(os.path.dirname(report_output_path), exist_ok=True)
+            with open(report_output_path, "w", encoding="utf-8") as _f:
+                json.dump(merged_report, _f, indent=2, default=str)
 
         original_content = Path(doc_repo_path, doc_path).read_text(
             encoding="utf-8", errors="replace"

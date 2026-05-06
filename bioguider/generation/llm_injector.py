@@ -64,6 +64,8 @@ PROSE-CODE CONSISTENCY ERROR CATEGORIES (inject ONLY when a matching code-block 
 - prose_code_marker: prose names a cell-type marker gene that disagrees with the marker used in a fenced code block (e.g., code subsets on `CD8` via `subset(..., CD8 > 0)` or `features = c("CD8")`, but prose describes "CD4+ T cells"). Mutate the prose marker only.
 - prose_code_param: prose states an analysis hyperparameter value that disagrees with the value passed to the corresponding function call in a fenced code block (e.g., code runs `FindClusters(..., resolution = 0.5)`, but prose says "resolution of 0.6"). Mutate the prose value only.
 
+CODE CONSISTENCY ERROR CATEGORIES (inject all; ONLY inside fenced code blocks — never break fence delimiters)
+- code_comment_conflict: change an inline code comment (a line starting with #) inside a code block so it conflicts with the function called on the same or the next line (e.g., change "# normalize the data" to "# cluster the data" when the code calls NormalizeData()). Use antonym/opposite-operation replacements only; keep the comment grammatically correct.
 
 CONSTRAINTS
 - Keep edits minimal and local; **≥85% token overlap** with input.
@@ -141,6 +143,56 @@ _PARAM_ANCHOR_RE = re.compile(
 )
 _ACCESSION_CONTEXT_WORDS = ("series", "samples", "experiment", "run", "study", "geo")
 
+# ── Code-consistency injection helpers ──────────────────────────────────────
+# Function/class calls inside code blocks (name must be ≥5 chars to avoid
+# corrupting short base-language tokens like `if(`, `c(`, `do(`).
+_FUNC_IN_CODE_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_.]{4,})\s*\(", re.M)
+# Named arguments: `arg_name = ` (≥3 chars)
+_NAMED_ARG_IN_CODE_RE = re.compile(r"\b([a-z_][a-z0-9_.]{2,})\s*=\s*", re.M)
+# Inline comment lines inside code blocks
+_COMMENT_IN_CODE_RE = re.compile(r"^([ \t]*#[ \t]+)(.+)$", re.M)
+
+# Tokens that must never be mutated (R control-flow, common base functions)
+_CODE_SKIP_NAMES: set = {
+    "function", "return", "print", "paste", "paste0", "list", "data",
+    "library", "require", "source", "if", "for", "while", "repeat",
+    "switch", "stop", "warning", "message", "class", "is", "as",
+    "tryCatch", "withCallingHandlers",
+}
+
+# ── .Rd documentation injection helpers ─────────────────────────────────────
+# Sections whose content must NOT be mutated (executable / machine-generated).
+_RD_SKIP_SECTIONS = (r"\usage", r"\examples")
+
+# \code{FuncName()} or \code{FuncName} in prose — function reference
+_RD_CODE_FUNC_RE = re.compile(r"\\code\{([A-Za-z][A-Za-z0-9._]{3,})\(?[^}]*\}", re.M)
+# \code{argname} in prose — likely an argument reference (no parens, lowercase-ish)
+_RD_CODE_ARG_RE  = re.compile(r"\\code\{([a-z][a-z0-9._]{2,})\}", re.M)
+# \link[pkg]{FuncName} or \link{FuncName} cross-references
+_RD_LINK_RE      = re.compile(r"\\link(?:\[[^\]]*\])?\{([A-Za-z][A-Za-z0-9._]{3,})\}", re.M)
+
+# Semantic-conflict replacement map for comment injection
+_COMMENT_CONFLICT_MAP = [
+    (re.compile(r"\bload\b", re.I), "save"),
+    (re.compile(r"\bfilter\b", re.I), "cluster"),
+    (re.compile(r"\bnormali[sz]e\b", re.I), "scale"),
+    (re.compile(r"\bscale\b", re.I), "normalize"),
+    (re.compile(r"\bcluster\b", re.I), "normalize"),
+    (re.compile(r"\bplot\b|\bvisuali[sz]e\b", re.I), "cluster"),
+    (re.compile(r"\bmerge\b", re.I), "split"),
+    (re.compile(r"\bsplit\b", re.I), "merge"),
+    (re.compile(r"\btrain\b", re.I), "predict"),
+    (re.compile(r"\bpredict\b", re.I), "train"),
+    (re.compile(r"\bintegrat\w*\b", re.I), "subset"),
+    (re.compile(r"\bsubset\b", re.I), "integrate"),
+]
+
+# ── File-type gates for code-consistency injection ───────────────────────────
+# Plain-text docs where function/arg names in prose can be verified and fixed.
+_PROSE_CODE_EXTENSIONS: frozenset = frozenset({".md", ".rst", ".txt"})
+# Executable notebooks — never mangle code inside them.
+_EXECUTABLE_CODE_EXTENSIONS: frozenset = frozenset({".rmd", ".ipynb"})
+
 
 class LLMErrorInjector:
     def __init__(self, llm: BaseChatOpenAI, force_deterministic: bool = False):
@@ -184,6 +236,21 @@ class LLMErrorInjector:
         return False
 
     @staticmethod
+    def _replace_in_fence(text: str, old: str, new: str, spans: List[Tuple[int, int]]) -> str:
+        """Replace the first occurrence of *old* that IS inside any fence span."""
+        start = 0
+        while True:
+            idx = text.find(old, start)
+            if idx == -1:
+                return text
+            for fstart, fend in spans:
+                if fstart <= idx < fend:
+                    return text[:idx] + new + text[idx + len(old):]
+                if fstart > idx:
+                    break
+            start = idx + 1
+
+    @staticmethod
     def _replace_prose_only(text: str, old: str, new: str, spans: List[Tuple[int, int]]) -> str:
         """Replace the first occurrence of ``old`` that is NOT inside a fence span."""
         start = 0
@@ -195,23 +262,90 @@ class LLMErrorInjector:
                 return text[:idx] + new + text[idx + len(old):]
             start = idx + 1
 
+    # ── .Rd helpers ───────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_rd_file(text: str) -> bool:
+        """Return True when text looks like an .Rd R-documentation file."""
+        return r"\name{" in text and r"\arguments{" in text
+
+    @staticmethod
+    def _rd_skip_spans(text: str) -> List[Tuple[int, int]]:
+        """Return (start, end) spans for \\usage{} and \\examples{} blocks.
+
+        Uses brace-depth counting so nested braces inside the block are handled
+        correctly.  These spans must never be mutated by the injector.
+        """
+        spans: List[Tuple[int, int]] = []
+        for kw in _RD_SKIP_SECTIONS:
+            search_kw = kw + "{"
+            pos = 0
+            while True:
+                idx = text.find(search_kw, pos)
+                if idx == -1:
+                    break
+                # Walk from the opening brace counting depth
+                depth = 0
+                end = idx
+                for i in range(idx + len(kw), len(text)):
+                    if text[i] == "{":
+                        depth += 1
+                    elif text[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i + 1
+                            break
+                spans.append((idx, end))
+                pos = end
+        spans.sort()
+        return spans
+
+    @staticmethod
+    def _replace_in_rd_prose(
+        text: str, old: str, new: str, skip_spans: List[Tuple[int, int]]
+    ) -> str:
+        """Replace first occurrence of *old* that is NOT inside any skip span."""
+        start = 0
+        while True:
+            idx = text.find(old, start)
+            if idx == -1:
+                return text
+            in_skip = any(s <= idx < e for s, e in skip_spans)
+            if not in_skip:
+                return text[:idx] + new + text[idx + len(old):]
+            start = idx + 1
+
+    @staticmethod
+    def _transpose_name(name: str) -> str:
+        """Transpose two adjacent characters near the middle of *name*.
+
+        Returns the mutated name, or the original if no valid transposition
+        exists (e.g. the name is too short or all adjacent pairs are identical).
+        """
+        mid = len(name) // 2
+        for offset in range(len(name) - 2):
+            i = (mid + offset) % (len(name) - 1)
+            if name[i] != name[i + 1]:
+                return name[:i] + name[i + 1] + name[i] + name[i + 2:]
+        return name  # no valid transposition found
+
     @staticmethod
     def _record_skip(data: Dict[str, Any], category: str, reason: str) -> None:
         data.setdefault("skipped", []).append({"category": category, "reason": reason})
 
-    def inject(self, readme_text: str, min_per_category: int = 3, preserve_keywords: list[str] | None = None, max_words: int = 450, project_terms: list[str] | None = None, force_deterministic: bool | None = None) -> Tuple[str, Dict[str, Any]]:
+    def inject(self, readme_text: str, min_per_category: int = 3, preserve_keywords: list[str] | None = None, max_words: int = 450, project_terms: list[str] | None = None, force_deterministic: bool | None = None, file_type: str = "") -> Tuple[str, Dict[str, Any]]:
         # Resolve the per-call override; fall back to instance default.
         use_det = self.force_deterministic if force_deterministic is None else force_deterministic
 
         if use_det:
             # Skip the LLM entirely — deterministic inject + supplements only.
-            corrupted, data = self._deterministic_inject(readme_text)
+            corrupted, data = self._deterministic_inject(readme_text, file_type=file_type)
             corrupted, data = self._supplement_errors(
-                readme_text, corrupted, data, min_per_category, project_terms
+                readme_text, corrupted, data, min_per_category, project_terms, file_type=file_type
             )
             if not self._check_code_blocks_preserved(readme_text, corrupted):
                 # Supplements broke fences — fall back to bare deterministic output.
-                corrupted, data = self._deterministic_inject(readme_text)
+                corrupted, data = self._deterministic_inject(readme_text, file_type=file_type)
             return corrupted, {
                 "errors": data.get("errors", []),
                 "skipped": data.get("skipped", []),
@@ -246,18 +380,18 @@ class LLMErrorInjector:
         # CRITICAL: Check code block preservation before validation
         if not self._check_code_blocks_preserved(readme_text, corrupted):
             print("Warning: LLM output broke code blocks, using deterministic fallback")
-            corrupted, data = self._deterministic_inject(readme_text)
+            corrupted, data = self._deterministic_inject(readme_text, file_type=file_type)
         # Validate output stays within original context; fallback to deterministic if invalid
         elif not self._validate_corrupted(readme_text, corrupted, preserve_keywords):
-            corrupted, data = self._deterministic_inject(readme_text)
-            
+            corrupted, data = self._deterministic_inject(readme_text, file_type=file_type)
+
         # Supplement to satisfy minimum per-category counts using deterministic local edits
-        corrupted, data = self._supplement_errors(readme_text, corrupted, data, min_per_category, project_terms)
-        
+        corrupted, data = self._supplement_errors(readme_text, corrupted, data, min_per_category, project_terms, file_type=file_type)
+
         # Final safety check: ensure code blocks are still intact after supplements
         if not self._check_code_blocks_preserved(readme_text, corrupted):
             print("Warning: Supplements broke code blocks, reverting to baseline with minimal errors")
-            corrupted, data = self._deterministic_inject(readme_text)
+            corrupted, data = self._deterministic_inject(readme_text, file_type=file_type)
         
         manifest = {
             "errors": data.get("errors", []),
@@ -393,7 +527,7 @@ class LLMErrorInjector:
             return False
         return True
 
-    def _deterministic_inject(self, baseline: str) -> Tuple[str, Dict[str, Any]]:
+    def _deterministic_inject(self, baseline: str, file_type: str = "") -> Tuple[str, Dict[str, Any]]:
         errors: List[Dict[str, Any]] = []
         text = baseline
         # typo
@@ -416,9 +550,16 @@ class LLMErrorInjector:
             block = lines[dup_idx: min(len(lines), dup_idx+5)]
             text = "\n".join(lines + ["", *block])
             errors.append({"id": "e_dup_1", "category": "duplicate", "original_snippet": "\n".join(block), "mutated_snippet": "\n".join(block), "rationale": "duplicated section"})
-        # markdown structure: break a header
-        if "\n# " in text:
-            text = text.replace("\n# ", "\n#", 1)
+        # markdown structure: break a header (prose only — skip inside code fences)
+        _fence_sp = self._fence_spans(text)
+        _md_match = next(
+            (m for m in re.finditer(r"\n# ", text)
+             if not any(s <= m.start() < e for s, e in _fence_sp)),
+            None,
+        )
+        if _md_match:
+            pos = _md_match.start()
+            text = text[:pos] + "\n#" + text[pos + len("\n# "):]
             errors.append({"id": "e_md_1", "category": "markdown_structure", "original_snippet": "\n# ", "mutated_snippet": "\n#", "rationale": "missing space in header"})
         data: Dict[str, Any] = {"errors": errors}
 
@@ -528,9 +669,279 @@ class LLMErrorInjector:
         else:
             self._record_skip(data, "prose_code_param", "no_anchor")
 
+        # code consistency: comment conflicts inside fences
+        text, errors = self._inject_code_consistency(text, errors, data, file_type=file_type)
+
+        # .Rd prose reference errors (function/arg names in documentation prose)
+        if self._is_rd_file(text):
+            text, errors = self._inject_rd_errors(text, errors, data)
+
+        data["errors"] = errors
+
         return text, data
 
-    def _supplement_errors(self, baseline: str, corrupted: str, data: Dict[str, Any], min_per_category: int, project_terms: list[str] | None = None) -> Tuple[str, Dict[str, Any]]:
+    def _inject_code_consistency(
+        self,
+        text: str,
+        errors: List[Dict[str, Any]],
+        data: Dict[str, Any],
+        file_type: str = "",
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """Inject code-consistency errors, gated by file_type.
+
+        - .rmd / .ipynb: skip all categories (executable code, not doc-quality scope)
+        - .md / .rst / .txt: inject code_func_name, code_func_args, code_comment_conflict
+        - other/unknown: inject only code_comment_conflict
+        """
+        ft = file_type.lower()
+        fence_spans = self._fence_spans(text)
+        if not fence_spans:
+            self._record_skip(data, "code_comment_conflict", "no_code_block")
+            if ft in _PROSE_CODE_EXTENSIONS:
+                self._record_skip(data, "code_func_name", "no_code_block")
+                self._record_skip(data, "code_func_args", "no_code_block")
+            elif ft not in _EXECUTABLE_CODE_EXTENSIONS:
+                self._record_skip(data, "code_func_name", "unknown_file_type")
+                self._record_skip(data, "code_func_args", "unknown_file_type")
+            return text, errors
+
+        if ft in _EXECUTABLE_CODE_EXTENSIONS:
+            self._record_skip(data, "code_comment_conflict", "executable_code_file")
+            self._record_skip(data, "code_func_name", "executable_code_file")
+            self._record_skip(data, "code_func_args", "executable_code_file")
+            return text, errors
+
+        used: set = {e.get("original_snippet", "") for e in errors}
+
+        # ── code_func_name (prose files only) ─────────────────────────────────
+        if ft in _PROSE_CODE_EXTENSIONS:
+            code_view = self._extract_code_fragments(text)
+            injected_fn = False
+            for m in _FUNC_IN_CODE_RE.finditer(code_view):
+                name = m.group(1)
+                if name.lower() in _CODE_SKIP_NAMES or len(name) < 5:
+                    continue
+                orig_call = m.group(0)
+                if orig_call in used:
+                    continue
+                mutated = self._transpose_name(name)
+                if mutated == name:
+                    continue
+                mut_call = mutated + orig_call[len(name):]
+                new_text = self._replace_in_fence(text, orig_call, mut_call, fence_spans)
+                if new_text != text:
+                    errors.append({
+                        "id": f"e_cfn_{len(errors)}", "category": "code_func_name",
+                        "original_snippet": orig_call.rstrip(), "mutated_snippet": mut_call.rstrip(),
+                        "rationale": "transposed characters in function name inside code fence",
+                    })
+                    used.add(orig_call)
+                    text = new_text
+                    fence_spans = self._fence_spans(text)
+                    injected_fn = True
+                    break
+            if not injected_fn:
+                self._record_skip(data, "code_func_name", "no_suitable_function_call")
+
+            # ── code_func_args ─────────────────────────────────────────────────
+            code_view = self._extract_code_fragments(text)
+            injected_fa = False
+            for m in _NAMED_ARG_IN_CODE_RE.finditer(code_view):
+                name = m.group(1)
+                if name.lower() in _CODE_SKIP_NAMES or len(name) < 3:
+                    continue
+                orig_arg = m.group(0)
+                if orig_arg in used:
+                    continue
+                mutated = self._transpose_name(name)
+                if mutated == name:
+                    continue
+                mut_arg = mutated + orig_arg[len(name):]
+                new_text = self._replace_in_fence(text, orig_arg, mut_arg, fence_spans)
+                if new_text != text:
+                    errors.append({
+                        "id": f"e_cfa_{len(errors)}", "category": "code_func_args",
+                        "original_snippet": orig_arg.rstrip(), "mutated_snippet": mut_arg.rstrip(),
+                        "rationale": "transposed characters in named argument inside code fence",
+                    })
+                    used.add(orig_arg)
+                    text = new_text
+                    fence_spans = self._fence_spans(text)
+                    injected_fa = True
+                    break
+            if not injected_fa:
+                self._record_skip(data, "code_func_args", "no_suitable_named_arg")
+        else:
+            self._record_skip(data, "code_func_name", "unknown_file_type")
+            self._record_skip(data, "code_func_args", "unknown_file_type")
+
+        # ── code_comment_conflict ─────────────────────────────────────────────
+        injected = False
+        code_view = self._extract_code_fragments(text)
+        for m in _COMMENT_IN_CODE_RE.finditer(code_view):
+            prefix = m.group(1)
+            comment_body = m.group(2)
+            for pat, replacement in _COMMENT_CONFLICT_MAP:
+                if not pat.search(comment_body):
+                    continue
+                mutated_body = pat.sub(replacement, comment_body, count=1)
+                if mutated_body == comment_body:
+                    continue
+                orig_line = prefix + comment_body
+                mut_line = prefix + mutated_body
+                if orig_line in used or orig_line.rstrip() in used:
+                    continue
+                new_text = self._replace_in_fence(text, orig_line, mut_line, fence_spans)
+                if new_text != text:
+                    errors.append({
+                        "id": f"e_ccc_{len(errors)}", "category": "code_comment_conflict",
+                        "original_snippet": orig_line.rstrip(), "mutated_snippet": mut_line.rstrip(),
+                        "rationale": "comment changed to conflict with adjacent code",
+                    })
+                    used.add(orig_line)
+                    text = new_text
+                    fence_spans = self._fence_spans(text)
+                    injected = True
+                    break
+            if injected:
+                break
+        if not injected:
+            self._record_skip(data, "code_comment_conflict", "no_suitable_comment")
+
+        return text, errors
+
+    def _inject_rd_errors(
+        self,
+        text: str,
+        errors: List[Dict[str, Any]],
+        data: Dict[str, Any],
+    ) -> Tuple[str, List[Dict[str, Any]]]:
+        """Inject rd_func_name and rd_arg_name errors into .Rd prose sections.
+
+        Only mutates text outside \\usage{} and \\examples{} blocks.
+        - rd_func_name: transpose two chars in a \\code{FuncName} or \\link{FuncName}
+          reference in prose.
+        - rd_arg_name: transpose two chars in an argument name mentioned in
+          \\item{arg}{description} prose (either as \\code{arg} or bare word).
+        """
+        skip_spans = self._rd_skip_spans(text)
+        used: set = {e.get("original_snippet", "") for e in errors}
+
+        # ── rd_func_name ──────────────────────────────────────────────────────
+        injected = False
+        for pattern in (_RD_CODE_FUNC_RE, _RD_LINK_RE):
+            if injected:
+                break
+            for m in pattern.finditer(text):
+                if self._in_fence(m.start(), skip_spans):
+                    continue
+                name = m.group(1)
+                if name in used or len(name) < 4:
+                    continue
+                mutated = self._transpose_name(name)
+                if mutated == name:
+                    continue
+                # Replace ONLY the captured group (group 1) inside the match,
+                # not the first occurrence of `name` in the full snippet
+                # (which might be in the package prefix of \link[pkg]{name}).
+                orig_snippet = m.group(0)
+                g1_start = m.start(1) - m.start()
+                g1_end   = m.end(1)   - m.start()
+                mut_snippet = orig_snippet[:g1_start] + mutated + orig_snippet[g1_end:]
+                if mut_snippet in used:
+                    continue
+                new_text = self._replace_in_rd_prose(text, orig_snippet, mut_snippet, skip_spans)
+                if new_text != text:
+                    errors.append({
+                        "id": f"e_rdfn_{len(errors)}",
+                        "category": "rd_func_name",
+                        "original_snippet": orig_snippet,
+                        "mutated_snippet": mut_snippet,
+                        "rationale": "character swap in function name in .Rd prose",
+                    })
+                    used.add(orig_snippet)
+                    text = new_text
+                    injected = True
+                    break
+        if not injected:
+            self._record_skip(data, "rd_func_name", "no_suitable_func_reference")
+
+        # ── rd_arg_name ───────────────────────────────────────────────────────
+        # Strategy 1: \code{argname} in prose (no parens = likely argument ref)
+        # Strategy 2: \item{argname}{desc} where argname appears verbatim in desc
+        injected = False
+        # Strategy 1
+        for m in _RD_CODE_ARG_RE.finditer(text):
+            if self._in_fence(m.start(), skip_spans):
+                continue
+            name = m.group(1)
+            if name in used or name.lower() in _CODE_SKIP_NAMES or len(name) < 3:
+                continue
+            mutated = self._transpose_name(name)
+            if mutated == name:
+                continue
+            orig_snippet = m.group(0)
+            g1_start = m.start(1) - m.start()
+            g1_end   = m.end(1)   - m.start()
+            mut_snippet = orig_snippet[:g1_start] + mutated + orig_snippet[g1_end:]
+            if mut_snippet in used:
+                continue
+            new_text = self._replace_in_rd_prose(text, orig_snippet, mut_snippet, skip_spans)
+            if new_text != text:
+                errors.append({
+                    "id": f"e_rdan_{len(errors)}",
+                    "category": "rd_arg_name",
+                    "original_snippet": orig_snippet,
+                    "mutated_snippet": mut_snippet,
+                    "rationale": "character swap in argument name in .Rd prose",
+                })
+                used.add(orig_snippet)
+                text = new_text
+                injected = True
+                break
+        # Strategy 2: bare argname mention inside \item{arg}{desc}
+        if not injected:
+            for m in re.finditer(r"\\item\{([a-z][a-z0-9._]{2,})\}\{([^}]+)\}", text):
+                if self._in_fence(m.start(), skip_spans):
+                    continue
+                argname = m.group(1)
+                desc = m.group(2)
+                # Look for a word-boundary occurrence of argname inside the description
+                word_m = re.search(rf"\b{re.escape(argname)}\b", desc)
+                if not word_m:
+                    continue
+                if argname in used or argname.lower() in _CODE_SKIP_NAMES or len(argname) < 3:
+                    continue
+                mutated = self._transpose_name(argname)
+                if mutated == argname:
+                    continue
+                # Build orig/mut snippets as just the argname occurrence in desc
+                desc_offset = m.start(2)  # absolute position of desc start
+                abs_word_start = desc_offset + word_m.start()
+                orig_snippet = argname
+                mut_snippet  = mutated
+                if orig_snippet in used:
+                    continue
+                # Replace that specific occurrence in the full text
+                new_text = text[:abs_word_start] + mutated + text[abs_word_start + len(argname):]
+                if new_text != text:
+                    errors.append({
+                        "id": f"e_rdan_{len(errors)}",
+                        "category": "rd_arg_name",
+                        "original_snippet": orig_snippet,
+                        "mutated_snippet": mut_snippet,
+                        "rationale": f"character swap in argument name '{argname}' in \\item description",
+                    })
+                    used.add(orig_snippet)
+                    text = new_text
+                    injected = True
+                    break
+        if not injected:
+            self._record_skip(data, "rd_arg_name", "no_suitable_arg_reference")
+
+        return text, errors
+
+    def _supplement_errors(self, baseline: str, corrupted: str, data: Dict[str, Any], min_per_category: int, project_terms: list[str] | None = None, file_type: str = "") -> Tuple[str, Dict[str, Any]]:
         errors: List[Dict[str, Any]] = data.get("errors", []) or []
         cat_counts: Dict[str, int] = {}
         for e in errors:
@@ -554,6 +965,14 @@ class LLMErrorInjector:
             """Replace first occurrence of ``old`` outside fenced code blocks."""
             nonlocal fence_spans
             result = self._replace_prose_only(text, old, new, fence_spans)
+            if result != text:
+                fence_spans = self._fence_spans(result)
+            return result
+
+        def fence_replace(text: str, old: str, new: str) -> str:
+            """Replace first occurrence of ``old`` inside fenced code blocks."""
+            nonlocal fence_spans
+            result = self._replace_in_fence(text, old, new, fence_spans)
             if result != text:
                 fence_spans = self._fence_spans(result)
             return result
@@ -1078,13 +1497,14 @@ class LLMErrorInjector:
             if not found:
                 break
 
-        # param_name supplements - corrupt parameter/argument names
+        # param_name supplements - corrupt parameter/argument names (prose only)
         param_attempts = 0
         while need("param_name") > 0 and param_attempts < min_per_category * 2:
             param_attempts += 1
             found = False
-            # Match parameter assignments like "param = value" or "param=value"
-            for m in re.finditer(r"\b([a-z_][a-z0-9_.]*)\s*=\s*", corrupted, flags=re.I):
+            # Search prose region only to avoid matching code-block arg names
+            prose_view = self._prose_region(corrupted)
+            for m in re.finditer(r"\b([a-z_][a-z0-9_.]*)\s*=\s*", prose_view, flags=re.I):
                 param = m.group(1)
                 orig = param
                 if orig in corrupted_snippets or len(param) < 3:
@@ -1096,13 +1516,15 @@ class LLMErrorInjector:
                     mut = param + "x"
                 if mut == orig or mut in corrupted_snippets:
                     continue
-                # Replace in context
+                # Replace in prose only
                 full_orig = m.group(0)
                 full_mut = full_orig.replace(param, mut, 1)
-                corrupted = prose_replace(corrupted, full_orig, full_mut)
-                if add_error("param_name", orig, mut, "misspelled parameter name"):
-                    found = True
-                    break
+                new_corrupted = prose_replace(corrupted, full_orig, full_mut)
+                if new_corrupted != corrupted:
+                    corrupted = new_corrupted
+                    if add_error("param_name", orig, mut, "misspelled parameter name"):
+                        found = True
+                        break
             if not found:
                 break
 
@@ -1144,6 +1566,199 @@ class LLMErrorInjector:
             if orig_sp in corrupted and orig_sp not in corrupted_snippets:
                 corrupted = prose_replace(corrupted, orig_sp, mut_sp)
                 add_error("species_name", orig_sp, mut_sp, "misspelled species name")
+
+        ft = file_type.lower()
+
+        # ── code_func_name supplements (prose .md/.rst/.txt files only) ──────
+        if ft in _PROSE_CODE_EXTENSIONS:
+            cfn_attempts = 0
+            while need("code_func_name") > 0 and cfn_attempts < min_per_category * 2:
+                cfn_attempts += 1
+                found = False
+                code_view = self._extract_code_fragments(corrupted)
+                for m in _FUNC_IN_CODE_RE.finditer(code_view):
+                    name = m.group(1)
+                    if name.lower() in _CODE_SKIP_NAMES or len(name) < 5:
+                        continue
+                    orig_call = m.group(0)
+                    if orig_call in corrupted_snippets:
+                        continue
+                    mutated = self._transpose_name(name)
+                    if mutated == name:
+                        continue
+                    mut_call = mutated + orig_call[len(name):]
+                    if mut_call in corrupted_snippets:
+                        continue
+                    new_corrupted = fence_replace(corrupted, orig_call, mut_call)
+                    if new_corrupted != corrupted:
+                        corrupted = new_corrupted
+                        if add_error("code_func_name", orig_call.rstrip(), mut_call.rstrip(),
+                                     "transposed characters in function name inside code fence"):
+                            found = True
+                            break
+                if not found:
+                    break
+
+            # ── code_func_args supplements ────────────────────────────────────
+            cfa_attempts = 0
+            while need("code_func_args") > 0 and cfa_attempts < min_per_category * 2:
+                cfa_attempts += 1
+                found = False
+                code_view = self._extract_code_fragments(corrupted)
+                for m in _NAMED_ARG_IN_CODE_RE.finditer(code_view):
+                    name = m.group(1)
+                    if name.lower() in _CODE_SKIP_NAMES or len(name) < 3:
+                        continue
+                    orig_arg = m.group(0)
+                    if orig_arg in corrupted_snippets:
+                        continue
+                    mutated = self._transpose_name(name)
+                    if mutated == name:
+                        continue
+                    mut_arg = mutated + orig_arg[len(name):]
+                    if mut_arg in corrupted_snippets:
+                        continue
+                    new_corrupted = fence_replace(corrupted, orig_arg, mut_arg)
+                    if new_corrupted != corrupted:
+                        corrupted = new_corrupted
+                        if add_error("code_func_args", orig_arg.rstrip(), mut_arg.rstrip(),
+                                     "transposed characters in named argument inside code fence"):
+                            found = True
+                            break
+                if not found:
+                    break
+
+        # ── code_comment_conflict supplements ─────────────────────────────────
+        if ft not in _EXECUTABLE_CODE_EXTENSIONS:
+            ccc_attempts = 0
+            while need("code_comment_conflict") > 0 and ccc_attempts < min_per_category * 2:
+                ccc_attempts += 1
+                found = False
+                code_view = self._extract_code_fragments(corrupted)
+                for m in _COMMENT_IN_CODE_RE.finditer(code_view):
+                    prefix = m.group(1)
+                    comment_body = m.group(2)
+                    for pat, replacement in _COMMENT_CONFLICT_MAP:
+                        if not pat.search(comment_body):
+                            continue
+                        mutated_body = pat.sub(replacement, comment_body, count=1)
+                        if mutated_body == comment_body:
+                            continue
+                        orig_line = prefix + comment_body
+                        mut_line = prefix + mutated_body
+                        if orig_line in corrupted_snippets or orig_line.rstrip() in corrupted_snippets:
+                            continue
+                        new_corrupted = fence_replace(corrupted, orig_line, mut_line)
+                        if new_corrupted != corrupted:
+                            corrupted = new_corrupted
+                            if add_error("code_comment_conflict", orig_line.rstrip(), mut_line.rstrip(),
+                                         "comment changed to conflict with adjacent code"):
+                                found = True
+                                break
+                    if found:
+                        break
+                if not found:
+                    break
+
+        # ── rd_func_name supplements (only for .Rd files) ─────────────────────
+        if self._is_rd_file(corrupted):
+            rd_skip = self._rd_skip_spans(corrupted)
+            rdfn_attempts = 0
+            while need("rd_func_name") > 0 and rdfn_attempts < min_per_category * 2:
+                rdfn_attempts += 1
+                found = False
+                for pattern in (_RD_CODE_FUNC_RE, _RD_LINK_RE):
+                    if found:
+                        break
+                    for m in pattern.finditer(corrupted):
+                        if self._in_fence(m.start(), rd_skip):
+                            continue
+                        name = m.group(1)
+                        orig_snippet = m.group(0)
+                        if orig_snippet in corrupted_snippets or name in corrupted_snippets:
+                            continue
+                        if len(name) < 4:
+                            continue
+                        mutated = self._transpose_name(name)
+                        if mutated == name:
+                            continue
+                        g1s = m.start(1) - m.start()
+                        g1e = m.end(1)   - m.start()
+                        mut_snippet = orig_snippet[:g1s] + mutated + orig_snippet[g1e:]
+                        if mut_snippet in corrupted_snippets:
+                            continue
+                        new_corrupted = self._replace_in_rd_prose(
+                            corrupted, orig_snippet, mut_snippet, rd_skip
+                        )
+                        if new_corrupted != corrupted:
+                            corrupted = new_corrupted
+                            rd_skip = self._rd_skip_spans(corrupted)
+                            if add_error("rd_func_name", orig_snippet, mut_snippet,
+                                         "character swap in function name in .Rd prose"):
+                                found = True
+                                break
+                if not found:
+                    break
+
+            # ── rd_arg_name supplements ────────────────────────────────────────
+            rdan_attempts = 0
+            while need("rd_arg_name") > 0 and rdan_attempts < min_per_category * 2:
+                rdan_attempts += 1
+                found = False
+                # Strategy 1: \code{argname}
+                for m in _RD_CODE_ARG_RE.finditer(corrupted):
+                    if self._in_fence(m.start(), rd_skip):
+                        continue
+                    name = m.group(1)
+                    orig_snippet = m.group(0)
+                    if orig_snippet in corrupted_snippets or name in corrupted_snippets:
+                        continue
+                    if name.lower() in _CODE_SKIP_NAMES or len(name) < 3:
+                        continue
+                    mutated = self._transpose_name(name)
+                    if mutated == name:
+                        continue
+                    g1s = m.start(1) - m.start()
+                    g1e = m.end(1)   - m.start()
+                    mut_snippet = orig_snippet[:g1s] + mutated + orig_snippet[g1e:]
+                    if mut_snippet in corrupted_snippets:
+                        continue
+                    new_corrupted = self._replace_in_rd_prose(
+                        corrupted, orig_snippet, mut_snippet, rd_skip
+                    )
+                    if new_corrupted != corrupted:
+                        corrupted = new_corrupted
+                        rd_skip = self._rd_skip_spans(corrupted)
+                        if add_error("rd_arg_name", orig_snippet, mut_snippet,
+                                     "character swap in argument name in .Rd prose"):
+                            found = True
+                            break
+                # Strategy 2: bare argname in \item{arg}{desc}
+                if not found:
+                    for m in re.finditer(r"\\item\{([a-z][a-z0-9._]{2,})\}\{([^}]+)\}", corrupted):
+                        if self._in_fence(m.start(), rd_skip):
+                            continue
+                        argname = m.group(1)
+                        desc = m.group(2)
+                        word_m = re.search(rf"\b{re.escape(argname)}\b", desc)
+                        if not word_m:
+                            continue
+                        if argname in corrupted_snippets or argname.lower() in _CODE_SKIP_NAMES or len(argname) < 3:
+                            continue
+                        mutated = self._transpose_name(argname)
+                        if mutated == argname or mutated in corrupted_snippets:
+                            continue
+                        abs_pos = m.start(2) + word_m.start()
+                        new_corrupted = corrupted[:abs_pos] + mutated + corrupted[abs_pos + len(argname):]
+                        if new_corrupted != corrupted:
+                            corrupted = new_corrupted
+                            rd_skip = self._rd_skip_spans(corrupted)
+                            if add_error("rd_arg_name", argname, mutated,
+                                         f"character swap in argument name '{argname}' in \\item description"):
+                                found = True
+                                break
+                if not found:
+                    break
 
         data["errors"] = errors
         return corrupted, data

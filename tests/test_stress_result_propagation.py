@@ -11,7 +11,7 @@ import json
 import os
 import tempfile
 
-from system_tests.test_single_file_stress import (
+from benchmark.shared import (
     CategoryResult,
     StressLevelResult,
     save_results,
@@ -104,7 +104,7 @@ def test_protection_fields_default_zero():
 
 def test_skill_csv_writer_includes_protection_columns():
     """SKILL_COMPARISON.csv and SKILL_MATRIX_TABLE.csv must include protection columns."""
-    from system_tests.test_single_file_stress import _write_skill_comparison_csv
+    from benchmark.shared import _write_skill_comparison_csv
 
     rows = [{
         "file_stem": "demo_vignette",

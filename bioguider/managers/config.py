@@ -112,6 +112,12 @@ ERROR_CATEGORIES = {
         "inline_code",
         "code_lang_tag",
         "emphasis",
+        "code_func_name",
+        "code_func_args",
+    ],
+    "rd_reference": [
+        "rd_func_name",
+        "rd_arg_name",
     ],
     "biology": [
         "bio_term",
@@ -162,11 +168,15 @@ ALL_ERROR_CATEGORIES = frozenset(
 #   means these can no longer be injected without entering code blocks.
 # - code_lang_tag: modifies fence delimiters (code-adjacent); models should
 #   not touch fence syntax.
+# - code_func_name / code_func_args: injected into code fences in prose .md/.rst
+#   files; fixing them requires a code linter, not a documentation evaluator.
 # These errors still appear in per-category detail rows (pre-registered carve-out).
 UNSCORABLE_CATEGORIES = frozenset({
     "function",
     "comment_typo",
     "code_lang_tag",
+    "code_func_name",
+    "code_func_args",
 })
 
 # Scorable categories are everything else (headline F1 denominator).
@@ -194,6 +204,8 @@ CONTENT_CATEGORIES: frozenset = frozenset({
     "coordinates", "units_scale", "sample_type", "contamination",
     # cli_config -- wrong default = wrong analysis
     "default_value",
+    # rd_reference -- wrong API names in .Rd prose are factual errors
+    "rd_func_name", "rd_arg_name",
 })
 
 HYGIENE_CATEGORIES: frozenset = frozenset({
@@ -353,6 +365,10 @@ FILE_CATEGORIES = {
     "installation": {
         "patterns": ["install*.md", "INSTALL*.md", "installation*.md"],
         "description": "Installation documentation",
+    },
+    "rd_doc": {
+        "patterns": ["man/*.Rd"],
+        "description": "R package documentation files (man/ directory)",
     },
 }
 
