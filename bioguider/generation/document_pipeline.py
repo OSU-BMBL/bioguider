@@ -66,6 +66,7 @@ class DocumentPipeline:
         doc_path: str,
         eval_type: EvaluationTypeEnum,
         report_output_path: str | None = None,
+        suggestion_categories: list[str] | None = None,
     ) -> tuple[dict, str]:
         """
         Evaluate a document then generate a refined version.
@@ -76,6 +77,12 @@ class DocumentPipeline:
             doc_path: Filename relative to doc_repo_path.
             eval_type: Which BioGuider evaluation task to run.
             report_output_path: If given, write the evaluation report JSON here.
+            suggestion_categories: If given, only suggestions whose ``category``
+                is in this list are passed to the generator.  Use
+                ``["readability_errors", "readability"]`` to restrict the
+                pipeline to direct error-fixes only (no setup / reproducibility
+                / structure improvements).  ``None`` (default) passes every
+                category, which is the original behaviour.
 
         Returns:
             (merged_report, refined_content)
@@ -101,7 +108,10 @@ class DocumentPipeline:
             summary_file_db=self.summary_file_db,
         )
 
-        merged_report = _build_merged_report(eval_results, doc_path, eval_type)
+        merged_report = _build_merged_report(
+            eval_results, doc_path, eval_type,
+            suggestion_categories=suggestion_categories,
+        )
 
         if report_output_path:
             os.makedirs(os.path.dirname(report_output_path), exist_ok=True)
@@ -169,9 +179,17 @@ def _build_merged_report(
     eval_results: dict,
     doc_path: str,
     eval_type: EvaluationTypeEnum,
+    suggestion_categories: list[str] | None = None,
 ) -> dict:
     """Convert a raw evaluation result dict into the merged-report format
-    that LLMContentGenerator.generate_full_document expects."""
+    that LLMContentGenerator.generate_full_document expects.
+
+    Args:
+        suggestion_categories: If given, only suggestions whose category is in
+            this set are included.  ``None`` (default) keeps every category.
+    """
+    _keep = set(suggestion_categories) if suggestion_categories is not None else None
+
     suggestions = []
     idx = 1
 
@@ -191,6 +209,8 @@ def _build_merged_report(
                     ("performance", te.performance_and_resource_notes_suggestions or []),
                 ]
                 for category, items in category_fields:
+                    if _keep is not None and category not in _keep:
+                        continue
                     for item in items:
                         suggestions.append({
                             "suggestion_number": idx,
@@ -211,6 +231,8 @@ def _build_merged_report(
                     ("error_handling", ug.error_handling_suggestions or []),
                 ]
                 for category, items in category_fields:
+                    if _keep is not None and category not in _keep:
+                        continue
                     for item in items:
                         suggestions.append({
                             "suggestion_number": idx,

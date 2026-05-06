@@ -55,6 +55,8 @@ class ConsistencyCollectionResult(BaseModel):
     functions_and_classes: list[dict] = Field(description="A list of functions and classes that the documentation mentions")
 
 ConsistencyCollectionResultJsonSchema = {
+  "title": "ConsistencyCollectionResult",
+  "description": "Collection of functions and classes mentioned in the documentation",
   "properties": {
     "functions_and_classes": {
       "description": "A list of functions and classes that the documentation mentions",
@@ -68,7 +70,6 @@ ConsistencyCollectionResultJsonSchema = {
   "required": [
     "functions_and_classes"
   ],
-  "title": "ConsistencyCollectionResult",
   "type": "object"
 }
 

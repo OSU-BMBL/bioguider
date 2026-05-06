@@ -74,27 +74,30 @@ class CommonAgentTwoSteps(CommonAgent):
         # Initialize the callback handler
         callback_handler = OpenAICallbackHandler()
         cot_prompt = self._build_prompt_for_cot_step(
-            system_prompt=system_prompt, 
+            system_prompt=system_prompt,
             instruction_prompt=instruction_prompt
         )
 
         try:
             # First, use llm to do CoT
             msgs = cot_prompt.invoke(input={}).to_messages()
-            
+
             cot_res = self.llm.generate(messages=[msgs])
             reasoning_process = cot_res.generations[0][0].text
-            token_usage = cot_res.llm_output.get("token_usage")
+            raw = (cot_res.llm_output or {})
+            raw_usage = raw.get("token_usage") or raw.get("usage") or {}
             cot_tokens = {
-                "total_tokens": token_usage.get("total_tokens", 0),
-                "prompt_tokens": token_usage.get("prompt_tokens", 0),
-                "completion_tokens": token_usage.get("completion_tokens", 0),
+                "total_tokens": raw_usage.get("total_tokens") or (raw_usage.get("input_tokens", 0) + raw_usage.get("output_tokens", 0)),
+                "prompt_tokens": raw_usage.get("prompt_tokens") or raw_usage.get("input_tokens", 0),
+                "completion_tokens": raw_usage.get("completion_tokens") or raw_usage.get("output_tokens", 0),
             }
             self._incre_token_usage(cot_tokens)
         except Exception as e:
-            logger.error(str(e))
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"_invoke_agent CoT step error: {type(e).__name__}: {e}\n{tb}")
             raise e
-        
+
         # Then use the reasoning process to do the structured output
         updated_prompt = self._build_prompt_for_final_step(
             system_prompt=system_prompt,
@@ -110,7 +113,9 @@ class CommonAgentTwoSteps(CommonAgent):
             )
             self._incre_token_usage(callback_handler)
         except Exception as e:
-            logger.error(str(e))
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"_invoke_agent final step error: {type(e).__name__}: {e}\n{tb}")
             raise e
         processed_res = None
         if post_process is not None:
@@ -168,11 +173,12 @@ class CommonAgentTwoChainSteps(CommonAgentTwoSteps):
             if cot_res is None or cot_res.llm_output is None:
                 raise Exception("llm generate invalid output")
             reasoning_process = cot_res.generations[0][0].text
-            token_usage: Any = cot_res.llm_output.get("token_usage")
+            raw = (cot_res.llm_output or {})
+            raw_usage = raw.get("token_usage") or raw.get("usage") or {}
             cot_tokens = {
-                "total_tokens": token_usage.get("total_tokens", 0),
-                "prompt_tokens": token_usage.get("prompt_tokens", 0),
-                "completion_tokens": token_usage.get("completion_tokens", 0),
+                "total_tokens": raw_usage.get("total_tokens") or (raw_usage.get("input_tokens", 0) + raw_usage.get("output_tokens", 0)),
+                "prompt_tokens": raw_usage.get("prompt_tokens") or raw_usage.get("input_tokens", 0),
+                "completion_tokens": raw_usage.get("completion_tokens") or raw_usage.get("output_tokens", 0),
             }
             self._incre_token_usage(cot_tokens)
         except Exception as e:

@@ -415,8 +415,13 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
     Because all strategies receive the same injected doc, F1 differences are
     attributable solely to the fixing strategy, not injection randomness.
 
+    Environment variables:
+      E004_MODELS      Comma-separated model keys (default: gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss)
+      E004_ERROR_LEVEL Errors per category to inject (default: 10)
+
     Run:
         pytest benchmark/test_stress.py::test_e004_pipeline_vs_prompt -v -s
+        E004_MODELS=gpt-4o,gpt-oss E004_ERROR_LEVEL=40 pytest benchmark/test_stress.py::test_e004_pipeline_vs_prompt -v -s
     """
     import time
     from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
@@ -424,9 +429,9 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
     from bioguider.utils.constants import EvaluationTypeEnum
     from langchain_openai import ChatOpenAI
 
-    TARGET_MODELS = ["gpt-4o", "gpt-5.4", "kimi-k2.5", "glm-5", "gpt-oss"]
-    # TARGET_MODELS = ["glm-5",]
-    ERROR_LEVEL = 40
+    _default_models = "gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss"
+    TARGET_MODELS = [m.strip() for m in os.environ.get("E004_MODELS", _default_models).split(",") if m.strip()]
+    ERROR_LEVEL = int(os.environ.get("E004_ERROR_LEVEL", "10"))
     test_file = DEFAULT_TEST_FILE
 
     if not os.path.exists(test_file):
@@ -505,13 +510,24 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
         try:
             model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
             model_id = model_config.get("model", model_name)
-            model_llm = ChatOpenAI(
-                model=model_id,
-                api_key=os.environ.get("OPENAI_API_KEY"),
-                base_url=os.environ.get("OPENAI_BASE_URL"),
-                timeout=120,
-                max_retries=1,
-            )
+            model_type = model_config.get("type", "litellm")
+            if model_type == "anthropic":
+                from langchain_anthropic import ChatAnthropic
+                model_llm = ChatAnthropic(
+                    model=model_id,
+                    api_key=os.environ.get("CLAUDE_API_KEY"),
+                    timeout=300,
+                    max_retries=1,
+                    max_tokens=8192,
+                )
+            else:
+                model_llm = ChatOpenAI(
+                    model=model_id,
+                    api_key=os.environ.get("OPENAI_API_KEY"),
+                    base_url=os.environ.get("OPENAI_BASE_URL"),
+                    timeout=120,
+                    max_retries=1,
+                )
             report_path = os.path.join(
                 test_output_dir,
                 f"{file_basename}.level_{ERROR_LEVEL}.{model_name}.pipeline_report.json",
@@ -553,9 +569,10 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
             print(f"  {combo:<42} ERROR: {e}")
             return None
 
-    # ── Run 9 tasks (3 models × 3 strategies) in parallel ────────────────────
-    print(f"\nRunning {len(TARGET_MODELS) * 3} tasks in parallel ...")
-    with ThreadPoolExecutor(max_workers=len(TARGET_MODELS) * 3) as pool:
+    # ── Run 3 strategies × N models in parallel ───────────────────────────────
+    n_strategies = 3  # bioguider, simple, pipeline
+    print(f"\nRunning {len(TARGET_MODELS) * n_strategies} tasks in parallel ...")
+    with ThreadPoolExecutor(max_workers=len(TARGET_MODELS) * n_strategies) as pool:
         futures = {}
         for model_name in TARGET_MODELS:
             futures[pool.submit(_run_prompt, model_name, "bioguider")] = f"{model_name}+bioguider"
@@ -583,10 +600,10 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
     # Per-model pipeline vs bioguider-prompt delta
     print(f"\n--- Pipeline vs BioGuider-prompt delta (per model) ---")
     for model_name in TARGET_MODELS:
-        pipeline_r = next((r for r in all_results if r.model_name == f"{model_name}+pipeline"), None)
-        bioguider_r = next((r for r in all_results if r.model_name == f"{model_name}+bioguider"), None)
-        if pipeline_r and bioguider_r:
-            delta = pipeline_r.f1_score - bioguider_r.f1_score
+        bio_r  = next((r for r in all_results if r.model_name == f"{model_name}+bioguider"), None)
+        pipe_r = next((r for r in all_results if r.model_name == f"{model_name}+pipeline"), None)
+        if bio_r and pipe_r:
+            delta = pipe_r.f1_score - bio_r.f1_score
             print(f"  {model_name}: pipeline {delta:+.3f} F1 vs bioguider prompt")
 
     assert all_results, "No results produced — check LLM/proxy connectivity"

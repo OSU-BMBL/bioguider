@@ -306,7 +306,9 @@ PROMPTS = {
 # MODEL CONFIGURATIONS
 # ============================================================================
 
-# Available models — all routed through LiteLLM proxy (OPENAI_BASE_URL)
+# Available models
+# litellm models are routed through LiteLLM proxy (OPENAI_BASE_URL)
+# anthropic models call the Anthropic API directly using CLAUDE_API_KEY
 # gpt-oss model id: verify via `curl $OPENAI_BASE_URL/models` if routing fails
 MODELS = {
     # OpenAI family — verified-real on the LiteLLM proxy
@@ -326,6 +328,8 @@ MODELS = {
     "minimax-m2.5":    {"type": "litellm", "model": "minimax-m2.5"},
     # DeepSeek (real — v3.2 on the proxy is mis-aliased to Claude, do NOT use)
     "deepseek-v4-flash": {"type": "litellm", "model": "deepseek-v4-flash"},
+    # Anthropic — direct API via CLAUDE_API_KEY
+    "claude-sonnet-4-6": {"type": "anthropic", "model": "claude-sonnet-4-6"},
 }
 
 def print_prompts():
@@ -393,15 +397,26 @@ def fix_with_model(
     """
     model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
     model_id = model_config.get("model", model_name)
+    model_type = model_config.get("type", "litellm")
     token_usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
-    llm_override = ChatOpenAI(
-        model=model_id,
-        api_key=os.environ.get("OPENAI_API_KEY"),
-        base_url=os.environ.get("OPENAI_BASE_URL"),
-        timeout=120,
-        max_retries=1,
-    )
+    if model_type == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        llm_override = ChatAnthropic(
+            model=model_id,
+            api_key=os.environ.get("CLAUDE_API_KEY"),
+            timeout=300,
+            max_retries=1,
+            max_tokens=8192,
+        )
+    else:
+        llm_override = ChatOpenAI(
+            model=model_id,
+            api_key=os.environ.get("OPENAI_API_KEY"),
+            base_url=os.environ.get("OPENAI_BASE_URL"),
+            timeout=300,
+            max_retries=1,
+        )
 
     # ── Prompt-based path ─────────────────────────────────────────────────────
     if prompt_name in PROMPTS:
@@ -415,11 +430,14 @@ def fix_with_model(
         response = _invoke_with_retry(llm_override, prompt)
         fixed_content = response.content if hasattr(response, "content") else str(response)
 
-        # Extract token usage from response metadata
-        usage = getattr(response, "response_metadata", {}).get("token_usage", {})
-        token_usage["prompt_tokens"] = int(usage.get("prompt_tokens", 0))
-        token_usage["completion_tokens"] = int(usage.get("completion_tokens", 0))
-        token_usage["total_tokens"] = int(usage.get("total_tokens", 0))
+        # Extract token usage — OpenAI uses "token_usage", Anthropic uses "usage"
+        meta = getattr(response, "response_metadata", {})
+        usage = meta.get("token_usage") or meta.get("usage", {})
+        prompt_tok   = int(usage.get("prompt_tokens") or usage.get("input_tokens", 0))
+        complete_tok = int(usage.get("completion_tokens") or usage.get("output_tokens", 0))
+        token_usage["prompt_tokens"]     = prompt_tok
+        token_usage["completion_tokens"] = complete_tok
+        token_usage["total_tokens"]      = prompt_tok + complete_tok
 
         # Clean up LLM wrapper text and markdown code fences
         lines = fixed_content.split('\n')

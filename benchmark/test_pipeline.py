@@ -131,13 +131,24 @@ def test_bioguider_pipeline_matrix(llm, test_output_dir):
                 try:
                     model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
                     model_id = model_config.get("model", model_name)
-                    model_llm = ChatOpenAI(
-                        model=model_id,
-                        api_key=os.environ.get("OPENAI_API_KEY"),
-                        base_url=os.environ.get("OPENAI_BASE_URL"),
-                        timeout=120,
-                        max_retries=1,
-                    )
+                    model_type = model_config.get("type", "litellm")
+                    if model_type == "anthropic":
+                        from langchain_anthropic import ChatAnthropic
+                        model_llm = ChatAnthropic(
+                            model=model_id,
+                            api_key=os.environ.get("CLAUDE_API_KEY"),
+                            timeout=300,
+                            max_retries=1,
+                            max_tokens=8192,
+                        )
+                    else:
+                        model_llm = ChatOpenAI(
+                            model=model_id,
+                            api_key=os.environ.get("OPENAI_API_KEY"),
+                            base_url=os.environ.get("OPENAI_BASE_URL"),
+                            timeout=300,
+                            max_retries=1,
+                        )
 
                     report_path = os.path.join(
                         file_out,
@@ -304,13 +315,24 @@ def test_bioguider_pipeline_matrix_minimal(llm, test_output_dir):
             try:
                 model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
                 model_id = model_config.get("model", model_name)
-                model_llm = ChatOpenAI(
-                    model=model_id,
-                    api_key=os.environ.get("OPENAI_API_KEY"),
-                    base_url=os.environ.get("OPENAI_BASE_URL"),
-                    timeout=120,
-                    max_retries=1,
-                )
+                model_type = model_config.get("type", "litellm")
+                if model_type == "anthropic":
+                    from langchain_anthropic import ChatAnthropic
+                    model_llm = ChatAnthropic(
+                        model=model_id,
+                        api_key=os.environ.get("CLAUDE_API_KEY"),
+                        timeout=300,
+                        max_retries=1,
+                        max_tokens=8192,
+                    )
+                else:
+                    model_llm = ChatOpenAI(
+                        model=model_id,
+                        api_key=os.environ.get("OPENAI_API_KEY"),
+                        base_url=os.environ.get("OPENAI_BASE_URL"),
+                        timeout=300,
+                        max_retries=1,
+                    )
 
                 report_path = os.path.join(
                     run_root,
@@ -466,13 +488,24 @@ def test_evaluation_and_refine_corrupt_file(llm, test_output_dir):
     model_name = "gpt-oss"
     model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
     model_id = model_config.get("model", model_name)
-    model_llm = ChatOpenAI(
-        model=model_id,
-        api_key=os.environ.get("OPENAI_API_KEY"),
-        base_url=os.environ.get("OPENAI_BASE_URL"),
-        timeout=120,
-        max_retries=1,
-    )
+    model_type = model_config.get("type", "litellm")
+    if model_type == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+        model_llm = ChatAnthropic(
+            model=model_id,
+            api_key=os.environ.get("CLAUDE_API_KEY"),
+            timeout=300,
+            max_retries=1,
+            max_tokens=8192,
+        )
+    else:
+        model_llm = ChatOpenAI(
+            model=model_id,
+            api_key=os.environ.get("OPENAI_API_KEY"),
+            base_url=os.environ.get("OPENAI_BASE_URL"),
+            timeout=300,
+            max_retries=1,
+        )
     merged_report, refined_content = pipeline.evaluate_and_refine_document(
         llm=model_llm,
         doc_repo_path=doc_repo_path,
@@ -614,13 +647,24 @@ def test_bioguider_pipeline_smoke(llm, test_output_dir):
         try:
             model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
             model_id = model_config.get("model", model_name)
-            model_llm = ChatOpenAI(
-                model=model_id,
-                api_key=os.environ.get("OPENAI_API_KEY"),
-                base_url=os.environ.get("OPENAI_BASE_URL"),
-                timeout=120,
-                max_retries=1,
-            )
+            model_type = model_config.get("type", "litellm")
+            if model_type == "anthropic":
+                from langchain_anthropic import ChatAnthropic
+                model_llm = ChatAnthropic(
+                    model=model_id,
+                    api_key=os.environ.get("CLAUDE_API_KEY"),
+                    timeout=300,
+                    max_retries=1,
+                    max_tokens=8192,
+                )
+            else:
+                model_llm = ChatOpenAI(
+                    model=model_id,
+                    api_key=os.environ.get("OPENAI_API_KEY"),
+                    base_url=os.environ.get("OPENAI_BASE_URL"),
+                    timeout=300,
+                    max_retries=1,
+                )
 
             report_path = os.path.join(
                 run_root,
