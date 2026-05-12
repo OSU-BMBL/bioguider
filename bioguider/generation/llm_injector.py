@@ -226,6 +226,16 @@ class LLMErrorInjector:
         return [(m.start(), m.end()) for m in _CODE_FENCE_RE.finditer(text)]
 
     @staticmethod
+    def _yaml_frontmatter_span(text: str) -> "Tuple[int, int] | None":
+        """Return (0, end) span of YAML frontmatter if present, else None."""
+        if not text.startswith("---"):
+            return None
+        m = re.search(r"\n---[ \t]*(?:\n|$)", text)
+        if m is None:
+            return None
+        return (0, m.end())
+
+    @staticmethod
     def _in_fence(pos: int, spans: List[Tuple[int, int]]) -> bool:
         """Return True if character position ``pos`` falls inside any fence span."""
         for start, end in spans:
@@ -530,18 +540,34 @@ class LLMErrorInjector:
     def _deterministic_inject(self, baseline: str, file_type: str = "") -> Tuple[str, Dict[str, Any]]:
         errors: List[Dict[str, Any]] = []
         text = baseline
+        # Pre-compute skip spans (YAML frontmatter + code fences) for prose-only mutations
+        _det_yaml = self._yaml_frontmatter_span(text)
+        _det_fences = self._fence_spans(text)
+        _det_skip = sorted(_det_fences + ([_det_yaml] if _det_yaml else []))
+
+        def _det_prose_replace(t: str, old: str, new: str) -> str:
+            return self._replace_prose_only(t, old, new, _det_skip)
+
         # typo
         if "successfully" in text:
-            text = text.replace("successfully", "succesfully", 1)
-            errors.append({"id": "e_typo_1", "category": "typo", "original_snippet": "successfully", "mutated_snippet": "succesfully", "rationale": "common misspelling"})
+            result = _det_prose_replace(text, "successfully", "succesfully")
+            if result != text:
+                text = result
+                errors.append({"id": "e_typo_1", "category": "typo", "original_snippet": "successfully", "mutated_snippet": "succesfully", "rationale": "common misspelling"})
         elif "installation" in text:
-            text = text.replace("installation", "instalation", 1)
-            errors.append({"id": "e_typo_1", "category": "typo", "original_snippet": "installation", "mutated_snippet": "instalation", "rationale": "common misspelling"})
-        # link
-        m = re.search(r"\]\(https?://[^)]+\)", text)
+            result = _det_prose_replace(text, "installation", "instalation")
+            if result != text:
+                text = result
+                errors.append({"id": "e_typo_1", "category": "typo", "original_snippet": "installation", "mutated_snippet": "instalation", "rationale": "common misspelling"})
+        # link — skip if match falls inside YAML or a code fence
+        m = next(
+            (m for m in re.finditer(r"\]\(https?://[^)]+\)", text)
+             if not any(s <= m.start() < e for s, e in _det_skip)),
+            None,
+        )
         if m:
             broken = m.group(0).replace("https://", "https//")
-            text = text.replace(m.group(0), broken, 1)
+            text = text[:m.start()] + broken + text[m.end():]
             errors.append({"id": "e_link_1", "category": "link", "original_snippet": m.group(0), "mutated_snippet": broken, "rationale": "missing colon in scheme"})
         # duplicate a small section (next header and paragraph)
         lines = text.splitlines()
@@ -550,8 +576,11 @@ class LLMErrorInjector:
             block = lines[dup_idx: min(len(lines), dup_idx+5)]
             text = "\n".join(lines + ["", *block])
             errors.append({"id": "e_dup_1", "category": "duplicate", "original_snippet": "\n".join(block), "mutated_snippet": "\n".join(block), "rationale": "duplicated section"})
-        # markdown structure: break a header (prose only — skip inside code fences)
-        _fence_sp = self._fence_spans(text)
+        # markdown structure: break a header (skip YAML and code fences)
+        _det_fences = self._fence_spans(text)
+        _det_yaml = self._yaml_frontmatter_span(text)
+        _det_skip = sorted(_det_fences + ([_det_yaml] if _det_yaml else []))
+        _fence_sp = _det_skip  # alias for clarity below
         _md_match = next(
             (m for m in re.finditer(r"\n# ", text)
              if not any(s <= m.start() < e for s, e in _fence_sp)),
@@ -954,19 +983,22 @@ class LLMErrorInjector:
             corrupted_snippets.add(e.get("original_snippet", ""))
             corrupted_snippets.add(e.get("mutated_snippet", ""))
 
-        # Pre-compute fence spans for prose-only replacement.
+        # Pre-compute fence spans and YAML span for prose-only replacement.
         # Recomputed after each replacement to stay in sync with offsets.
         fence_spans = self._fence_spans(corrupted)
+        yaml_span = self._yaml_frontmatter_span(corrupted)
 
         def need(cat: str) -> int:
             return max(0, min_per_category - cat_counts.get(cat, 0))
 
         def prose_replace(text: str, old: str, new: str) -> str:
-            """Replace first occurrence of ``old`` outside fenced code blocks."""
-            nonlocal fence_spans
-            result = self._replace_prose_only(text, old, new, fence_spans)
+            """Replace first occurrence of ``old`` outside fenced code blocks and YAML frontmatter."""
+            nonlocal fence_spans, yaml_span
+            skip = sorted(fence_spans + ([yaml_span] if yaml_span else []))
+            result = self._replace_prose_only(text, old, new, skip)
             if result != text:
                 fence_spans = self._fence_spans(result)
+                yaml_span = self._yaml_frontmatter_span(result)
             return result
 
         def fence_replace(text: str, old: str, new: str) -> str:
@@ -1285,21 +1317,25 @@ class LLMErrorInjector:
 
         # inline_code supplements
         # NOTE: Only match single-backtick inline code, NOT code fences or RMarkdown chunks
+        _ic_skip = sorted(fence_spans + ([yaml_span] if yaml_span else []))
         for _ in range(need("inline_code")):
-            # Match inline code that:
-            # - Is NOT at the start of a line (to avoid code fences)
-            # - Contains word characters (actual code, not just punctuation)
-            # - Is surrounded by single backticks only
-            m = re.search(r"(?<!`)(?<!^)`([^`\n]{2,30})`(?!`)", corrupted)
+            # Find the first backtick-enclosed span that sits outside YAML and fences
+            m = next(
+                (m for m in re.finditer(r"(?<!`)(?<!^)`([^`\n]{2,30})`(?!`)", corrupted)
+                 if not any(s <= m.start() < e for s, e in _ic_skip)),
+                None,
+            )
             if not m:
                 break
             orig = m.group(0)
             inner = m.group(1)
-            # Skip if it looks like a code fence or RMarkdown chunk marker
             if inner.startswith("{") or inner.startswith("```"):
                 continue
             mut = inner  # Remove surrounding backticks
-            corrupted = prose_replace(corrupted, orig, mut)
+            new_corrupted = prose_replace(corrupted, orig, mut)
+            if new_corrupted == corrupted:
+                break  # prose_replace rejected it (e.g. still inside a skip span)
+            corrupted = new_corrupted
             errors.append({"id": f"e_code_sup_{len(errors)}", "category": "inline_code", "original_snippet": orig, "mutated_snippet": mut, "rationale": "removed inline code backticks"})
 
         # ============================================================
