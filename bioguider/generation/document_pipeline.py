@@ -66,6 +66,7 @@ class DocumentPipeline:
         doc_path: str,
         eval_type: EvaluationTypeEnum,
         report_output_path: str | None = None,
+        eval_report_output_path: str | None = None,
         suggestion_categories: list[str] | None = None,
     ) -> tuple[dict, str]:
         """
@@ -76,7 +77,14 @@ class DocumentPipeline:
             doc_repo_path: Directory that contains the document on disk.
             doc_path: Filename relative to doc_repo_path.
             eval_type: Which BioGuider evaluation task to run.
-            report_output_path: If given, write the evaluation report JSON here.
+            report_output_path: If given, write the merged generator-input
+                report (flat list of suggestions, what the generator actually
+                consumes) to this path as JSON.
+            eval_report_output_path: If given, write the raw evaluation
+                results (per-dimension scores + assessment text + structured
+                findings, before they are flattened into the merged report)
+                to this path as JSON.  Useful for inspecting what the
+                evaluation task actually found.
             suggestion_categories: If given, only suggestions whose ``category``
                 is in this list are passed to the generator.  Use
                 ``["readability_errors", "readability"]`` to restrict the
@@ -118,6 +126,16 @@ class DocumentPipeline:
             with open(report_output_path, "w", encoding="utf-8") as _f:
                 json.dump(merged_report, _f, indent=2, default=str)
 
+        if eval_report_output_path:
+            os.makedirs(os.path.dirname(eval_report_output_path), exist_ok=True)
+            with open(eval_report_output_path, "w", encoding="utf-8") as _f:
+                json.dump(
+                    _serialise_eval_results(eval_results),
+                    _f,
+                    indent=2,
+                    default=str,
+                )
+
         original_content = Path(doc_repo_path, doc_path).read_text(
             encoding="utf-8", errors="replace"
         )
@@ -136,6 +154,60 @@ class DocumentPipeline:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _append_consistency_suggestions(
+    suggestions: list,
+    next_idx: int,
+    consistency_eval,
+    keep_categories: set | None,
+) -> int:
+    """Flatten ``consistency_evaluation.development`` into ``suggestions``.
+
+    Each entry in the consistency task's ``development`` list (the concrete
+    inconsistency findings — undefined CLI flags, mismatched names,
+    contradicted docstrings, etc.) becomes one suggestion with
+    ``category="consistency"`` so the generator can act on them.  The
+    high-level ``assessment`` text is intentionally not emitted — it is
+    summary commentary, not an actionable line.
+
+    Returns the next suggestion index to use.
+    """
+    if consistency_eval is None:
+        return next_idx
+    if keep_categories is not None and "consistency" not in keep_categories:
+        return next_idx
+    items = getattr(consistency_eval, "development", None) or []
+    for item in items:
+        if not item:
+            continue
+        suggestions.append({
+            "suggestion_number": next_idx,
+            "category": "consistency",
+            "content_guidance": str(item),
+        })
+        next_idx += 1
+    return next_idx
+
+
+def _serialise_eval_results(eval_results: dict | None) -> dict:
+    """Convert ``eval_results`` (``{doc_path: PydanticResult}``) into a
+    JSON-friendly dict.
+
+    Pydantic v2 result models are dumped via ``model_dump()``; anything
+    else is passed through unchanged and relies on ``json.dump``'s
+    ``default=str`` fallback at the call site.
+    """
+    out: dict = {}
+    for k, v in (eval_results or {}).items():
+        if hasattr(v, "model_dump"):
+            try:
+                out[k] = v.model_dump()
+                continue
+            except Exception:
+                pass
+        out[k] = v
+    return out
+
 
 def _run_evaluation(
     llm,
@@ -218,6 +290,9 @@ def _build_merged_report(
                             "content_guidance": item,
                         })
                         idx += 1
+            idx = _append_consistency_suggestions(
+                suggestions, idx, getattr(result, "consistency_evaluation", None), _keep,
+            )
 
     elif eval_type == EvaluationTypeEnum.USERGUIDE:
         result = eval_results.get(doc_path) if eval_results else None
@@ -240,6 +315,9 @@ def _build_merged_report(
                             "content_guidance": item,
                         })
                         idx += 1
+            idx = _append_consistency_suggestions(
+                suggestions, idx, getattr(result, "consistency_evaluation", None), _keep,
+            )
 
     elif eval_type == EvaluationTypeEnum.README:
         for _file, result in (eval_results or {}).items():

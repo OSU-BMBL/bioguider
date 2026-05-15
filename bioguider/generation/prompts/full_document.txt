@@ -18,7 +18,9 @@ CRITICAL RULES
    - Keep EVERY code block (including <details>, <summary> tags)
    - Keep ALL existing explanations, examples, text
    - Keep ALL YAML frontmatter, metadata
-   - NEVER delete ANY sections, paragraphs, or code
+   - NEVER delete entire sections, paragraphs, or code blocks
+     (token-level fixes flagged by Consistency suggestions ARE permitted
+     — see § Consistency below for the precise scope)
    - NEVER reorganize sections or change order
    - NEVER remove HTML tags (<details>, <summary>, etc.)
 
@@ -48,7 +50,8 @@ CRITICAL RULES
    - Excellent: Minimal changes only
    - Good: Add specific details where missing
    - Fair: Add missing sections, provide specifics
-   - Poor: Major additions but NEVER delete existing content
+   - Poor: Major additions; do not delete entire sections, paragraphs,
+     or code blocks (Consistency token-level fixes still apply)
 
 5. HANDLE SPECIFIC EVALUATION CATEGORIES (CONTEXT-AWARE)
    - Readability: Simplify language, add definitions
@@ -61,14 +64,36 @@ CRITICAL RULES
    - Code Quality: Fix hardcoded paths, add error handling
    - Result Verification: Add expected output examples
    - Performance: Add ONE section with specific hardware/runtime numbers
+   - Consistency (REQUIRED — explicit carve-out from the no-delete rules):
+     Fix documentation that contradicts the code by editing ONLY the
+     specific offending tokens identified in the suggestion. The
+     surrounding line, paragraph, section, and overall structure must
+     stay intact. Concrete shapes:
+       * Undefined CLI flag — when a Consistency suggestion says a flag
+         like "--cores" is not defined by the parser, REMOVE that flag
+         (and its value) from the invocation. Keep the rest of the
+         command line. Example:
+           before: `pharokka_multiplotter.py -g g.gbk -o out/ --cores 4`
+           after : `pharokka_multiplotter.py -g g.gbk -o out/`
+       * Mismatched function / class / method name — REWRITE the wrong
+         name to the correct one in prose; keep the surrounding
+         sentence. Do not delete the sentence.
+       * Docstring contradicting the code — edit only the wrong word(s);
+         leave the rest of the docstring unchanged.
+     Do NOT use Consistency as an excuse to delete sections, paragraphs,
+     or code blocks. The carve-out is strictly token-level.
 
 STRICT CONSTRAINTS
 - NEVER invent hardware specs, version numbers, performance metrics without source
 - If evaluation requests but context lacks data: provide reasonable defaults with caveats
 - ABSOLUTELY FORBIDDEN: Wrapping entire output in ```markdown fences
 - ABSOLUTELY FORBIDDEN: Adding conclusions, summaries, or wrap-up paragraphs at end
-- ABSOLUTELY FORBIDDEN: Deleting ANY existing content
+- ABSOLUTELY FORBIDDEN: Deleting entire sections, paragraphs, or code blocks
+  (token-level edits required by Consistency suggestions are explicitly permitted)
 - ABSOLUTELY FORBIDDEN: Reorganizing major sections
+- REQUIRED: Apply every Consistency suggestion at token level — undefined
+  CLI flags must be removed from their invocations; mismatched names must
+  be corrected in place
 - REQUIRED: Stop immediately after last section from original
 - REQUIRED: Preserve ALL metadata (YAML frontmatter, etc.)
 

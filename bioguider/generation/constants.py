@@ -82,6 +82,9 @@ class ErrorCategory(str, Enum):
     PARAM_NAME = "param_name"
     DEFAULT_VALUE = "default_value"
     PATH_HINT = "path_hint"
+    CLI_FLAG_TYPO = "cli_flag_typo"
+    CLI_UNKNOWN_FLAG = "cli_unknown_flag"
+    CLI_PROGRAM_RENAME = "cli_program_rename"
 
     @classmethod
     def basic_categories(cls) -> Set[str]:
@@ -129,6 +132,9 @@ class ErrorCategory(str, Enum):
             cls.PARAM_NAME.value,
             cls.DEFAULT_VALUE.value,
             cls.PATH_HINT.value,
+            cls.CLI_FLAG_TYPO.value,
+            cls.CLI_UNKNOWN_FLAG.value,
+            cls.CLI_PROGRAM_RENAME.value,
         }
 
     @classmethod

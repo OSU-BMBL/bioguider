@@ -96,3 +96,49 @@ class TestConvenienceFunctions:
             existing_content_tail="Last part of content...",
         )
         assert "Last part of content..." in formatted
+
+
+class TestFullDocumentConsistencyCarveOut:
+    """Pin the prompt language that lets the generator actually act on
+    Consistency suggestions. Earlier benchmark runs showed the LLM ignoring
+    the suggestions because the no-delete rules were too strict; the
+    Consistency bullet needs explicit REQUIRED authority and a concrete
+    before/after example to override them."""
+
+    def _template(self) -> str:
+        return PromptLoader().load(PromptTemplate.FULL_DOCUMENT)
+
+    def test_consistency_bullet_is_required(self):
+        tpl = self._template()
+        assert "Consistency (REQUIRED" in tpl, (
+            "Consistency bullet must carry REQUIRED authority — without it the "
+            "no-delete rules override it and the generator leaves bogus flags in place"
+        )
+
+    def test_consistency_has_concrete_before_after_example(self):
+        tpl = self._template()
+        # The before/after pair must demonstrate token-level removal so the
+        # LLM has a worked example, not just an abstract instruction.
+        assert "before:" in tpl and "after :" in tpl
+        # The canonical example pins --cores 4 as the bogus flag.
+        assert "--cores 4" in tpl, "the before example must show a bogus --cores flag"
+
+    def test_no_delete_rule_is_narrowed_not_blanket(self):
+        tpl = self._template()
+        # The old blanket "Deleting ANY existing content" rule overrode the
+        # Consistency bullet — make sure it has been narrowed.
+        assert "Deleting ANY existing content" not in tpl
+        assert "Deleting entire sections, paragraphs, or code blocks" in tpl
+
+    def test_no_delete_rule_mentions_consistency_exception(self):
+        tpl = self._template()
+        # The narrowing must explicitly call out the Consistency carve-out
+        # so the LLM doesn't read the narrow rule as still blocking token edits.
+        assert "Consistency suggestions are explicitly permitted" in tpl
+
+    def test_strict_constraints_require_consistency_application(self):
+        tpl = self._template()
+        # Positive imperative: Consistency suggestions must be applied,
+        # not just allowed. This is what flips the LLM from "leave alone"
+        # to "actually edit".
+        assert "REQUIRED: Apply every Consistency suggestion" in tpl

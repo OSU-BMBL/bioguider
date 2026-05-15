@@ -199,10 +199,18 @@ def inject_errors_at_level(
     original_content: str,
     error_count: int,
     output_dir: str,
-    file_basename: str
+    file_basename: str,
+    file_type: str = "",
 ) -> Dict[str, Any]:
     """
     Inject errors into content at a specific level.
+
+    ``file_type`` is the extension (".md", ".rmd", ".rst", ...). It is
+    forwarded to ``LLMErrorInjector.inject`` so file-type-gated categories
+    (code_func_name, cli_flag_typo, …) fire correctly; default ``""`` keeps
+    legacy Rmd callers unchanged. The corrupted-file extension is also
+    derived from ``file_type`` (falls back to ``.Rmd`` when unset to preserve
+    the historical filename pattern used by Seurat callers).
 
     Returns dict with corrupted content and manifest.
     """
@@ -211,11 +219,14 @@ def inject_errors_at_level(
     corrupted, manifest = injector.inject(
         original_content,
         min_per_category=error_count,
-        max_words=50000  # Don't limit words for tutorials
+        max_words=50000,  # Don't limit words for tutorials
+        file_type=file_type,
     )
 
+    out_ext = file_type.lstrip(".") if file_type else "Rmd"
+
     # Save corrupted file
-    corrupted_path = os.path.join(output_dir, f"{file_basename}.level_{error_count}.corrupted.Rmd")
+    corrupted_path = os.path.join(output_dir, f"{file_basename}.level_{error_count}.corrupted.{out_ext}")
     write_file(corrupted_path, corrupted)
 
     # Save manifest
@@ -377,6 +388,7 @@ def fix_with_model(
     error_count: int,
     prompt_name: str = "bioguider",
     model_name: str = "gpt-4o",
+    file_type: str = ".Rmd",
 ) -> Tuple[str, Dict[str, int]]:
     """
     Fix corrupted content using specified model and prompt combination.
@@ -390,11 +402,16 @@ def fix_with_model(
         error_count: Error level being tested
         prompt_name: Name of prompt to use ("bioguider", "simple", "gpt_basic", etc.)
         model_name: Name of model ("gpt-4o", "qwen3_30b", etc.)
+        file_type: Extension for the saved ``.fixed`` file (e.g. ``".Rmd"``,
+            ``".md"``). Defaults to ``.Rmd`` so existing Seurat benchmarks
+            keep their historical filenames. Markdown-oriented benchmarks
+            (e.g. pharokka) should pass ``".md"``.
 
     Returns:
         (fixed_content, token_usage) where token_usage is a dict with keys
         prompt_tokens, completion_tokens, total_tokens (all int, default 0).
     """
+    ext = file_type if file_type.startswith(".") else f".{file_type}"
     model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
     model_id = model_config.get("model", model_name)
     model_type = model_config.get("type", "litellm")
@@ -466,7 +483,10 @@ def fix_with_model(
         fixed_content = corrupted_content
 
     # Save fixed file with model and prompt name in filename
-    fixed_path = os.path.join(output_dir, f"{file_basename}.level_{error_count}.{model_name}_{prompt_name}.fixed.Rmd")
+    fixed_path = os.path.join(
+        output_dir,
+        f"{file_basename}.level_{error_count}.{model_name}_{prompt_name}.fixed{ext}",
+    )
     write_file(fixed_path, fixed_content)
 
     return fixed_content, token_usage

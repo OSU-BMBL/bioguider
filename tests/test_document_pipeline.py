@@ -14,6 +14,7 @@ from bioguider.generation.document_pipeline import (
     DocumentPipeline,
     _build_merged_report,
     _run_evaluation,
+    _serialise_eval_results,
 )
 
 
@@ -40,7 +41,9 @@ def _make_tutorial_result(errors=None, readability=None, setup=None,
 
 
 def _make_userguide_result(errors=None, readability=None,
-                            context=None, error_handling=None):
+                            context=None, error_handling=None,
+                            consistency_development=None,
+                            consistency_evaluation=...):
     ug = MagicMock()
     ug.readability_errors_found = errors or []
     ug.readability_suggestions = readability or []
@@ -48,6 +51,23 @@ def _make_userguide_result(errors=None, readability=None,
     ug.error_handling_suggestions = error_handling or []
     result = MagicMock()
     result.user_guide_evaluation = ug
+    if consistency_evaluation is ...:
+        ce = MagicMock()
+        ce.development = consistency_development or []
+        result.consistency_evaluation = ce
+    else:
+        result.consistency_evaluation = consistency_evaluation
+    return result
+
+
+def _attach_consistency(result, development=None, *, none=False):
+    """Attach a ConsistencyEvaluationResult-shaped mock to *result*."""
+    if none:
+        result.consistency_evaluation = None
+        return result
+    ce = MagicMock()
+    ce.development = development or []
+    result.consistency_evaluation = ce
     return result
 
 
@@ -447,3 +467,243 @@ class TestEvaluateAndRefineDocumentMocked:
             )
 
         assert refined == doc_content
+
+
+# ---------------------------------------------------------------------------
+# _serialise_eval_results — direct
+# ---------------------------------------------------------------------------
+
+
+class _PydanticLike:
+    """Stub mirroring the pydantic-v2 ``model_dump`` surface used by the helper."""
+    def __init__(self, payload):
+        self._payload = payload
+
+    def model_dump(self):
+        return dict(self._payload)
+
+
+class _PydanticRaises:
+    """Stub whose ``model_dump`` raises — exercises the fallback branch."""
+    def model_dump(self):
+        raise RuntimeError("boom")
+
+
+class TestBuildMergedReportConsistency:
+    """``consistency_evaluation.development`` must flow into the merged
+    report as ``"consistency"`` suggestions — otherwise the consistency
+    task's findings (CLI/code inconsistencies, mismatched names) never
+    reach the generator."""
+
+    def test_userguide_consistency_development_emitted(self):
+        result = _make_userguide_result(
+            readability=["clarify intro"],
+            consistency_development=[
+                "Documentation passes --cores to pharokka_multiplotter.py, "
+                "but the parser does not define this option.",
+                "Function name `Plotr` referenced in prose; actual name is `Plotter`.",
+            ],
+        )
+        report = _build_merged_report(
+            {"doc.md": result}, "doc.md", EvaluationTypeEnum.USERGUIDE
+        )
+        consistency_items = [s for s in report["suggestions"] if s["category"] == "consistency"]
+        assert len(consistency_items) == 2
+        joined = " ".join(s["content_guidance"] for s in consistency_items)
+        assert "--cores" in joined
+        assert "Plotr" in joined
+        # Existing categories still flow through.
+        assert any(s["category"] == "readability" for s in report["suggestions"])
+
+    def test_tutorial_consistency_development_emitted(self):
+        result = _make_tutorial_result(readability=["clarify intro"])
+        _attach_consistency(result, development=["docstring mismatch: foo()"])
+        report = _build_merged_report(
+            {"doc.Rmd": result}, "doc.Rmd", EvaluationTypeEnum.TUTORIAL
+        )
+        consistency_items = [s for s in report["suggestions"] if s["category"] == "consistency"]
+        assert len(consistency_items) == 1
+        assert "foo()" in consistency_items[0]["content_guidance"]
+
+    def test_consistency_evaluation_none_is_ignored(self):
+        result = _make_userguide_result(
+            readability=["clarify intro"],
+            consistency_evaluation=None,
+        )
+        report = _build_merged_report(
+            {"doc.md": result}, "doc.md", EvaluationTypeEnum.USERGUIDE
+        )
+        assert not any(s["category"] == "consistency" for s in report["suggestions"])
+        # Non-consistency suggestions still come through.
+        assert any(s["category"] == "readability" for s in report["suggestions"])
+
+    def test_empty_development_emits_zero_consistency_suggestions(self):
+        result = _make_userguide_result(
+            readability=["clarify intro"],
+            consistency_development=[],
+        )
+        report = _build_merged_report(
+            {"doc.md": result}, "doc.md", EvaluationTypeEnum.USERGUIDE
+        )
+        assert not any(s["category"] == "consistency" for s in report["suggestions"])
+
+    def test_suggestion_categories_filter_keeps_only_consistency(self):
+        """When the caller restricts to ``["consistency"]`` only the
+        consistency items survive — readability/error_handling/etc. drop."""
+        result = _make_userguide_result(
+            readability=["clarify intro"],
+            error_handling=["add try/except"],
+            consistency_development=["undefined --cores flag"],
+        )
+        report = _build_merged_report(
+            {"doc.md": result},
+            "doc.md",
+            EvaluationTypeEnum.USERGUIDE,
+            suggestion_categories=["consistency"],
+        )
+        cats = {s["category"] for s in report["suggestions"]}
+        assert cats == {"consistency"}
+        assert report["suggestions"][0]["content_guidance"] == "undefined --cores flag"
+
+    def test_consistency_suggestion_numbers_continue_sequence(self):
+        """Suggestion numbers must remain a contiguous sequence across
+        category-source boundaries (1, 2, 3, … not 1, 2, 1)."""
+        result = _make_userguide_result(
+            readability=["a", "b"],
+            consistency_development=["c", "d"],
+        )
+        report = _build_merged_report(
+            {"doc.md": result}, "doc.md", EvaluationTypeEnum.USERGUIDE
+        )
+        nums = [s["suggestion_number"] for s in report["suggestions"]]
+        assert nums == list(range(1, len(nums) + 1))
+
+    def test_falsy_development_items_skipped(self):
+        """``None``/``""`` entries in development should not become suggestions."""
+        result = _make_userguide_result(
+            consistency_development=["real finding", "", None, "another finding"],
+        )
+        report = _build_merged_report(
+            {"doc.md": result}, "doc.md", EvaluationTypeEnum.USERGUIDE
+        )
+        consistency_items = [s for s in report["suggestions"] if s["category"] == "consistency"]
+        assert len(consistency_items) == 2
+
+
+class TestSerialiseEvalResults:
+    def test_none_returns_empty_dict(self):
+        assert _serialise_eval_results(None) == {}
+
+    def test_empty_returns_empty_dict(self):
+        assert _serialise_eval_results({}) == {}
+
+    def test_pydantic_value_is_dumped(self):
+        v = _PydanticLike({"score": 87, "assessment": "ok"})
+        out = _serialise_eval_results({"foo.md": v})
+        assert out == {"foo.md": {"score": 87, "assessment": "ok"}}
+
+    def test_plain_value_passed_through(self):
+        out = _serialise_eval_results({"foo.md": {"already": "dict"}})
+        assert out == {"foo.md": {"already": "dict"}}
+
+    def test_falls_back_when_model_dump_raises(self):
+        v = _PydanticRaises()
+        out = _serialise_eval_results({"foo.md": v})
+        # Helper must not bubble the exception — it returns the object,
+        # leaving the eventual json.dump's default=str to coerce it.
+        assert out["foo.md"] is v
+
+
+# ---------------------------------------------------------------------------
+# evaluate_and_refine_document — eval_report_output_path
+# ---------------------------------------------------------------------------
+
+
+def _make_tutorial_result_with_dump(dump_payload, **kwargs):
+    """``_make_tutorial_result`` but with ``model_dump`` returning *dump_payload*.
+
+    The MagicMock-based stub supports both:
+      - attribute access used by ``_build_merged_report``
+        (``result.tutorial_evaluation.readability_errors_found``);
+      - ``result.model_dump()`` used by ``_serialise_eval_results``.
+    """
+    result = _make_tutorial_result(**kwargs)
+    result.model_dump.return_value = dump_payload
+    return result
+
+
+class TestEvaluateAndRefineEvalReportOutput:
+    def _run(self, tmp_path, *, eval_report_output_path, report_output_path=None):
+        doc_content = "# doc\n"
+        (tmp_path / "doc.Rmd").write_text(doc_content)
+
+        stub = _make_tutorial_result_with_dump(
+            dump_payload={
+                "tutorial_evaluation": {
+                    "readability_errors_found": ["typo: foo -> bar"],
+                    "readability_suggestions": [],
+                },
+            },
+            errors=["typo: foo -> bar"],
+        )
+        eval_results = {"doc.Rmd": stub}
+
+        pipeline = DocumentPipeline(str(tmp_path))
+        with patch(
+            "bioguider.generation.document_pipeline._run_evaluation",
+            return_value=(eval_results, ["doc.Rmd"]),
+        ), patch(
+            "bioguider.generation.document_pipeline.LLMContentGenerator"
+        ) as MockGen:
+            mock_gen_instance = MagicMock()
+            mock_gen_instance.generate_full_document.return_value = ("refined", {})
+            MockGen.return_value = mock_gen_instance
+
+            return pipeline.evaluate_and_refine_document(
+                llm=MagicMock(),
+                doc_repo_path=str(tmp_path),
+                doc_path="doc.Rmd",
+                eval_type=EvaluationTypeEnum.TUTORIAL,
+                report_output_path=report_output_path,
+                eval_report_output_path=eval_report_output_path,
+            )
+
+    def test_writes_json_when_path_given(self, tmp_path):
+        eval_path = tmp_path / "out" / "doc.pipeline_eval.json"
+        self._run(tmp_path, eval_report_output_path=str(eval_path))
+        assert eval_path.exists(), "eval_report_output_path file was not written"
+        data = json.loads(eval_path.read_text(encoding="utf-8"))
+        assert list(data.keys()) == ["doc.Rmd"]
+        assert data["doc.Rmd"]["tutorial_evaluation"]["readability_errors_found"] == [
+            "typo: foo -> bar"
+        ]
+
+    def test_does_not_write_when_path_none(self, tmp_path):
+        sentinel = tmp_path / "no_such_file.json"
+        self._run(tmp_path, eval_report_output_path=None)
+        assert not sentinel.exists()
+
+    def test_creates_parent_directory(self, tmp_path):
+        nested = tmp_path / "a" / "b" / "c" / "eval.json"
+        self._run(tmp_path, eval_report_output_path=str(nested))
+        assert nested.exists()
+
+    def test_report_and_eval_paths_are_independent(self, tmp_path):
+        """Two distinct outputs: the merged generator-input report and the raw
+        evaluation. The fields differ in shape and neither overwrites the other."""
+        report_path = tmp_path / "merged.json"
+        eval_path = tmp_path / "eval.json"
+        self._run(
+            tmp_path,
+            eval_report_output_path=str(eval_path),
+            report_output_path=str(report_path),
+        )
+        merged = json.loads(report_path.read_text(encoding="utf-8"))
+        raw = json.loads(eval_path.read_text(encoding="utf-8"))
+        # Merged report has the generator-facing shape.
+        assert {"total_suggestions", "integration_instruction", "suggestions"} <= set(merged.keys())
+        # Raw eval is keyed by doc path.
+        assert list(raw.keys()) == ["doc.Rmd"]
+        # Different shapes.
+        assert "tutorial_evaluation" not in merged
+        assert "suggestions" not in raw["doc.Rmd"]

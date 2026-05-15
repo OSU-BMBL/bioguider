@@ -537,10 +537,12 @@ class BenchmarkEvaluator:
             category = err.get("category", "unknown")
             orig = err.get("original_snippet", "")
             mut = err.get("mutated_snippet", "")
-            
+            mutated_token = err.get("mutated_token", "")
+
             # Determine if error was fixed
             is_fixed, status = self._check_error_fixed(
-                category, orig, mut, baseline, corrupted, revised
+                category, orig, mut, baseline, corrupted, revised,
+                mutated_token=mutated_token,
             )
             
             error_metrics.append(ErrorMetrics(
@@ -583,11 +585,19 @@ class BenchmarkEvaluator:
         mut: str,
         baseline: str,
         corrupted: str,
-        revised: str
+        revised: str,
+        mutated_token: str = "",
     ) -> Tuple[bool, str]:
         """
         Check if a specific error was fixed.
-        
+
+        ``mutated_token`` is the optional token the injector recorded as the
+        specific substring it introduced/changed (e.g. ``"--cores"`` for
+        cli_unknown_flag). When provided for CLI categories, the fix check
+        uses a whitespace-anchored token search instead of whole-line
+        substring matching — this is robust to incidental edits the LLM may
+        make to the surrounding line (e.g. collapsing a double space).
+
         Returns:
             Tuple of (is_fixed, status)
         """
@@ -677,12 +687,27 @@ class BenchmarkEvaluator:
             is_fixed = var_after < var_before
             return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
         
+        # CLI/Config categories injected by the new ``_inject_cli_consistency``
+        # path: the manifest carries the specific token that was introduced
+        # or changed by the mutation, so we can ask the precise question
+        # "is that token still present, as a standalone whitespace-bounded
+        # match, in the revised document?" — robust to incidental
+        # whitespace/quoting edits on the same line.  When ``mutated_token``
+        # is empty (legacy manifests), fall back to whole-line matching.
+        elif category in {"cli_flag_typo", "cli_unknown_flag", "cli_program_rename"}:
+            if mutated_token:
+                pattern = re.compile(rf"(?<!\S){re.escape(mutated_token)}(?!\S)")
+                is_fixed = pattern.search(revised) is None
+            else:
+                is_fixed = bool(mut) and mut not in revised
+            return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
+
         # Biology-specific and CLI/CONFIG categories
         elif category in {
             "gene_symbol_case", "species_swap", "ref_genome_mismatch", "modality_confusion",
             "normalization_error", "umi_vs_read", "batch_effect", "qc_threshold", "file_format",
             "strandedness", "coordinates", "units_scale", "sample_type", "contamination",
-            "param_name", "default_value", "path_hint"
+            "param_name", "default_value", "path_hint",
         }:
             is_fixed = mut and mut not in revised
             return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"

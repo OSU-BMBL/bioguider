@@ -54,3 +54,11 @@ def test_output_dir():
     output_dir = os.path.join("outputs/single_file_stress", f"run_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
+
+@pytest.fixture
+def test_pipeline_output_dir():
+    """Create output directory for test."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = os.path.join("outputs/pipeline_stress", f"run_{timestamp}")
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
