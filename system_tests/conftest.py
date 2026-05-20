@@ -238,7 +238,7 @@ def plan_actions():
 
 @pytest.fixture(scope="module")
 def root_path():
-    return "/home/ubuntu/projects/github" # "/bmbl_data/shaohong/projects/github"
+    return "/bmbl_data/shaohong/projects/github" # "/home/ubuntu/projects/github" # 
 
 @pytest.fixture(scope="module")
 def data_folder():

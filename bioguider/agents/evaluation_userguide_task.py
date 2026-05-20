@@ -38,6 +38,13 @@ class UserGuideEvaluationResult(BaseModel):
     context_and_purpose_suggestions: list[str]=Field(description="A list of string values, suggestions to improve context and purpose if necessary")
     error_handling_score: int=Field(description="A number between 0 and 100 representing the error handling quality rating.")
     error_handling_suggestions: list[str]=Field(description="A list of string values, suggestions to improve error handling if necessary")
+    usage_examples_score: int=Field(description="A number between 0 and 100 representing the usage examples quality rating.")
+    usage_examples_suggestions: list[str]=Field(description="A list of string values, suggestions to improve usage examples if necessary")
+    arguments_and_clarity_score: int=Field(description="A number between 0 and 100 representing the arguments and clarity quality rating.")
+    arguments_and_clarity_suggestions: list[str]=Field(description="A list of string values, suggestions to improve arguments and clarity if necessary")
+    return_value_and_clarity_score: int=Field(description="A number between 0 and 100 representing the return value and clarity quality rating.")
+    return_value_and_clarity_suggestions: list[str]=Field(description="A list of string values, suggestions to improve return value and clarity if necessary")
+    
 
 class IndividualUserGuideEvaluationResult(BaseModel):
     user_guide_evaluation: UserGuideEvaluationResult | None=Field(description="The evaluation result of the user guide")
@@ -131,8 +138,11 @@ class EvaluationUserGuideTask(EvaluationTask):
                 res.readability_score, 
                 res.context_and_purpose_score, 
                 res.error_handling_score, 
+                res.usage_examples_score,
+                res.arguments_and_clarity_score,
+                res.return_value_and_clarity_score,
             ],
-            [2, 1, 1, 1],
+            [2, 1, 1, 1, 1, 1, 1],
         )
         
         return IndividualUserGuideEvaluationResult(
