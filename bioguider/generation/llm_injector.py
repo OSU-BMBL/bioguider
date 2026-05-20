@@ -54,7 +54,7 @@ CLI/CONFIG ERROR CATEGORIES (inject all)
 - param_name: slightly misspell a CLI flag or config key (e.g., `--min-cell` → `--min-cells`)
 - default_value: state a plausible but incorrect default value
 - path_hint: introduce a subtle path typo (e.g., `data/filtrd`)
-- cli_flag_typo: inside a fenced code block, truncate or transpose a long CLI flag on a shell-style invocation line so the parser would not define it (e.g., `python train.py --epochs 20` → `python train.py --epoch 20`). Inject ONLY inside fenced code blocks; never break fence delimiters.
+- cli_flag_typo: permute (transpose two adjacent characters in) a long CLI flag so the parser would not define it (e.g., `--size` → `--szie`, `--epochs` → `--epohcs`). When the flag appears in multiple places (fenced blocks, inline `` `…` `` spans, help/usage stanzas, prose option references), mutate EVERY occurrence consistently so the document stays self-consistent in its wrongness. Do not break fence delimiters or inline-code backticks.
 - cli_unknown_flag: inside a fenced code block, append a plausible-looking bogus long flag that the program's parser does not define (e.g., `python train.py --epochs 20` → `python train.py --epochs 20 --workers 4`). Inject ONLY inside fenced code blocks; never break fence delimiters.
 - cli_program_rename: inside a fenced code block, mutate the script-name token of a shell-style invocation so the file does not exist in the repo (e.g., `python scripts/train.py ...` → `python scripts/trian.py ...`). Inject ONLY inside fenced code blocks; do not modify the flags or values; never break fence delimiters.
 
@@ -518,16 +518,42 @@ class LLMErrorInjector:
         return None
 
     @staticmethod
-    def _truncate_long_flag(token: str) -> str:
-        """Drop the last char of a long flag, preserving an optional ``=value`` suffix."""
+    def _permute_long_flag(token: str) -> str:
+        """Transpose two adjacent characters inside a long flag's stem.
+
+        Preserves the leading ``--`` and an optional ``=value`` suffix, e.g.
+        ``--size`` → ``--szie``, ``--epochs=20`` → ``--epohcs=20``.  Returns
+        the original token if the stem is too short or has no transposable
+        adjacent pair.
+        """
         if "=" in token:
             flag, _, value = token.partition("=")
-            if len(flag) <= 4:
-                return token
-            return f"{flag[:-1]}={value}"
-        if len(token) <= 4:
+            suffix = f"={value}"
+        else:
+            flag = token
+            suffix = ""
+        if not flag.startswith("--") or len(flag) <= 4:
             return token
-        return token[:-1]
+        stem = flag[2:]
+        mutated_stem = LLMErrorInjector._transpose_name(stem)
+        if mutated_stem == stem:
+            return token
+        return f"--{mutated_stem}{suffix}"
+
+    @staticmethod
+    def _replace_flag_globally(text: str, orig_flag: str, mut_flag: str) -> Tuple[str, int]:
+        """Replace every standalone occurrence of ``orig_flag`` with ``mut_flag``.
+
+        Whitespace-anchored on both sides via negative lookarounds on
+        ``[\\w-]`` so the match doesn't extend into longer flag names
+        (``--label`` is NOT matched inside ``--label-extra`` or ``--label_size``)
+        but still matches the flag when it appears bare, in usage stanzas
+        ``[--flag]``, with ``=value``, or inside backticks.  Returns
+        ``(new_text, n_replacements)``.
+        """
+        pattern = re.compile(rf"(?<![\w-]){re.escape(orig_flag)}(?![\w-])")
+        new_text, n = pattern.subn(mut_flag, text)
+        return new_text, n
 
     @staticmethod
     def _pick_program_token(tokens: List[str]) -> "Tuple[int, str] | None":
@@ -1143,6 +1169,10 @@ class LLMErrorInjector:
             return self._replace_in_inline_code(text, line, mut_line)
 
         # ── cli_flag_typo ────────────────────────────────────────────────
+        # Pick a long flag from one real CLI invocation line, then permute its
+        # stem and rewrite EVERY occurrence of that flag throughout the doc —
+        # fenced blocks, inline-code spans, usage stanzas, prose mentions —
+        # so the document stays internally consistent in its wrongness.
         injected = False
         for line, source in candidates:
             if line in used_lines or line in used_snippets:
@@ -1152,29 +1182,36 @@ class LLMErrorInjector:
             if not picked:
                 continue
             _idx, orig_token = picked
-            mut_token = self._truncate_long_flag(orig_token)
+            mut_token = self._permute_long_flag(orig_token)
             if mut_token == orig_token:
                 continue
-            mut_line = self._replace_token_in_line(line, orig_token, mut_token)
-            if mut_line is None:
+            # Strip any "=value" suffix — we replace just the flag stem so
+            # both ``--foo bar`` and ``--foo=bar`` forms get caught.
+            orig_flag = orig_token.split("=", 1)[0]
+            mut_flag = mut_token.split("=", 1)[0]
+            new_text, n_replaced = self._replace_flag_globally(text, orig_flag, mut_flag)
+            if n_replaced == 0 or new_text == text:
                 continue
-            new_text = _apply(line, mut_line, source, fence_spans)
-            if new_text != text:
-                errors.append({
-                    "id": f"e_cli_flag_typo_{len(errors)}",
-                    "category": "cli_flag_typo",
-                    "original_snippet": line,
-                    "mutated_snippet": mut_line,
-                    "mutated_token": mut_token,
-                    "rationale": f"truncated long flag {orig_token} -> {mut_token}",
-                })
-                used_lines.add(line)
-                used_lines.add(mut_line)
-                text = new_text
-                fence_spans = self._fence_spans(text)
-                candidates = self._cli_candidates(text)
-                injected = True
-                break
+            # mutated_snippet records the picked-from line after the global
+            # rewrite — the canonical worked example for diagnostics.
+            mut_line = self._replace_token_in_line(line, orig_token, mut_token) or line
+            errors.append({
+                "id": f"e_cli_flag_typo_{len(errors)}",
+                "category": "cli_flag_typo",
+                "original_snippet": line,
+                "mutated_snippet": mut_line,
+                "original_token": orig_flag,
+                "mutated_token": mut_flag,
+                "occurrences_changed": n_replaced,
+                "rationale": f"permuted long flag {orig_flag} -> {mut_flag} ({n_replaced} occurrences)",
+            })
+            used_lines.add(line)
+            used_lines.add(mut_line)
+            text = new_text
+            fence_spans = self._fence_spans(text)
+            candidates = self._cli_candidates(text)
+            injected = True
+            break
         if not injected:
             self._record_skip(data, "cli_flag_typo", "no_long_flag")
 
@@ -2126,33 +2163,66 @@ class LLMErrorInjector:
                     break
 
         # ── cli_flag_typo supplements (prose .md/.rst/.txt files only) ────────
+        # Pick a long flag from one CLI invocation, permute its stem, then
+        # globally rewrite every occurrence (fenced + inline + usage stanzas
+        # + prose mentions) so the doc stays internally consistent.
+        #
+        # Three invariants this loop must hold:
+        #   1) Skip flags that are bogus (members of ``_CLI_BOGUS_FLAGS`` — they
+        #      were injected by cli_unknown_flag, not real CLI options).
+        #   2) Skip flags that any earlier injection step already touched, in
+        #      either direction (original or mutated form).  Otherwise the
+        #      picker will pick the just-mutated form on the next iteration
+        #      and ``_permute_long_flag`` will helpfully transpose it BACK to
+        #      the original, silently reversing the prior mutation.
+        #   3) Apply ``corrupted = new_corrupted`` only after ``add_error``
+        #      succeeds — applying it earlier means an entry that fails the
+        #      duplicate-snippet check still mutates the document silently.
         if ft in _PROSE_CODE_EXTENSIONS:
+            # Seed the "do-not-touch" set:
+            off_limits: Set[str] = {f for f, _ in _CLI_BOGUS_FLAGS}
+            for e in errors:
+                if e.get("category") in ("cli_flag_typo", "cli_unknown_flag"):
+                    for k in ("original_token", "mutated_token"):
+                        v = e.get(k)
+                        if v:
+                            off_limits.add(v)
             cft_attempts = 0
             while need("cli_flag_typo") > 0 and cft_attempts < min_per_category * 2:
                 cft_attempts += 1
                 found = False
-                for line, source in self._cli_candidates(corrupted):
-                    if line in corrupted_snippets:
-                        continue
+                for line, _source in self._cli_candidates(corrupted):
                     _prefix, tokens = self._split_cli_line(line)
                     picked = self._pick_long_flag(tokens)
                     if not picked:
                         continue
                     _idx, orig_token = picked
-                    mut_token = self._truncate_long_flag(orig_token)
+                    orig_flag = orig_token.split("=", 1)[0]
+                    if orig_flag in off_limits:
+                        continue
+                    mut_token = self._permute_long_flag(orig_token)
                     if mut_token == orig_token:
                         continue
-                    mut_line = self._replace_token_in_line(line, orig_token, mut_token)
-                    if mut_line is None:
+                    mut_flag = mut_token.split("=", 1)[0]
+                    if mut_flag in off_limits:
                         continue
-                    new_corrupted = cli_replace(corrupted, line, mut_line, source)
-                    if new_corrupted != corrupted:
+                    new_corrupted, n_replaced = self._replace_flag_globally(
+                        corrupted, orig_flag, mut_flag
+                    )
+                    if n_replaced == 0 or new_corrupted == corrupted:
+                        continue
+                    mut_line = self._replace_token_in_line(line, orig_token, mut_token) or line
+                    if add_error("cli_flag_typo", line, mut_line,
+                                 f"permuted long flag {orig_flag} -> {mut_flag} ({n_replaced} occurrences)",
+                                 mutated_token=mut_flag):
                         corrupted = new_corrupted
-                        if add_error("cli_flag_typo", line, mut_line,
-                                     f"truncated long flag {orig_token} -> {mut_token}",
-                                     mutated_token=mut_token):
-                            found = True
-                            break
+                        fence_spans = self._fence_spans(corrupted)
+                        errors[-1]["original_token"] = orig_flag
+                        errors[-1]["occurrences_changed"] = n_replaced
+                        off_limits.add(orig_flag)
+                        off_limits.add(mut_flag)
+                        found = True
+                        break
                 if not found:
                     break
 

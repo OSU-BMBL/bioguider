@@ -206,10 +206,14 @@ class TestInlineCodeMutation:
         result, errors = inj._inject_cli_consistency(text, [], {}, file_type=".md")
         typo = [e for e in errors if e["category"] == "cli_flag_typo"]
         assert typo, errors
-        # Truncated flag (`--label_ids` → `--label_id`).
-        assert typo[0]["mutated_token"] == "--label_id"
+        # Permuted flag (`--label_ids` → some transposition of the stem).
+        mut_token = typo[0]["mutated_token"]
+        assert mut_token.startswith("--") and mut_token != "--label_ids"
+        assert sorted(mut_token) == sorted("--label_ids")
         # The mutated span still lives inside the inline-code backticks.
-        assert "`pharokka_plotter.py -i input.fasta --label_id labels.txt`" in result
+        assert f"`pharokka_plotter.py -i input.fasta {mut_token} labels.txt`" in result
+        # Original flag must be gone everywhere.
+        assert "--label_ids" not in result
         # Surrounding prose untouched.
         assert "Then run:" in result and "to generate the plot." in result
 
@@ -251,41 +255,63 @@ class TestInlineCodeMutation:
 
 
 class TestPharokkaHelpBlockUntouched:
-    def test_help_block_lines_are_not_mutated(self):
-        """The whole argparse help stanza should be left alone; only the real
-        invocation in the second fence should be mutated."""
+    def test_help_block_is_never_a_picking_target(self):
+        """The argparse help stanza must never be the *source* of a picked
+        flag/program/bogus-flag injection — picks come from real invocation
+        lines only.  (The mutated flag may still ripple into help-block
+        lines via global rewriting; see
+        ``test_picked_flag_propagates_into_help_block`` for that side.)"""
+        inj = _make_injector()
+        errors: list = []
+        data: dict = {}
+        _result, errors = inj._inject_cli_consistency(
+            PHAROKKA_USAGE_DOC, errors, data, file_type=".md"
+        )
+        for e in errors:
+            assert "python scripts/pharokka_plotter.py" in e["original_snippet"], (
+                f"injection targeted help-block line: {e!r}"
+            )
+
+    def test_picked_flag_propagates_into_help_block(self):
+        """cli_flag_typo is now document-wide: when the injector picks
+        ``--infile`` (or any other flag) from the invocation, every other
+        mention of that flag — including the help stanza — gets rewritten so
+        the doc is internally consistent in its wrongness."""
         inj = _make_injector()
         errors: list = []
         data: dict = {}
         result, errors = inj._inject_cli_consistency(
             PHAROKKA_USAGE_DOC, errors, data, file_type=".md"
         )
-
-        # Every help-block line from the input must still appear verbatim.
-        help_lines = [
-            "usage: pharokka_plotter.py [-h] -i INFILE [-n PLOT_NAME] [-o OUTDIR] [--gff GFF]",
-            "                           [--label_hypotheticals] [--remove_other_features_labels]",
-            "options:",
-            "  -h, --help            show this help message and exit",
-            "  -i INFILE, --infile INFILE",
-            "                        Input genome file in FASTA format.",
-            "  --gff GFF             Pharokka gff.",
-        ]
-        for hl in help_lines:
-            assert hl in result, f"help-block line was mutated: {hl!r}"
-
-        # Errors should target only the real-invocation line.
-        for e in errors:
-            assert "python scripts/pharokka_plotter.py" in e["original_snippet"], (
-                f"injection targeted help-block line: {e!r}"
-            )
+        typo = [e for e in errors if e["category"] == "cli_flag_typo"]
+        assert typo, errors
+        e = typo[0]
+        mut_flag = e["mutated_token"]
+        orig_flag = e["original_token"]
+        # Picked flag's original form must be wholly gone from the document.
+        import re as _re
+        leftover = _re.search(rf"(?<![\w-]){_re.escape(orig_flag)}(?![\w-])", result)
+        assert leftover is None, (
+            f"global rewrite missed an occurrence of {orig_flag!r}: ...{result[max(0,leftover.start()-20):leftover.end()+20]}..."
+            if leftover else ""
+        )
+        # The mutated flag should appear in MORE than one place if the
+        # original appeared in both the invocation and the help block.
+        # ``--infile`` appears twice in PHAROKKA_USAGE_DOC (help + invoke);
+        # other picks (``--gff``) likewise appear in both.
+        assert result.count(mut_flag) >= 2, (
+            f"expected >=2 occurrences of {mut_flag} after global rewrite, "
+            f"got {result.count(mut_flag)}"
+        )
+        # occurrences_changed should reflect the same count.
+        assert e.get("occurrences_changed", 0) >= 2
 
 
 class TestMutatedTokenRecorded:
     """The manifest must carry the precise token introduced/changed by each
     CLI mutation, so the evaluator can do a token-anchored fix check."""
 
-    def test_cli_flag_typo_records_truncated_flag(self):
+    def test_cli_flag_typo_records_permuted_flag(self):
         text = (
             "```bash\n"
             "python scripts/train.py --epochs 20\n"
@@ -295,8 +321,11 @@ class TestMutatedTokenRecorded:
         _result, errors = inj._inject_cli_consistency(text, [], {}, file_type=".md")
         typo = [e for e in errors if e["category"] == "cli_flag_typo"]
         assert typo
-        # Truncated form of --epochs, with no surrounding whitespace.
-        assert typo[0]["mutated_token"] == "--epoch"
+        # Permuted form of --epochs (two adjacent stem chars transposed),
+        # same length as the original — no characters dropped.
+        token = typo[0]["mutated_token"]
+        assert token.startswith("--") and len(token) == len("--epochs")
+        assert token != "--epochs"
 
     def test_cli_unknown_flag_records_bogus_flag(self):
         text = (
@@ -350,11 +379,14 @@ class TestWhitespacePreservedInMutation:
         typo = [e for e in errors if e["category"] == "cli_flag_typo"]
         assert typo, errors
         mut_line = typo[0]["mutated_snippet"]
-        # The "   --epochs " and "   --lr 0.001" alignment columns stay.
+        mut_token = typo[0]["mutated_token"]
+        # The "   --epochs " and "   --lr 0.001" alignment columns stay —
+        # permutation preserves token length so columns line up byte-for-byte.
         assert "scripts/train.py   " in mut_line
         assert "   --lr 0.001" in mut_line
-        # One char dropped from --epochs.
-        assert "--epoch " in mut_line and "--epochs " not in mut_line
+        # The flag was permuted (same length, different ordering).
+        assert mut_token in mut_line and "--epochs" not in mut_line
+        assert len(mut_token) == len("--epochs")
 
     def test_cli_program_rename_preserves_surrounding_alignment(self):
         # Three CLI fences — cli_flag_typo and cli_unknown_flag will each
@@ -399,12 +431,38 @@ class TestPickHelpers:
         idx, t = inj._pick_long_flag(["python", "train.py", "--epochs=20"])
         assert t == "--epochs=20"
 
-    def test_truncate_long_flag_with_and_without_equals(self):
+    def test_permute_long_flag_with_and_without_equals(self):
         inj = _make_injector()
-        assert inj._truncate_long_flag("--epochs") == "--epoch"
-        assert inj._truncate_long_flag("--epochs=20") == "--epoch=20"
-        # Too short to safely truncate.
-        assert inj._truncate_long_flag("--ab") == "--ab"
+        # Permuted form: same length, leading "--" intact, stem reordered.
+        out = inj._permute_long_flag("--epochs")
+        assert out.startswith("--") and out != "--epochs"
+        assert len(out) == len("--epochs")
+        assert sorted(out) == sorted("--epochs")
+        # ``=value`` suffix is preserved unchanged.
+        out_eq = inj._permute_long_flag("--epochs=20")
+        assert out_eq.endswith("=20")
+        assert out_eq.split("=", 1)[0] == out
+        # Too short to safely transpose — returns the original.
+        assert inj._permute_long_flag("--ab") == "--ab"
+
+    def test_replace_flag_globally_hits_all_standalone_occurrences(self):
+        inj = _make_injector()
+        text = (
+            "Use --foo on its own; in `--foo bar` inline; in `[--foo]` brackets; "
+            "and --foo=value with an equals."
+        )
+        out, n = inj._replace_flag_globally(text, "--foo", "--ofo")
+        assert n == 4, out
+        assert "--foo" not in out
+        assert out.count("--ofo") == 4
+
+    def test_replace_flag_globally_does_not_overshoot(self):
+        inj = _make_injector()
+        text = "use --foo here, but not --foo-bar, --foobar, or --foo_x"
+        out, n = inj._replace_flag_globally(text, "--foo", "--ofo")
+        # Only the standalone --foo is replaced.
+        assert n == 1
+        assert "--foo-bar" in out and "--foobar" in out and "--foo_x" in out
 
     def test_pick_program_token_recognises_script(self):
         inj = _make_injector()
@@ -492,17 +550,21 @@ class TestInjectCliConsistencyDirect:
         result, errors = inj._inject_cli_consistency(text, errors, data, file_type=file_type)
         return result, errors, data
 
-    def test_cli_flag_typo_truncates_long_flag(self):
+    def test_cli_flag_typo_permutes_long_flag(self):
         result, errors, _ = self._call(CLI_DOC_BASH)
         typo_errors = [e for e in errors if e["category"] == "cli_flag_typo"]
         assert typo_errors, errors
         e = typo_errors[0]
-        # The original line was the train command; the mutated line should have
-        # a truncated long flag (the first eligible long flag is --epochs).
+        # The original line was the train command; the picked flag is the
+        # first eligible long flag (--epochs).
         assert "--epochs" in e["original_snippet"]
-        assert "--epoch " in e["mutated_snippet"] or "--epoch" in e["mutated_snippet"]
+        mut_token = e["mutated_token"]
+        assert mut_token.startswith("--") and mut_token != "--epochs"
+        assert sorted(mut_token) == sorted("--epochs")  # same chars, reordered
         # The mutated line must appear in the resulting text.
         assert e["mutated_snippet"] in result
+        # Original flag must no longer appear anywhere (global rewrite).
+        assert "--epochs" not in result
 
     def test_cli_unknown_flag_appends_bogus_flag(self):
         result, errors, _ = self._call(CLI_DOC_BASH)
@@ -541,6 +603,53 @@ class TestInjectCliConsistencyDirect:
         typo = [e for e in errors if e["category"] == "cli_flag_typo"]
         assert typo, errors
         assert "--input" in typo[0]["original_snippet"]
+
+    def test_cli_flag_typo_rewrites_every_occurrence_globally(self):
+        """When the picked flag appears in multiple places — fenced block,
+        inline-code, prose mention — every occurrence must be rewritten so
+        the document is internally consistent in its wrongness."""
+        text = (
+            "# Tool\n\n"
+            "Pass `--annotations` to enable annotations.\n\n"
+            "```bash\n"
+            "python scripts/train.py --annotations metadata.tsv\n"
+            "```\n\n"
+            "You can also override via `train.py --annotations=other.tsv`.\n\n"
+            "See [the `--annotations` option] for details.\n"
+        )
+        result, errors, _ = self._call(text)
+        typo = [e for e in errors if e["category"] == "cli_flag_typo"]
+        assert typo, errors
+        e = typo[0]
+        assert e["original_token"] == "--annotations"
+        mut_flag = e["mutated_token"]
+        # All four original occurrences (prose mention, fenced invocation,
+        # ``=value`` form, bracketed mention) must be rewritten.
+        assert "--annotations" not in result
+        assert result.count(mut_flag) == 4
+        assert e["occurrences_changed"] == 4
+
+    def test_cli_flag_typo_does_not_overshoot_longer_flag_names(self):
+        """Replacing ``--label`` must not also rewrite ``--label-extra`` or
+        ``--label_size``: the token boundary must be flag-name aware."""
+        text = (
+            "```bash\n"
+            "python scripts/train.py --label data.tsv\n"
+            "```\n\n"
+            "Related: `--label-extra` and `--label_size` are different flags.\n"
+        )
+        # --label is only 7 chars (>4 so eligible), but the test bites only
+        # if --label is what the picker chose.  Run and inspect.
+        result, errors, _ = self._call(text)
+        typo = [e for e in errors if e["category"] == "cli_flag_typo"]
+        assert typo, errors
+        if typo[0]["original_token"] != "--label":
+            pytest.skip("picker chose a different flag in this fixture")
+        # The longer-named siblings must be untouched.
+        assert "--label-extra" in result
+        assert "--label_size" in result
+        # ``--label`` itself must be globally rewritten.
+        assert "--label " not in result and "--label\n" not in result
 
     def test_rmd_file_type_records_skips(self):
         _result, errors, data = self._call(CLI_DOC_BASH, file_type=".rmd")
@@ -582,3 +691,77 @@ class TestDeterministicInjectWithCli:
         assert cats & {"cli_flag_typo", "cli_unknown_flag", "cli_program_rename"}, data
         # Fences still intact byte-for-byte.
         assert corrupted.count("```") == CLI_DOC_MULTI.count("```")
+
+
+class TestCliFlagTypoManifestMatchesFile:
+    """Every cli_flag_typo manifest entry must correspond to a mutation that
+    actually persists in the corrupted document.  The earlier supplements loop
+    silently ping-pong'd back its own mutations (picking the post-mutated form
+    on the next iteration and ``_permute_long_flag``-ing it BACK to the
+    original) so the manifest counted phantom fixes.  This regression test
+    guards against that: for every recorded entry, the original flag must be
+    gone and the mutated flag must be present at the recorded occurrence count.
+    """
+
+    def _doc_with_many_flags(self) -> str:
+        # Multiple distinct long flags, each appearing several times across
+        # fenced blocks and inline-code spans, plus one CLI line per fence so
+        # the picker has enough material for many supplement iterations.
+        # NOTE: avoid ``--flag=value`` forms in prose — the ``param_name``
+        # supplement matches ``identifier=`` patterns and will happily mutate
+        # ``--annottaions=meta.tsv`` to ``--annottaion=meta.tsv``, which is a
+        # separate interaction from the cli_flag_typo behaviour we want to pin.
+        return (
+            "# Tool\n\n"
+            "Pass `--annotations` to enable annotation parsing.\n\n"
+            "```bash\n"
+            "python scripts/train.py --annotations data/meta.tsv\n"
+            "python scripts/train.py --annotations other.tsv\n"
+            "```\n\n"
+            "Also: `--label_hypotheticals` for label control.\n\n"
+            "```bash\n"
+            "python scripts/run.py --label_hypotheticals --truncate 15\n"
+            "```\n\n"
+            "Use `--truncate 30` for shorter output.\n\n"
+            "```bash\n"
+            "python scripts/analyze.py --label_size 24 --label_ids ids.txt\n"
+            "```\n"
+        )
+
+    def test_every_cli_flag_typo_mutation_lands_in_text(self):
+        inj = _make_injector()
+        text = self._doc_with_many_flags()
+        corrupted, manifest = inj.inject(text, min_per_category=10, file_type=".md")
+        typo_errors = [e for e in manifest["errors"] if e["category"] == "cli_flag_typo"]
+        assert typo_errors, manifest
+        import re as _re
+        for e in typo_errors:
+            ot = e["original_token"]
+            mt = e["mutated_token"]
+            n = e["occurrences_changed"]
+            ot_pat = _re.compile(rf"(?<![\w-]){_re.escape(ot)}(?![\w-])")
+            mt_pat = _re.compile(rf"(?<![\w-]){_re.escape(mt)}(?![\w-])")
+            assert len(ot_pat.findall(corrupted)) == 0, (
+                f"manifest says {ot!r} was rewritten {n} times, but it is still "
+                f"present in corrupted text — phantom mutation"
+            )
+            assert len(mt_pat.findall(corrupted)) >= n, (
+                f"manifest says {mt!r} should appear at least {n} times after "
+                f"global rewrite, but it appears {len(mt_pat.findall(corrupted))} times"
+            )
+
+    def test_supplement_loop_does_not_pick_bogus_flags(self):
+        """``--workers``/``--nproc``/``--threads``/``--cores`` are appended by
+        cli_unknown_flag; cli_flag_typo must not then permute one of them
+        (which would create entries that are unstable across iterations)."""
+        from bioguider.generation.llm_injector import _CLI_BOGUS_FLAGS
+        inj = _make_injector()
+        text = self._doc_with_many_flags()
+        _corrupted, manifest = inj.inject(text, min_per_category=10, file_type=".md")
+        bogus_names = {f for f, _ in _CLI_BOGUS_FLAGS}
+        for e in manifest["errors"]:
+            if e["category"] == "cli_flag_typo":
+                ot = e.get("original_token", "")
+                mt = e.get("mutated_token", "")
+                assert ot not in bogus_names, f"picked a bogus flag as orig: {e!r}"
+                assert mt not in bogus_names, f"mutated to a bogus flag: {e!r}"

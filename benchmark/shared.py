@@ -898,6 +898,30 @@ def save_results(results: List[StressLevelResult], output_dir: str):
     except ImportError:
         print("matplotlib not available; skipping figure generation")
 
+    # Auto-generate the strategy-grouped F1 / fix-rate heatmaps that
+    # ``system_tests/generate_benchmark_heatmaps.py`` produces.  Best-effort:
+    # any failure here must not break the benchmark run.
+    try:
+        import sys as _sys
+        _repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+        if _repo_root not in _sys.path:
+            _sys.path.insert(0, _repo_root)
+        from system_tests.generate_benchmark_heatmaps import (
+            generate_f1_heatmap,
+            generate_fix_rate_heatmap,
+            generate_per_level_heatmaps,
+        )
+        # Re-parse the JSON we just wrote so the heatmap script and
+        # ``save_results`` agree on the on-disk schema.
+        with open(json_path) as _fh:
+            _hm_results = json.load(_fh).get("results", [])
+        if _hm_results:
+            generate_f1_heatmap(output_dir, _hm_results)
+            generate_fix_rate_heatmap(output_dir, _hm_results)
+            generate_per_level_heatmaps(output_dir, _hm_results)
+    except Exception as _e:  # pragma: no cover - defensive
+        print(f"heatmap generation skipped: {type(_e).__name__}: {_e}")
+
 
 def _write_skill_comparison_csv(rows: List[Dict[str, Any]], csv_path: str) -> None:
     """Write skill comparison rows to CSV.
