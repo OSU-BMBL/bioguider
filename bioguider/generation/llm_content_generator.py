@@ -107,11 +107,11 @@ class LLMContentGenerator:
         Returns:
             Tuple of (continuation_content, token_usage)
         """
-        from bioguider.agents.agent_utils import get_openai
-
-        llm = get_openai()
-
-        conv = CommonConversation(llm)
+        # Use the LLM this generator was constructed with — NOT a hard-coded
+        # default model.  Otherwise a truncated first pass would have its
+        # continuation written by whatever ``OPENAI_MODEL`` points at, silently
+        # contaminating per-model benchmark results with a different model.
+        conv = CommonConversation(self.llm)
 
         # Calculate total suggestions for the prompt
         total_suggestions = 1
@@ -211,8 +211,18 @@ class LLMContentGenerator:
             "evaluation_report": evaluation_report,
             "context_length": len(context),
             "llm_settings": {
-                "model_name": os.environ.get("OPENAI_MODEL", "gpt-4o"),
-                "azure_deployment": os.environ.get("OPENAI_DEPLOYMENT_NAME"),
+                # Report the model actually in use (self.llm), falling back to
+                # env only if the attribute is missing, so the debug log can't
+                # mislabel which model produced the document.
+                "model_name": (
+                    getattr(llm, "model_name", None)
+                    or os.environ.get("OPENAI_MODEL", "gpt-4o")
+                ),
+                "azure_deployment": (
+                    getattr(llm, "deployment_name", None)
+                    or getattr(llm, "azure_deployment", None)
+                    or os.environ.get("OPENAI_DEPLOYMENT_NAME")
+                ),
                 "max_tokens": getattr(llm, "max_tokens", 16384),
             },
         }
