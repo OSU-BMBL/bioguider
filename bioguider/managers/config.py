@@ -30,6 +30,7 @@ class GenerationConfig:
     write_originals: bool = True
 
     # LLM settings
+    polish_output: bool = True  # Run narrow markdown polish before LLM cleaner
     clean_output: bool = True  # Run LLM cleaner on output
 
 

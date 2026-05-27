@@ -221,6 +221,24 @@ _CLI_USAGE_HEADER_RE = re.compile(
     r"^\s*(usage:|options:|positional\s+arguments:|optional\s+arguments:)",
     re.I,
 )
+
+# Argparse-style ``usage: prog [-h] [--flag VAL] …`` block.  The first line
+# starts with ``usage:``; continuation lines are indented (argparse wraps
+# long usage lines and aligns the continuation to the character after
+# ``usage: ``).  The block ends at the first non-indented line — typically
+# a blank line before the program description.
+_HELP_USAGE_BLOCK_RE = re.compile(
+    r"^[ \t]*usage:[^\n]*(?:\n[ \t]+[^\n]*)*",
+    re.M,
+)
+# Argparse ``options:`` / ``optional arguments:`` section.  Header line is
+# captured separately from the indented body; ``re.I`` because some tools
+# emit ``Options:`` with a capital O.
+_HELP_OPTIONS_BLOCK_RE = re.compile(
+    r"(?P<head>^[ \t]*(?:options|optional[ \t]+arguments):[ \t]*\n)"
+    r"(?P<body>(?:[ \t]+[^\n]*\n)+)",
+    re.M | re.I,
+)
 # Single-backtick inline-code span (one line only). Negative lookarounds
 # exclude double-backtick spans `` `text with ` backtick` `` ``, which are
 # rare and need different scanning.
@@ -554,6 +572,62 @@ class LLMErrorInjector:
         pattern = re.compile(rf"(?<![\w-]){re.escape(orig_flag)}(?![\w-])")
         new_text, n = pattern.subn(mut_flag, text)
         return new_text, n
+
+    @staticmethod
+    def _splice_bogus_flag_into_help_block(
+        text: str, bogus_flag: str, bogus_val: str
+    ) -> Tuple[str, int]:
+        """Splice a bogus flag into any argparse-style help block in ``text``.
+
+        Closes the cli_unknown_flag loophole where a model can look at the
+        preserved ``usage:`` / ``options:`` stanza, notice the appended
+        flag isn't listed, and strip it without ever consulting the repo.
+        After this rewrite the doc is self-consistent in its wrongness:
+        the bogus flag appears both in shell-invocation lines AND in the
+        help block that claims to define valid flags.
+
+        Idempotent — if the flag is already present in the help block
+        (e.g. an earlier cli_unknown_flag entry already spliced it), this
+        is a no-op for that surface.  Returns ``(new_text, n_edits)``
+        where ``n_edits`` counts each surface (usage line, options entry)
+        that was actually modified — ``0`` means "no help block to edit
+        or flag already there".
+        """
+        n_edits = 0
+
+        # Whitespace-anchored presence check so ``--workers`` does not
+        # match inside ``--workers-pool`` or similar.
+        already_present = re.compile(rf"(?<![\w-]){re.escape(bogus_flag)}(?![\w-])")
+
+        # 1. Splice into the ``usage:`` block.  Append ``[--flag VAL]`` to
+        # the end of the captured block — argparse's own behaviour when a
+        # new option is added to a parser.  Edit only the FIRST usage
+        # block; if a doc has multiple, downstream entries can target
+        # them via subsequent injector calls.
+        m = _HELP_USAGE_BLOCK_RE.search(text)
+        if m and not already_present.search(m.group(0)):
+            value_token = bogus_val.upper() if bogus_val.isalpha() else "VAL"
+            new_block = m.group(0).rstrip() + f" [{bogus_flag} {value_token}]"
+            text = text[: m.start()] + new_block + text[m.end():]
+            n_edits += 1
+
+        # 2. Splice into the ``options:`` body.  Append a new entry that
+        # matches argparse's default formatting (2-space indent, flag +
+        # value placeholder, then a 24-space description indent on the
+        # next line).  Re-detect the block after the usage edit so spans
+        # are accurate.
+        m = _HELP_OPTIONS_BLOCK_RE.search(text)
+        if m and not already_present.search(m.group("body")):
+            value_token = bogus_val.upper() if bogus_val.isalpha() else "VAL"
+            new_entry = (
+                f"  {bogus_flag} {value_token}\n"
+                f"                        Number of parallel workers.\n"
+            )
+            insert_at = m.end("body")
+            text = text[:insert_at] + new_entry + text[insert_at:]
+            n_edits += 1
+
+        return text, n_edits
 
     @staticmethod
     def _pick_program_token(tokens: List[str]) -> "Tuple[int, str] | None":
@@ -1216,6 +1290,11 @@ class LLMErrorInjector:
             self._record_skip(data, "cli_flag_typo", "no_long_flag")
 
         # ── cli_unknown_flag ─────────────────────────────────────────────
+        # After appending the bogus flag to a shell invocation, also splice
+        # it into any argparse-style help block so the doc is internally
+        # self-consistent in its wrongness.  Without this, models can
+        # trivially cross-reference the preserved help block — see
+        # ``_splice_bogus_flag_into_help_block`` for the rationale.
         injected = False
         bogus_flag, bogus_val = _CLI_BOGUS_FLAGS[len(errors) % len(_CLI_BOGUS_FLAGS)]
         for line, source in candidates:
@@ -1227,13 +1306,20 @@ class LLMErrorInjector:
             mut_line = line.rstrip() + f" {bogus_flag} {bogus_val}"
             new_text = _apply(line, mut_line, source, fence_spans)
             if new_text != text:
+                new_text, n_help_edits = self._splice_bogus_flag_into_help_block(
+                    new_text, bogus_flag, bogus_val
+                )
+                rationale = f"appended bogus flag {bogus_flag}"
+                if n_help_edits:
+                    rationale += f" + spliced into help block ({n_help_edits} surface)"
                 errors.append({
                     "id": f"e_cli_unknown_flag_{len(errors)}",
                     "category": "cli_unknown_flag",
                     "original_snippet": line,
                     "mutated_snippet": mut_line,
                     "mutated_token": bogus_flag,
-                    "rationale": f"appended bogus flag {bogus_flag}",
+                    "help_block_edits": n_help_edits,
+                    "rationale": rationale,
                 })
                 used_lines.add(line)
                 used_lines.add(mut_line)
@@ -2227,6 +2313,11 @@ class LLMErrorInjector:
                     break
 
         # ── cli_unknown_flag supplements (prose .md/.rst/.txt files only) ─────
+        # As in the primary path: after each shell-line append, also splice
+        # the bogus flag into any help block so the corrupted doc remains
+        # self-consistent in its wrongness.  Subsequent iterations are
+        # idempotent on the help-block surface — the splicer no-ops if the
+        # flag is already listed there.
         if ft in _PROSE_CODE_EXTENSIONS:
             cuf_attempts = 0
             while need("cli_unknown_flag") > 0 and cuf_attempts < min_per_category * 2:
@@ -2244,10 +2335,16 @@ class LLMErrorInjector:
                     mut_line = line.rstrip() + f" {bogus_flag} {bogus_val}"
                     new_corrupted = cli_replace(corrupted, line, mut_line, source)
                     if new_corrupted != corrupted:
+                        new_corrupted, n_help_edits = self._splice_bogus_flag_into_help_block(
+                            new_corrupted, bogus_flag, bogus_val
+                        )
                         corrupted = new_corrupted
-                        if add_error("cli_unknown_flag", line, mut_line,
-                                     f"appended bogus flag {bogus_flag}",
+                        rationale = f"appended bogus flag {bogus_flag}"
+                        if n_help_edits:
+                            rationale += f" + spliced into help block ({n_help_edits} surface)"
+                        if add_error("cli_unknown_flag", line, mut_line, rationale,
                                      mutated_token=bogus_flag):
+                            errors[-1]["help_block_edits"] = n_help_edits
                             found = True
                             break
                 if not found:

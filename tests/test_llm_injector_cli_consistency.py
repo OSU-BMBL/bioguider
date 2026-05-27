@@ -765,3 +765,226 @@ class TestCliFlagTypoManifestMatchesFile:
                 mt = e.get("mutated_token", "")
                 assert ot not in bogus_names, f"picked a bogus flag as orig: {e!r}"
                 assert mt not in bogus_names, f"mutated to a bogus flag: {e!r}"
+
+
+# ===========================================================================
+# Help-block consistency for cli_unknown_flag
+# ===========================================================================
+#
+# Closes the loophole the user spotted in pharokka: the corrupted doc
+# preserved the canonical ``usage:`` / ``options:`` stanza, and a model
+# with no repo access could trivially cross-reference it to strip the
+# appended bogus flag.  These tests pin that the splicer:
+#
+#   * adds the bogus flag to BOTH the usage line and the options entry,
+#   * stays idempotent on repeat calls (the supplement loop runs ≥1 time),
+#   * no-ops cleanly on docs without a help block (so non-CLI-tooling
+#     repos still get the legacy single-site injection without crashing),
+#   * is wired into both the primary and supplement injection paths.
+
+PHAROKKA_HELP_DOC = """\
+# pharokka_plotter
+
+```text
+usage: pharokka_plotter.py [-h] -i INFILE [-o OUTDIR]
+                           [--label_hypotheticals] [--annotations ANNOTATIONS]
+
+pharokka_plotter.py: pharokka plotting function
+
+options:
+  -h, --help            show this help message and exit
+  -i INFILE, --infile INFILE
+                        Input genome file.
+  --label_hypotheticals
+                        Flag to label hypothetical proteins.
+  --annotations ANNOTATIONS
+                        Annotation density.
+```
+
+Run it:
+```bash
+pharokka_plotter.py -i input.fasta -o out --label_hypotheticals
+```
+
+Or with annotations:
+```bash
+pharokka_plotter.py -i input.fasta -o out --annotations 0.5
+```
+
+For multiple plots:
+```bash
+pharokka_plotter.py -i input.fasta -n p1 -o out -t 'phage' --label_hypotheticals
+```
+
+And a prefix:
+```bash
+pharokka_plotter.py -i input.fasta -n p2 -o out -p myprefix --annotations 1.0
+```
+
+Larger plot title:
+```bash
+pharokka_plotter.py -i input.fasta -n p3 -o out -t 'big phage' --label_hypotheticals --annotations 0.8
+```
+"""
+
+
+class TestSpliceBogusFlagIntoHelpBlock:
+    """Direct unit tests on the splicer (static method, no LLM)."""
+
+    def test_splices_into_usage_and_options(self):
+        new, n = LLMErrorInjector._splice_bogus_flag_into_help_block(
+            PHAROKKA_HELP_DOC, "--workers", "4"
+        )
+        assert n == 2  # one usage edit + one options edit
+        # Usage line picks up ``[--workers VAL]`` (numeric value → VAL token).
+        assert "[--workers VAL]" in new
+        # Options section gets a new entry, matching argparse's 2-space
+        # indent + 24-space description indent.
+        assert "  --workers VAL\n                        Number of parallel workers." in new
+
+    def test_idempotent_on_second_call_same_flag(self):
+        """The supplement loop runs the splicer repeatedly with the same
+        bogus flag during round-robin reuse — a second call must NOT
+        double-insert into either surface."""
+        once, _ = LLMErrorInjector._splice_bogus_flag_into_help_block(
+            PHAROKKA_HELP_DOC, "--workers", "4"
+        )
+        twice, n2 = LLMErrorInjector._splice_bogus_flag_into_help_block(
+            once, "--workers", "4"
+        )
+        assert n2 == 0
+        assert twice == once
+        # Sanity: each surface still contains exactly one occurrence.
+        assert once.count("[--workers VAL]") == 1
+        assert once.count("  --workers VAL\n") == 1
+
+    def test_no_op_when_no_help_block(self):
+        plain = "## Plot\n\nRun: `pharokka_plotter.py -i in.fa`\n"
+        out, n = LLMErrorInjector._splice_bogus_flag_into_help_block(plain, "--workers", "4")
+        assert n == 0
+        assert out == plain
+
+    def test_no_op_when_flag_already_present_in_usage(self):
+        """Edge case: the doc claims ``--workers`` is valid (lists it in
+        usage).  Don't double-add; the splicer no-ops on that surface."""
+        doc = (
+            "```text\n"
+            "usage: prog.py [-h] [--workers WORKERS]\n"
+            "\n"
+            "options:\n"
+            "  -h, --help  show help\n"
+            "```\n"
+        )
+        out, n = LLMErrorInjector._splice_bogus_flag_into_help_block(doc, "--workers", "4")
+        # Usage already has it → 0 edits there; options body lacks an entry
+        # → 1 edit there.  Tests the per-surface decision, not all-or-nothing.
+        assert n == 1
+        assert out.count("[--workers WORKERS]") == 1
+        assert "  --workers VAL\n" in out
+
+    def test_handles_optional_arguments_header(self):
+        """Older argparse (Python 3.9 and below) used ``optional arguments:``
+        instead of ``options:`` — the regex covers both."""
+        doc = (
+            "```\n"
+            "usage: prog.py [-h]\n"
+            "\n"
+            "optional arguments:\n"
+            "  -h, --help  show help\n"
+            "```\n"
+        )
+        out, n = LLMErrorInjector._splice_bogus_flag_into_help_block(doc, "--threads", "2")
+        assert n == 2
+        assert "[--threads VAL]" in out
+        assert "  --threads VAL\n" in out
+
+    def test_does_not_match_token_inside_longer_flag_name(self):
+        """Presence check must be whitespace-anchored — ``--workers`` should
+        not be considered "already present" inside ``--workers-pool``."""
+        doc = (
+            "```\n"
+            "usage: prog.py [-h] [--workers-pool POOL]\n"
+            "\n"
+            "options:\n"
+            "  --workers-pool POOL  configure the pool\n"
+            "```\n"
+        )
+        out, n = LLMErrorInjector._splice_bogus_flag_into_help_block(doc, "--workers", "4")
+        assert n == 2, "splicer mis-detected --workers as already present"
+        assert "[--workers VAL]" in out
+        assert "  --workers VAL\n" in out
+
+
+class TestCliUnknownFlagWithHelpBlockInjection:
+    """End-to-end through ``inject(...)``: confirm the manifest records the
+    help-block edit AND the corrupted doc carries the bogus flag in the
+    help block as well as in a shell invocation."""
+
+    def test_primary_path_splices_into_help_block(self):
+        inj = _make_injector()
+        # min_per_category=1 keeps it to the primary path only.
+        corrupted, manifest = inj.inject(
+            PHAROKKA_HELP_DOC, min_per_category=1, file_type=".md"
+        )
+        cuf = [e for e in manifest["errors"] if e["category"] == "cli_unknown_flag"]
+        assert cuf, "no cli_unknown_flag entry was produced"
+        entry = cuf[0]
+        # Manifest must record the help-block edit count.
+        assert entry.get("help_block_edits") == 2, entry
+        # The bogus flag now lives in the help block in addition to the
+        # shell line — this is what defeats help-block grounding.
+        token = entry["mutated_token"]
+        assert f"[{token} VAL]" in corrupted, "usage line was not edited"
+        assert f"  {token} VAL\n" in corrupted, "options entry was not added"
+
+    def test_supplement_path_splices_and_stays_idempotent(self):
+        """High min_per_category triggers the supplement loop multiple
+        times.  Same bogus flag may be re-picked via the round-robin —
+        each repeat must be a no-op on the help block surface."""
+        inj = _make_injector()
+        corrupted, manifest = inj.inject(
+            PHAROKKA_HELP_DOC, min_per_category=6, file_type=".md"
+        )
+        cuf = [e for e in manifest["errors"] if e["category"] == "cli_unknown_flag"]
+        assert len(cuf) >= 2, "expected supplement loop to produce ≥2 entries"
+        # Each DISTINCT bogus flag injected must show up exactly once in
+        # the usage line and exactly once in the options body, regardless
+        # of how many cli_unknown_flag entries used it.
+        distinct_tokens = {e["mutated_token"] for e in cuf}
+        for tok in distinct_tokens:
+            assert corrupted.count(f"[{tok} VAL]") == 1, f"duplicate usage entry for {tok}"
+            assert corrupted.count(f"  {tok} VAL\n") == 1, f"duplicate options entry for {tok}"
+        # The FIRST entry (primary path) records 2 edits.  Later entries
+        # for the same flag should record 0; entries for fresh flags
+        # should record 2.  At least one entry must record 2 (the bug we
+        # are fixing) — flag this regression if it ever silently flips to
+        # 0 everywhere.
+        edits = [e.get("help_block_edits", 0) for e in cuf]
+        assert max(edits) == 2, f"no entry actually edited the help block: {edits}"
+
+    def test_doc_without_help_block_still_injects_legacy_way(self):
+        """Repos without an embedded ``--help`` stanza must still get the
+        single-site cli_unknown_flag injection — this is the original
+        behaviour and must NOT regress for docs the splicer can't act on.
+
+        Two distinct CLI lines so cli_flag_typo claims one and
+        cli_unknown_flag still has something to operate on (cli_flag_typo
+        is processed first within the same fence and consumes a line)."""
+        doc = (
+            "# pharokka\n\nRun:\n\n"
+            "```bash\n"
+            "pharokka_plotter.py -i input.fasta -o out --label_size 12\n"
+            "```\n\n"
+            "Or with truncation:\n\n"
+            "```bash\n"
+            "pharokka_plotter.py -i input.fasta -o out --truncate 25\n"
+            "```\n"
+        )
+        inj = _make_injector()
+        corrupted, manifest = inj.inject(doc, min_per_category=1, file_type=".md")
+        cuf = [e for e in manifest["errors"] if e["category"] == "cli_unknown_flag"]
+        assert cuf, "legacy single-site injection should still produce an entry"
+        # No help block → no help-block edits, but mutated_token and the
+        # shell-line append still land normally.
+        assert cuf[0]["help_block_edits"] == 0
+        assert cuf[0]["mutated_token"] in corrupted

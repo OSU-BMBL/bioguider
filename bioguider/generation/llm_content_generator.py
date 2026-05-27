@@ -13,6 +13,19 @@ from .truncation_handler import TruncationHandler
 from .rmarkdown_processor import RMarkdownProcessor, ChunkType
 
 
+# Maximum characters of the JSON-serialized merged evaluation report we
+# splice into the generator's prompt.  The historical 6000-char cap was
+# extremely tight: on pharokka-class docs the eval would emit 100+
+# findings and the consistency entries (CLI/code inconsistencies — the
+# repo-aware bits the pipeline exists to surface) were truncated away
+# before the generator ever saw them.  30 000 matches the LLMCleaner /
+# MarkdownPolisher caps and lets the full report through for documents
+# in the typical user-guide / README size range.  Combined with the
+# consistency-first ordering in ``_build_merged_report`` this is robust
+# to future evaluation tasks that emit even more findings.
+_MAX_EVALUATION_REPORT_PROMPT_CHARS = 30_000
+
+
 class LLMContentGenerator:
     """
     Generates documentation content using LLMs.
@@ -247,7 +260,7 @@ class LLMContentGenerator:
             system_prompt = self.prompt_loader.format(
                 PromptTemplate.README_COMPREHENSIVE,
                 target_file=target_file,
-                evaluation_report=json.dumps(evaluation_report)[:6000],
+                evaluation_report=json.dumps(evaluation_report)[:_MAX_EVALUATION_REPORT_PROMPT_CHARS],
                 context=context[:4000],
                 original_content=original_content or "",
             )
@@ -265,7 +278,7 @@ class LLMContentGenerator:
             system_prompt = self.prompt_loader.format(
                 PromptTemplate.FULL_DOCUMENT,
                 target_file=target_file,
-                evaluation_report=json.dumps(evaluation_report)[:6000],
+                evaluation_report=json.dumps(evaluation_report)[:_MAX_EVALUATION_REPORT_PROMPT_CHARS],
                 context=context[:4000],
                 original_content=original_content or "",
                 total_suggestions=total_suggestions,

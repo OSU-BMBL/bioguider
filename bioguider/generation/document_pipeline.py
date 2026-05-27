@@ -11,6 +11,10 @@ from bioguider.utils.constants import (
     ProjectTypeEnum,
 )
 from bioguider.generation.llm_content_generator import LLMContentGenerator
+from bioguider.generation.markdown_polisher import (
+    MarkdownPolisher,
+    _accept_polish_if_safe,
+)
 
 
 class DocumentPipeline:
@@ -68,6 +72,7 @@ class DocumentPipeline:
         report_output_path: str | None = None,
         eval_report_output_path: str | None = None,
         suggestion_categories: list[str] | None = None,
+        polish: bool = True,
     ) -> tuple[dict, str]:
         """
         Evaluate a document then generate a refined version.
@@ -91,6 +96,15 @@ class DocumentPipeline:
                 pipeline to direct error-fixes only (no setup / reproducibility
                 / structure improvements).  ``None`` (default) passes every
                 category, which is the original behaviour.
+            polish: If True (default), run a narrow surface-markdown polish
+                pass over the generated document — fixes residual broken
+                inline-code spans / image / link syntax / prose typos that
+                the evaluation tasks do not emit explicit findings for.
+                Gated by a structural guardrail (length, fence count, and
+                header count must stay within tolerance of the pre-polish
+                output); if the polish drifts, the unpolished generator
+                output is returned.  Set to False for ablation runs that
+                want to measure the generator in isolation.
 
         Returns:
             (merged_report, refined_content)
@@ -147,6 +161,19 @@ class DocumentPipeline:
             context=original_content,
             original_content=original_content,
         )
+
+        # Surface-markdown polish pass.  Closes the inline_code / image /
+        # link / typo gap where ``simple`` historically beats ``pipeline``
+        # because the evaluation tasks emit no targeted findings for those
+        # categories.  Constructed with the same ``llm`` so the polish is
+        # attributed to the model under test — never a hard-coded default.
+        # ``_accept_polish_if_safe`` guarantees we never regress structure
+        # relative to ``refined``: if the polish drifts on length, fence
+        # count, or header count, we keep the pre-polish output.
+        if polish and refined:
+            polisher = MarkdownPolisher(llm)
+            polished, _ = polisher.polish(refined)
+            refined = _accept_polish_if_safe(refined, polished, original_content)
 
         return merged_report, refined or original_content
 
@@ -268,6 +295,16 @@ def _build_merged_report(
     if eval_type == EvaluationTypeEnum.TUTORIAL:
         result = eval_results.get(doc_path) if eval_results else None
         if result is not None:
+            # Consistency findings (CLI flag inconsistencies, mismatched
+            # function names, prose-vs-code contradictions) are the
+            # highest-value, repo-aware output of the evaluation pipeline
+            # — and they're short and dense.  Emit them FIRST so they
+            # survive the generator's prompt-truncation budget even when
+            # the long-tail readability findings would otherwise push
+            # them past the cutoff.
+            idx = _append_consistency_suggestions(
+                suggestions, idx, getattr(result, "consistency_evaluation", None), _keep,
+            )
             te = result.tutorial_evaluation
             if te is not None:
                 category_fields = [
@@ -290,13 +327,16 @@ def _build_merged_report(
                             "content_guidance": item,
                         })
                         idx += 1
-            idx = _append_consistency_suggestions(
-                suggestions, idx, getattr(result, "consistency_evaluation", None), _keep,
-            )
 
     elif eval_type == EvaluationTypeEnum.USERGUIDE:
         result = eval_results.get(doc_path) if eval_results else None
         if result is not None:
+            # Consistency-first ordering, same rationale as TUTORIAL: keep
+            # the repo-aware CLI / code / docstring findings at the front
+            # of the merged report so they survive prompt truncation.
+            idx = _append_consistency_suggestions(
+                suggestions, idx, getattr(result, "consistency_evaluation", None), _keep,
+            )
             ug = result.user_guide_evaluation
             if ug is not None:
                 category_fields = [
@@ -315,9 +355,6 @@ def _build_merged_report(
                             "content_guidance": item,
                         })
                         idx += 1
-            idx = _append_consistency_suggestions(
-                suggestions, idx, getattr(result, "consistency_evaluation", None), _keep,
-            )
 
     elif eval_type == EvaluationTypeEnum.README:
         for _file, result in (eval_results or {}).items():
