@@ -5,6 +5,7 @@ from langchain_community.callbacks.openai_info import OpenAICallbackHandler
 from pydantic import BaseModel, Field
 from tenacity import retry, stop_after_attempt, wait_incrementing
 import logging
+import os
 
 from bioguider.utils.utils import escape_braces
 from bioguider.agents.common_agent import (
@@ -14,6 +15,28 @@ from bioguider.agents.common_agent import (
 from bioguider.agents.prompt_utils import COT_USER_INSTRUCTION
 
 logger = logging.getLogger()
+
+_COT_MAX_CHARS = int(os.environ.get("COT_MAX_CHARS", 40000))
+
+
+def _truncate_cot(text: str) -> str:
+    """Cap CoT length before it is fed into the structured-output step.
+
+    The CoT (step 1) can easily exceed the model's output-token limit when
+    asked to enumerate every error in a document. Passing a 16K-token wall of
+    text as *input* to step 2 causes step 2's JSON output to also be enormous
+    and hit the limit again. Capping here prevents the cascade.
+
+    40 000 chars ≈ 10 000 tokens — enough reasoning context for any schema
+    we use, while keeping step-2 output safely under 16K tokens.
+    """
+    if len(text) <= _COT_MAX_CHARS:
+        return text
+    logger.warning(
+        "CoT response truncated from %d to %d chars before structured-output step",
+        len(text), _COT_MAX_CHARS,
+    )
+    return text[:_COT_MAX_CHARS]
 
 
 class CommonAgentTwoSteps(CommonAgent):
@@ -98,7 +121,7 @@ class CommonAgentTwoSteps(CommonAgent):
         # Then use the reasoning process to do the structured output
         updated_prompt = self._build_prompt_for_final_step(
             system_prompt=system_prompt,
-            cot_msg=reasoning_process,
+            cot_msg=_truncate_cot(reasoning_process),
         )
         agent = updated_prompt | self.llm.with_structured_output(schema)
         try:
@@ -181,7 +204,7 @@ class CommonAgentTwoChainSteps(CommonAgentTwoSteps):
                 
         try:
             # Then use the reasoning process to do the structured output
-            processed_reasoning_process = reasoning_process.replace("{", "{{").replace("}", "}}")
+            processed_reasoning_process = _truncate_cot(reasoning_process).replace("{", "{{").replace("}", "}}")
             final_msg = FINAL_STEP_SYSTEM_PROMPTS.format(
                 llm_response=processed_reasoning_process,
             )
