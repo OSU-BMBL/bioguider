@@ -26,7 +26,7 @@ def get_azure_openai():
         azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", None),
         api_version=os.environ.get("OPENAI_API_VERSION", None),
         azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME", None),
-        max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKEN", 16384)),  # Increased for tutorial generation
+        max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 16384)),  # Increased for tutorial generation
     )
 
 

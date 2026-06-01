@@ -57,7 +57,7 @@ def get_openai():
         azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
         api_version=os.environ.get("OPENAI_API_VERSION"),
         azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
-        max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKEN"),
+        max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKENS"),
     )
 
 def get_configured_llm(provider: str = None):
