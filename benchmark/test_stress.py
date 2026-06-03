@@ -521,10 +521,11 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
                     max_tokens=8192,
                 )
             else:
+                proxy_key, proxy_base_url = resolve_proxy_credentials()
                 model_llm = ChatOpenAI(
                     model=model_id,
-                    api_key=os.environ.get("OPENAI_API_KEY"),
-                    base_url=os.environ.get("OPENAI_BASE_URL"),
+                    api_key=proxy_key,
+                    base_url=proxy_base_url,
                     timeout=120,
                     max_retries=1,
                 )

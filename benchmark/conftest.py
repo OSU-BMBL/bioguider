@@ -5,7 +5,7 @@ import logging
 import pytest
 from dotenv import load_dotenv
 
-from bioguider.agents.agent_utils import get_llm
+from bioguider.agents.agent_utils import get_configured_llm
 
 load_dotenv(override=True)
 
@@ -31,15 +31,10 @@ def prepare_logging():
     root_logger.addHandler(stream_handler)
 
 def get_litellm():
-    return get_llm(
-        api_key=os.environ.get("OPENAI_API_KEY", None),
-        model_name=os.environ.get("OPENAI_MODEL", None),
-        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", None),
-        api_version=os.environ.get("OPENAI_API_VERSION", None),
-        azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME", None),
-        max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKEN", 16384)),
-        base_url=os.environ.get("OPENAI_BASE_URL", None),
-    )
+    # Honor LLM_PROVIDER (kimi / minimax / azure). When unset, falls back to the
+    # azure branch, which still passes base_url=OPENAI_BASE_URL — i.e. identical
+    # to the previous proxy behavior when OPENAI_BASE_URL is set.
+    return get_configured_llm()
 
 
 @pytest.fixture(scope="module")

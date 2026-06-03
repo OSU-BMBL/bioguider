@@ -128,14 +128,11 @@ class TestEvaluateAndRefineDocument:
     @skip_no_repo
     def test_different_llms_both_succeed(self, prepared_pipeline, llm, tmp_path):
         """The pipeline accepts any LLM per-call without requiring re-prepare."""
-        from langchain_openai import ChatOpenAI
+        from bioguider.agents.agent_utils import get_configured_llm
 
-        alt_llm = ChatOpenAI(
-            model="gpt-4o",
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            base_url=os.environ.get("OPENAI_BASE_URL"),
-            max_tokens=4096,
-        )
+        # A second, independently-constructed LLM instance honoring the env
+        # provider config (LLM_PROVIDER / *_BASE_URL).
+        alt_llm = get_configured_llm()
 
         original = Path(SEURAT_REPO_PATH, DE_VIGNETTE_PATH).read_text()
         (tmp_path / "de_vignette.Rmd").write_text(original)

@@ -343,6 +343,29 @@ MODELS = {
     "claude-sonnet-4-6": {"type": "anthropic", "model": "claude-sonnet-4-6"},
 }
 
+def resolve_proxy_credentials():
+    """Resolve (api_key, base_url) for the LiteLLM proxy that serves the
+    ``litellm``-type models above.
+
+    Two supported env layouts:
+    - Legacy: ``OPENAI_BASE_URL`` set → use it with ``OPENAI_API_KEY`` (the
+      proxy virtual key).
+    - Provider layout: ``OPENAI_BASE_URL`` unset → fall back to the KIMI/MINIMAX
+      proxy vars (same proxy, different env names). The key MUST stay paired with
+      the base_url it belongs to — never mix ``OPENAI_API_KEY`` (which may be an
+      Azure key) with a KIMI/MINIMAX base_url.
+    """
+    base_url = os.environ.get("OPENAI_BASE_URL")
+    if base_url:
+        return os.environ.get("OPENAI_API_KEY"), base_url
+    base_url = os.environ.get("KIMI_BASE_URL") or os.environ.get("MINIMAX_BASE_URL")
+    api_key = (
+        os.environ.get("KIMI_API_KEY")
+        or os.environ.get("MINIMAX_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+    )
+    return api_key, base_url
+
 def print_prompts():
     """Print all available prompts for reference."""
     print("\n" + "="*70)
@@ -427,10 +450,11 @@ def fix_with_model(
             max_tokens=8192,
         )
     else:
+        proxy_key, proxy_base_url = resolve_proxy_credentials()
         llm_override = ChatOpenAI(
             model=model_id,
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            base_url=os.environ.get("OPENAI_BASE_URL"),
+            api_key=proxy_key,
+            base_url=proxy_base_url,
             timeout=300,
             max_retries=1,
         )

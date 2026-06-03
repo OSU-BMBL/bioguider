@@ -142,10 +142,11 @@ def test_bioguider_pipeline_matrix(llm, test_output_dir):
                             max_tokens=8192,
                         )
                     else:
+                        proxy_key, proxy_base_url = resolve_proxy_credentials()
                         model_llm = ChatOpenAI(
                             model=model_id,
-                            api_key=os.environ.get("OPENAI_API_KEY"),
-                            base_url=os.environ.get("OPENAI_BASE_URL"),
+                            api_key=proxy_key,
+                            base_url=proxy_base_url,
                             timeout=300,
                             max_retries=1,
                         )
@@ -326,10 +327,11 @@ def test_bioguider_pipeline_matrix_minimal(llm, test_output_dir):
                         max_tokens=8192,
                     )
                 else:
+                    proxy_key, proxy_base_url = resolve_proxy_credentials()
                     model_llm = ChatOpenAI(
                         model=model_id,
-                        api_key=os.environ.get("OPENAI_API_KEY"),
-                        base_url=os.environ.get("OPENAI_BASE_URL"),
+                        api_key=proxy_key,
+                        base_url=proxy_base_url,
                         timeout=300,
                         max_retries=1,
                     )
@@ -499,10 +501,11 @@ def test_evaluation_and_refine_corrupt_file(llm, test_output_dir):
             max_tokens=8192,
         )
     else:
+        proxy_key, proxy_base_url = resolve_proxy_credentials()
         model_llm = ChatOpenAI(
             model=model_id,
-            api_key=os.environ.get("OPENAI_API_KEY"),
-            base_url=os.environ.get("OPENAI_BASE_URL"),
+            api_key=proxy_key,
+            base_url=proxy_base_url,
             timeout=300,
             max_retries=1,
         )
@@ -658,10 +661,11 @@ def test_bioguider_pipeline_smoke(llm, test_output_dir):
                     max_tokens=8192,
                 )
             else:
+                proxy_key, proxy_base_url = resolve_proxy_credentials()
                 model_llm = ChatOpenAI(
                     model=model_id,
-                    api_key=os.environ.get("OPENAI_API_KEY"),
-                    base_url=os.environ.get("OPENAI_BASE_URL"),
+                    api_key=proxy_key,
+                    base_url=proxy_base_url,
                     timeout=300,
                     max_retries=1,
                 )

@@ -37,6 +37,7 @@ from benchmark.shared import (
     evaluate_fixes,
     fix_with_model,
     inject_errors_at_level,
+    resolve_proxy_credentials,
     save_results,
 )
 from bioguider.agents.agent_utils import read_file, write_file
@@ -187,10 +188,11 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
                     max_tokens=8192,
                 )
             else:
+                proxy_key, proxy_base_url = resolve_proxy_credentials()
                 model_llm = ChatOpenAI(
                     model=model_id,
-                    api_key=os.environ.get("OPENAI_API_KEY"),
-                    base_url=os.environ.get("OPENAI_BASE_URL"),
+                    api_key=proxy_key,
+                    base_url=proxy_base_url,
                     timeout=120,
                     max_retries=1,
                 )
