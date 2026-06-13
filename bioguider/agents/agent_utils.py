@@ -214,7 +214,10 @@ def read_file(
     file_path = str(file_path).strip()
     if not os.path.isfile(file_path):
         return None
-    with open(file_path, 'r') as f:
+    # Use errors="replace" so a stray non-UTF-8 byte (e.g. a binary or
+    # latin-1 README) does not raise UnicodeDecodeError and abort the whole
+    # page generation.
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
         content = f.read()
         return content
 

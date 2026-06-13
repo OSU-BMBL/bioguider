@@ -449,38 +449,49 @@ class EvaluationREADMETask(EvaluationTask):
 
     def _project_level_evaluate(self, readme_files: list[str]) -> tuple[dict, dict]:
         """
-        Evaluate if the README files are a project-level README file.
+        Determine which README files are project-level.
+
+        The project-level README is the one at the repository **root**; READMEs
+        nested in sub-directories (``docs/``, ``data/``, ``tests/``, vendored
+        sub-packages, ...) are folder-level and must NOT be scored as the project's
+        documentation. The decision is made by path depth rather than by an LLM
+        classifier, which previously mislabeled vendored/data-folder READMEs as
+        project-level — producing junk 0-score cards (Pattern B) — and occasionally
+        demoted the real root README so no scorecard rendered (Pattern D).
+
+        If no readable root-level README exists, the shallowest readable candidate is
+        promoted so a project-level scorecard is still produced.
         """
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
+
+        readable: dict[str, bool] = {}
+        for readme_file in readme_files:
+            content = read_file(Path(self.repo_path, readme_file))
+            readable[readme_file] = content is not None and len(content.strip()) > 0
+            if not readable[readme_file]:
+                logger.error(f"Error in reading file {readme_file}")
+
+        # root-level READMEs (no path separator) are the project-level ones
+        root_files = [f for f in readme_files if "/" not in f and readable[f]]
+        if not root_files:
+            readable_files = [f for f in readme_files if readable[f]]
+            if readable_files:
+                root_files = [min(readable_files, key=lambda f: f.count("/"))]
+        project_level_set = set(root_files)
+
         project_level_evaluations = {}
         for readme_file in readme_files:
-            full_path = Path(self.repo_path, readme_file)
-            readme_content = read_file(full_path)
-            if readme_content is None or len(readme_content.strip()) == 0:
-                logger.error(f"Error in reading file {readme_file}")
-                project_level_evaluations[readme_file] = {
-                    "project_level": "/" in readme_file,
-                    "project_level_reasoning_process": f"Error in reading file {readme_file}" \
-                        if readme_content is None else f"{readme_file} is an empty file.",
-                }
-                continue
-            system_prompt = ChatPromptTemplate.from_template(
-                README_PROJECT_LEVEL_SYSTEM_PROMPT
-            ).format(
-                readme_path=readme_file,
-                readme_content=readme_content,
-            )
-            response, token_usage, reasoning_process = run_llm_evaluation(
-                llm=self.llm,
-                system_prompt=system_prompt,
-                instruction_prompt=EVALUATION_INSTRUCTION,
-                schema=ProjectLevelEvaluationREADMEResult,
-            )
-            total_token_usage = increase_token_usage(total_token_usage, token_usage)
-            self.print_step(step_output=f"README: {readme_file} project level README")
+            is_project = readme_file in project_level_set
+            if not readable[readme_file]:
+                reason = f"{readme_file} could not be read or is empty; treated as non-project-level."
+            elif is_project:
+                reason = f"{readme_file} is at the repository root; treated as the project-level README."
+            else:
+                reason = f"{readme_file} is nested in a sub-directory; treated as a folder-level README."
+            self.print_step(step_output=f"README: {readme_file} -> {'project' if is_project else 'folder'} level")
             project_level_evaluations[readme_file] = {
-                "project_level": response.project_level,
-                "project_level_reasoning_process": reasoning_process,
+                "project_level": is_project,
+                "project_level_reasoning_process": reason,
             }
 
         return project_level_evaluations, total_token_usage
