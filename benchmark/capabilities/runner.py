@@ -49,13 +49,25 @@ def build_client(model_name: str) -> ChatOpenAI:
     wait=wait_exponential(multiplier=2, min=4, max=60),
     retry=retry_if_exception_type(RateLimitError),
 )
-def _invoke(runnable, prompt: str):
+def _invoke(runnable, prompt):
+    """``prompt`` may be a plain string or a list of (role, content) messages."""
     return runnable.invoke(prompt)
 
 
 # ===========================================================================
 # Tool-calling
 # ===========================================================================
+
+# Mirrors the abstention escape-hatch the prompt-based path states explicitly,
+# so the native path measures restraint under the same rules (otherwise the
+# model is never told it may decline). Required-arg abstention is the key case.
+TOOL_SYSTEM_MSG = (
+    "You can call the provided tools. Only call a tool when it genuinely fits the "
+    "request AND every required argument is supplied by the user. If no tool fits, "
+    "or a required argument is missing, do NOT call a tool and do NOT guess values — "
+    "reply asking for the missing information instead."
+)
+
 
 def run_tool_task(client: ChatOpenAI, task: ToolTask) -> Dict[str, Any]:
     """Run one tool task. Returns a per-task result record."""
@@ -67,7 +79,7 @@ def run_tool_task(client: ChatOpenAI, task: ToolTask) -> Dict[str, Any]:
     }
     try:
         bound = client.bind_tools(task.tools)
-        resp = _invoke(bound, task.prompt)
+        resp = _invoke(bound, [("system", TOOL_SYSTEM_MSG), ("human", task.prompt)])
     except Exception as e:  # noqa: BLE001 — record, don't crash the sweep
         rec["error"] = f"{type(e).__name__}: {e}"
         return rec
