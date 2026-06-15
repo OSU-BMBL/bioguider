@@ -358,10 +358,12 @@ MODELS = {
     # Moonshot Kimi
     "kimi-k2.5":       {"type": "litellm", "model": "kimi-k2.5"},
     "kimi-k2.6":       {"type": "litellm", "model": "kimi-k2.6"},
-    # Zhipu — glm-5 deployment is deprecated on the proxy (HTTP 410), and
-    # glm-5.1 routes but times out / drops on real-size generations, so GLM
-    # is currently unusable for this benchmark. Re-enable when the proxy is fixed.
-    # "glm-5":         {"type": "litellm", "model": "glm-5"},
+    # Zhipu — kept registered so it stays selectable via PHAROKKA_MODELS, but
+    # left OUT of DEFAULT_MODELS: glm-5's proxy deployment is currently
+    # deprecated (HTTP 410) and glm-5.1 times out on real-size generations.
+    # Add back to DEFAULT_MODELS (or pass PHAROKKA_MODELS=...,glm-5) once the
+    # proxy is fixed.
+    "glm-5":           {"type": "litellm", "model": "glm-5"},
     # Minimax
     "minimax-m2.5":    {"type": "litellm", "model": "minimax-m2.5"},
     # DeepSeek (real — v3.2 on the proxy is mis-aliased to Claude, do NOT use)

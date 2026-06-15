@@ -50,7 +50,10 @@ PHAROKKA_DOC_REL = "docs/plotting.md"
 
 # E004's default model list minus Claude (which is "claude-sonnet-4-6" in MODELS
 # but already absent from the E004 default).
-# glm-5 dropped: its proxy deployment is deprecated (HTTP 410, unusable).
+# Default model set. glm-5 is intentionally omitted (its proxy deployment is
+# deprecated, HTTP 410). To run it once the proxy is fixed, either add "glm-5"
+# back to this string or run with:
+#     PHAROKKA_MODELS=gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss
 DEFAULT_MODELS = "gpt-4o,gpt-5.4,kimi-k2.5,gpt-oss"
 
 

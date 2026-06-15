@@ -35,8 +35,9 @@ TARGET_LEVELS = [40, 100, 150, 200]
 STRATEGY_ORDER = ["pipeline", "simple"]
 STRATEGY_LABELS = {"pipeline": "BioGuider", "simple": "Prompt"}
 STRATEGY_COLORS = {"pipeline": "#4878D0", "simple": "#EE854A"}
-# glm-5 dropped: proxy deployment deprecated (HTTP 410), unusable for the benchmark.
-LLM_ORDER = ["gpt-5.4", "gpt-4o", "kimi-k2.5", "gpt-oss"]
+# glm-5 omitted (proxy deployment deprecated, HTTP 410). Re-add "glm-5" below
+# to plot it once there are valid runs; its color/marker are kept ready.
+LLM_ORDER = ["gpt-5.4", "gpt-4o", "kimi-k2.5", "gpt-oss"]  # add "glm-5" to re-enable
 
 EXCLUDED_CATEGORIES = {"code_func_name", "duplicate", "markdown_structure"}
 
@@ -45,12 +46,14 @@ LLM_COLORS = {
     "gpt-4o":     "#ff7f0e",
     "gpt-5.4":    "#2ca02c",
     "kimi-k2.5":  "#9467bd",
+    "glm-5":      "#d62728",   # kept ready; add "glm-5" to LLM_ORDER to plot
 }
 LLM_MARKERS = {
     "gpt-oss":    "o",
     "gpt-4o":     "s",
     "gpt-5.4":    "^",
     "kimi-k2.5":  "v",
+    "glm-5":      "D",         # kept ready; add "glm-5" to LLM_ORDER to plot
 }
 
 
