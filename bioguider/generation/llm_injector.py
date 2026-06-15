@@ -47,6 +47,7 @@ ERROR CATEGORIES (inject all)
 - section_title: subtly change a section title casing or wording
 - image_syntax: break image markdown spacing (e.g., `![alt] (url)`)
 - inline_code: remove backticks around inline code
+- inline_code_mismatch: move the backticks off a real code token onto an adjacent ordinary word, so the markup wraps the WRONG token (e.g. `` `--gff` and `` → `` --gff `and` ``)
 - emphasis: break emphasis markers (e.g., missing closing `*`)
 - table_alignment: misalign or omit a `|` in a markdown table
 
@@ -135,6 +136,17 @@ OUTPUT (JSON only):
 
 
 _CODE_FENCE_RE = re.compile(r"```[^\n]*\n.*?```", re.DOTALL)
+
+# inline_code_mismatch: a token must look code-like to be a valid anchor, and
+# the word the markup is moved ONTO must be an obvious non-code word (a stopword)
+# so the resulting `` `the` `` / `` `and` `` is unambiguously wrong.
+_ICM_CODE_SIGNAL_RE = re.compile(r"[._/]|--|\(\)|\d")
+_ICM_STOPWORDS = frozenset({
+    "the", "and", "that", "this", "with", "for", "from", "into", "then",
+    "your", "you", "are", "was", "will", "can", "has", "have", "but", "not",
+    "all", "any", "out", "via", "per", "see", "use", "used", "uses", "which",
+    "when", "where", "what", "value", "values", "above", "below", "here",
+})
 _PKG_ANCHOR_RE = re.compile(
     r"\b(Seurat|scanpy|SingleCellExperiment|DESeq2|edgeR|limma)[_=\s]+v?(\d+)(?:\.\d+)*",
     re.I,
@@ -1915,6 +1927,48 @@ class LLMErrorInjector:
                 break  # prose_replace rejected it (e.g. still inside a skip span)
             corrupted = new_corrupted
             errors.append({"id": f"e_code_sup_{len(errors)}", "category": "inline_code", "original_snippet": orig, "mutated_snippet": mut, "rationale": "removed inline code backticks"})
+
+        # inline_code_mismatch supplements — move the backticks off a real
+        # code token onto an adjacent stopword, so the markup wraps the WRONG
+        # token (`--gff` and  ->  --gff `and`). Anchored to a genuine `code`
+        # span; the spurious `stopword` is recorded as mutated_token.
+        _icm_skip = sorted(fence_spans + ([yaml_span] if yaml_span else []))
+        for _ in range(need("inline_code_mismatch")):
+            cand = None
+            for m in re.finditer(r"(?<!`)`([^`\n]{2,40})`(?!`)", corrupted):
+                if any(s <= m.start() < e for s, e in _icm_skip):
+                    continue
+                inner = m.group(1)
+                if inner.startswith("{") or inner.startswith("```"):
+                    continue
+                if not _ICM_CODE_SIGNAL_RE.search(inner):
+                    continue  # only steal markup from tokens that look like code
+                wm = re.match(r"(\s+)([A-Za-z]{3,})\b", corrupted[m.end():])
+                if not wm or wm.group(2).lower() not in _ICM_STOPWORDS:
+                    continue
+                sep, word = wm.group(1), wm.group(2)
+                orig = f"`{inner}`{sep}{word}"
+                mut = f"{inner}{sep}`{word}`"
+                if orig in corrupted_snippets or mut in corrupted_snippets:
+                    continue
+                cand = (orig, mut, word)
+                break
+            if cand is None:
+                break
+            orig, mut, word = cand
+            new_corrupted = prose_replace(corrupted, orig, mut)
+            if new_corrupted == corrupted:
+                break
+            corrupted = new_corrupted
+            corrupted_snippets.add(orig)
+            corrupted_snippets.add(mut)
+            cat_counts["inline_code_mismatch"] = cat_counts.get("inline_code_mismatch", 0) + 1
+            errors.append({
+                "id": f"e_icm_sup_{len(errors)}", "category": "inline_code_mismatch",
+                "original_snippet": orig, "mutated_snippet": mut,
+                "mutated_token": f"`{word}`",
+                "rationale": "backticks moved from code token onto adjacent stopword",
+            })
 
         # ============================================================
         # PROSE-CODE CONSISTENCY supplements (anchor-required)

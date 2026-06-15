@@ -666,6 +666,15 @@ class BenchmarkEvaluator:
                 return False, "unchanged"
             is_fixed = _naked_count(revised, raw) < _naked_count(corrupted, raw)
             return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
+
+        elif category == "inline_code_mismatch":
+            # Markup was moved off a code token onto a plain word; the spurious
+            # wrapped word (mutated_token, e.g. `and`) is the anomaly to remove.
+            if orig and orig in revised:
+                return True, "fixed_to_baseline"
+            if mutated_token and mutated_token not in revised:
+                return True, "fixed_to_valid"
+            return False, "unchanged"
         
         elif category in ("emphasis", "code_lang_tag"):
             is_fixed = mut and mut not in revised

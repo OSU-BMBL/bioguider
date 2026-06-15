@@ -111,6 +111,7 @@ ERROR_CATEGORIES = {
     ],
     "code": [
         "inline_code",
+        "inline_code_mismatch",
         "code_lang_tag",
         "emphasis",
         "code_func_name",
@@ -211,7 +212,7 @@ CONTENT_CATEGORIES: frozenset = frozenset({
 
 HYGIENE_CATEGORIES: frozenset = frozenset({
     "typo", "markdown_structure",
-    "inline_code", "link", "duplicate",
+    "inline_code", "inline_code_mismatch", "link", "duplicate",
     "boolean", "emphasis",
     # structure group -- pure markdown formatting
     "list_structure", "table_alignment", "section_title", "image_syntax",
