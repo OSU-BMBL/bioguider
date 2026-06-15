@@ -50,7 +50,8 @@ PHAROKKA_DOC_REL = "docs/plotting.md"
 
 # E004's default model list minus Claude (which is "claude-sonnet-4-6" in MODELS
 # but already absent from the E004 default).
-DEFAULT_MODELS = "gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss"
+# glm-5 dropped: its proxy deployment is deprecated (HTTP 410, unusable).
+DEFAULT_MODELS = "gpt-4o,gpt-5.4,kimi-k2.5,gpt-oss"
 
 
 @pytest.fixture(scope="module")
@@ -244,8 +245,13 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
 
     # ── Run 3 strategies × N models in parallel ──────────────────────────────
     n_strategies = 3  # bioguider, simple, pipeline
-    print(f"\nRunning {len(target_models) * n_strategies} tasks in parallel ...")
-    with ThreadPoolExecutor(max_workers=len(target_models) * n_strategies) as pool:
+    # Cap concurrency: all models share one proxy endpoint, which throttles
+    # (HTTP 429) and times out sub-calls when too many tasks run at once.
+    # Override with PHAROKKA_MAX_WORKERS if needed.
+    max_workers = int(os.environ.get("PHAROKKA_MAX_WORKERS", "4"))
+    n_tasks = len(target_models) * n_strategies
+    print(f"\nRunning {n_tasks} tasks, {min(max_workers, n_tasks)} at a time ...")
+    with ThreadPoolExecutor(max_workers=min(max_workers, n_tasks)) as pool:
         futures = {}
         for model_name in target_models:
             futures[pool.submit(_run_prompt, model_name, "bioguider")] = f"{model_name}+bioguider"
