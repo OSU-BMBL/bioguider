@@ -10,6 +10,23 @@ from bioguider.agents.common_conversation import CommonConversation
 from bioguider.utils.utils import escape_braces
 
 
+# Categories whose mutation lives INSIDE ``` code fences (function/argument
+# names, in-code comments, the fence language tag). Fixing them requires a code
+# linter, not a documentation evaluator, and every fixer prompt forbids editing
+# code fences — so they are unfixable by construction. We therefore do NOT
+# inject them at all (rather than inject-but-leave-unscored). NOTE: this is
+# deliberately narrower than UNSCORABLE_CATEGORIES — the prose-level `function`
+# typo and the scorable CLI-in-fence categories (cli_unknown_flag,
+# cli_program_rename) are intentionally NOT scoped out here.
+CODE_INTERNAL_CATEGORIES = frozenset({
+    "code_func_name",
+    "code_func_args",
+    "code_comment_conflict",
+    "comment_typo",
+    "code_lang_tag",
+})
+
+
 INJECTION_PROMPT = """
 You are “BioGuider-Intro,” generating a deliberately flawed **INTRODUCTION** file
 (“README-lite”) to test an auto-fixer. Start from the provided clean INTRO doc that follows the
@@ -32,7 +49,6 @@ ERROR CATEGORIES (inject all)
 - inline_code: remove backticks around inline code
 - emphasis: break emphasis markers (e.g., missing closing `*`)
 - table_alignment: misalign or omit a `|` in a markdown table
-- code_lang_tag: use the wrong fenced code language (e.g., ```py for R)
 
 BIOLOGY-SPECIFIC ERROR CATEGORIES (inject all; keep realistic & subtle)
 - gene_symbol_case: change gene symbol casing or add suffix (e.g., “tp53”, “CD3e”), but **do not alter** protected keywords
@@ -67,16 +83,16 @@ PROSE-CODE CONSISTENCY ERROR CATEGORIES (inject ONLY when a matching code-block 
 - prose_code_marker: prose names a cell-type marker gene that disagrees with the marker used in a fenced code block (e.g., code subsets on `CD8` via `subset(..., CD8 > 0)` or `features = c("CD8")`, but prose describes "CD4+ T cells"). Mutate the prose marker only.
 - prose_code_param: prose states an analysis hyperparameter value that disagrees with the value passed to the corresponding function call in a fenced code block (e.g., code runs `FindClusters(..., resolution = 0.5)`, but prose says "resolution of 0.6"). Mutate the prose value only.
 
-CODE CONSISTENCY ERROR CATEGORIES (inject all; ONLY inside fenced code blocks — never break fence delimiters)
-- code_comment_conflict: change an inline code comment (a line starting with #) inside a code block so it conflicts with the function called on the same or the next line (e.g., change "# normalize the data" to "# cluster the data" when the code calls NormalizeData()). Use antonym/opposite-operation replacements only; keep the comment grammatically correct.
-
 CONSTRAINTS
 - Keep edits minimal and local; **≥85% token overlap** with input.
 - **CRITICAL: Preserve ALL code block structure exactly**:
   * Do NOT remove, add, or modify code fence delimiters (``` or ```{r} or ```{python})
   * The number of ``` lines MUST be identical in input and output
   * For RMarkdown/Rmd files, preserve ALL chunk headers like ```{r, ...}
-  * Only introduce errors INSIDE code blocks (typos in code), never break the fences
+  * Do NOT introduce typos, comment changes, or symbol/identifier changes
+    inside ``` code fences. Keep all fenced code character-for-character
+    identical to the input — EXCEPT where a CLI category above explicitly
+    requires an in-fence mutation (cli_unknown_flag, cli_program_rename).
 - **Preserve section ORDER and TITLES** from the Intro spec (if applicable):
   1) # <project_name>
      _<tagline>_
@@ -92,8 +108,6 @@ CONSTRAINTS
 - Do **not** alter the protected keywords (exact casing/spelling): {keywords}
 - Keep at least **{min_per_category} errors per category** listed above.
 - Limit `duplicate` injections to at most **{min_per_category}**.
-- If the input contains runnable code, keep it mostly intact but introduce **one** realistic break
-  (e.g., missing quote/paren or wrong function name) without adding new libraries.
 - Keep at least one **valid** URL so the fixer can compare.
 - Do not change the project identity, domain, or language.
 - Do not include markers, explanations, or commentary in the corrupted markdown.
@@ -1073,7 +1087,16 @@ class LLMErrorInjector:
         - .rmd / .ipynb: skip all categories (executable code, not doc-quality scope)
         - .md / .rst / .txt: inject code_func_name, code_func_args, code_comment_conflict
         - other/unknown: inject only code_comment_conflict
+
+        Scoped out entirely: the categories this method emits are all
+        CODE_INTERNAL_CATEGORIES (mutations inside ``` fences), which are
+        unfixable by construction, so injection is disabled and each is
+        recorded in "skipped" with reason "scoped_out_code_internal".
         """
+        for _cat in ("code_func_name", "code_func_args", "code_comment_conflict"):
+            self._record_skip(data, _cat, "scoped_out_code_internal")
+        return text, errors
+
         ft = file_type.lower()
         fence_spans = self._fence_spans(text)
         if not fence_spans:
@@ -1518,6 +1541,9 @@ class LLMErrorInjector:
         yaml_span = self._yaml_frontmatter_span(corrupted)
 
         def need(cat: str) -> int:
+            # Code-internal categories are scoped out of injection entirely.
+            if cat in CODE_INTERNAL_CATEGORIES:
+                return 0
             return max(0, min_per_category - cat_counts.get(cat, 0))
 
         def prose_replace(text: str, old: str, new: str) -> str:

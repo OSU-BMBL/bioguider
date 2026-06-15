@@ -2,11 +2,21 @@
 Unit tests for code-consistency error injection:
   code_func_name, code_func_args, code_comment_conflict
 
+These three categories are CODE_INTERNAL_CATEGORIES — their mutation lives
+inside ``` fences, which is unfixable by a documentation evaluator. They are
+therefore scoped OUT of injection entirely (regardless of file type) and only
+recorded in the manifest's "skipped" list with reason
+"scoped_out_code_internal". The tests below assert that contract.
+
 All tests use _deterministic_inject (no LLM) or _inject_code_consistency
 directly so they run fast without network calls.
 """
 import pytest
-from bioguider.generation.llm_injector import LLMErrorInjector, _COMMENT_CONFLICT_MAP
+from bioguider.generation.llm_injector import (
+    LLMErrorInjector,
+    _COMMENT_CONFLICT_MAP,
+    CODE_INTERNAL_CATEGORIES,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -101,23 +111,23 @@ class TestInjectCodeConsistencyDirect:
         orig = arg_errors[0]["original_snippet"]
         assert "=" in orig
 
-    def test_code_comment_conflict_injected(self):
+    def test_code_comment_conflict_not_injected(self):
+        # Scoped out: in-fence comment mutation is unfixable by a doc evaluator.
         result, errors, data = self._call(DOC_WITH_CODE)
         cats = {e["category"] for e in errors}
-        assert "code_comment_conflict" in cats, f"Expected code_comment_conflict in {cats}"
+        assert "code_comment_conflict" not in cats, f"should not be injected: {cats}"
 
-    def test_code_comment_conflict_changes_meaning(self):
+    def test_code_internal_categories_recorded_skipped(self):
         result, errors, data = self._call(DOC_WITH_CODE)
-        ccc = [e for e in errors if e["category"] == "code_comment_conflict"]
-        if not ccc:
-            pytest.skip("no code_comment_conflict error injected")
-        orig = ccc[0]["original_snippet"]
-        mut = ccc[0]["mutated_snippet"]
-        assert orig != mut
+        skipped = {s["category"]: s["reason"] for s in data.get("skipped", [])}
+        for cat in ("code_func_name", "code_func_args", "code_comment_conflict"):
+            assert skipped.get(cat) == "scoped_out_code_internal", (
+                f"{cat} should be skipped as scoped_out_code_internal: {skipped}"
+            )
 
     def test_no_code_block_records_comment_conflict_skipped(self):
-        # code_func_name / code_func_args are no longer injected at all,
-        # so they won't appear in skipped either.
+        # All three code-internal categories are scoped out, so errors is empty
+        # and they appear only in skipped.
         _, errors, data = self._call(DOC_WITHOUT_CODE)
         skipped = _skipped_categories(data)
         assert "code_comment_conflict" in skipped
@@ -133,12 +143,13 @@ class TestInjectCodeConsistencyDirect:
 # ---------------------------------------------------------------------------
 
 class TestDeterministicPathCodeConsistency:
-    def test_full_inject_produces_code_comment_conflict(self):
+    def test_full_inject_does_not_produce_code_internal(self):
         inj = _make_injector()
         corrupted, manifest = inj.inject(DOC_WITH_CODE, min_per_category=1)
         cats = _categories(manifest)
-        # code_func_name / code_func_args removed; only code_comment_conflict remains
-        assert "code_comment_conflict" in cats, f"Expected code_comment_conflict in {cats}"
+        # All code-internal categories are scoped out of injection.
+        leaked = cats & CODE_INTERNAL_CATEGORIES
+        assert not leaked, f"code-internal categories leaked into manifest: {leaked}"
 
     def test_full_inject_preserves_code_blocks(self):
         inj = _make_injector()
@@ -226,8 +237,9 @@ class TestCommentConflictMap:
 # ---------------------------------------------------------------------------
 
 class TestFileTypeAwareInjection:
-    """code_func_name/code_func_args are injected only for prose file types (.md/.rst/.txt)
-    and suppressed entirely for executable notebooks (.rmd/.ipynb)."""
+    """All code-internal categories (code_func_name, code_func_args,
+    code_comment_conflict) are scoped out of injection for EVERY file type and
+    recorded in "skipped" with reason "scoped_out_code_internal"."""
 
     def _call(self, text, file_type=""):
         inj = _make_injector()
@@ -236,74 +248,26 @@ class TestFileTypeAwareInjection:
         result, errors = inj._inject_code_consistency(text, errors, data, file_type=file_type)
         return result, errors, data
 
-    # ── .md file_type ────────────────────────────────────────────────────────
+    def _assert_scoped_out(self, file_type):
+        result, errors, data = self._call(DOC_WITH_CODE, file_type=file_type)
+        assert errors == [], f"Expected no errors for {file_type!r}, got: {errors}"
+        skipped = {s["category"]: s["reason"] for s in data.get("skipped", [])}
+        for cat in ("code_func_name", "code_func_args", "code_comment_conflict"):
+            assert skipped.get(cat) == "scoped_out_code_internal", (
+                f"{cat} for {file_type!r}: {skipped}"
+            )
 
-    def test_md_injects_code_func_name(self):
-        result, errors, data = self._call(DOC_WITH_CODE, file_type=".md")
-        cats = {e["category"] for e in errors}
-        assert "code_func_name" in cats, f"Expected code_func_name for .md, got: {cats}"
+    def test_md_scopes_out_code_internal(self):
+        self._assert_scoped_out(".md")
 
-    def test_md_injects_code_func_args(self):
-        result, errors, data = self._call(DOC_WITH_CODE, file_type=".md")
-        cats = {e["category"] for e in errors}
-        assert "code_func_args" in cats, f"Expected code_func_args for .md, got: {cats}"
+    def test_rst_scopes_out_code_internal(self):
+        self._assert_scoped_out(".rst")
 
-    def test_md_mutation_stays_inside_fence(self):
-        result, errors, data = self._call(DOC_WITH_CODE, file_type=".md")
-        fn_errors = [e for e in errors if e["category"] in {"code_func_name", "code_func_args"}]
-        if not fn_errors:
-            pytest.skip("no code_func_name/code_func_args injected for .md")
-        for err in fn_errors:
-            orig = err["original_snippet"]
-            # original must appear inside a code fence in the original doc
-            assert orig in DOC_WITH_CODE
-            prose_before_fence = DOC_WITH_CODE.split("```")[0]
-            assert orig not in prose_before_fence
+    def test_rmd_scopes_out_code_internal(self):
+        self._assert_scoped_out(".rmd")
 
-    def test_rst_injects_code_func_name(self):
-        result, errors, data = self._call(DOC_WITH_CODE, file_type=".rst")
-        cats = {e["category"] for e in errors}
-        assert "code_func_name" in cats, f"Expected code_func_name for .rst, got: {cats}"
+    def test_ipynb_scopes_out_code_internal(self):
+        self._assert_scoped_out(".ipynb")
 
-    # ── .rmd / .ipynb file_type ──────────────────────────────────────────────
-
-    def test_rmd_skips_all_code_categories(self):
-        result, errors, data = self._call(DOC_WITH_CODE, file_type=".rmd")
-        assert errors == [], f"Expected no errors for .rmd, got: {errors}"
-        skipped_cats = {s["category"] for s in data.get("skipped", [])}
-        assert "code_comment_conflict" in skipped_cats
-        assert "code_func_name" in skipped_cats
-        assert "code_func_args" in skipped_cats
-
-    def test_rmd_skip_reason_is_executable(self):
-        _, errors, data = self._call(DOC_WITH_CODE, file_type=".rmd")
-        for s in data.get("skipped", []):
-            if s["category"] in {"code_comment_conflict", "code_func_name", "code_func_args"}:
-                assert s["reason"] == "executable_code_file", (
-                    f"Wrong skip reason for {s['category']}: {s['reason']}"
-                )
-
-    def test_ipynb_skips_all_code_categories(self):
-        result, errors, data = self._call(DOC_WITH_CODE, file_type=".ipynb")
-        assert errors == [], f"Expected no errors for .ipynb, got: {errors}"
-        skipped_cats = {s["category"] for s in data.get("skipped", [])}
-        assert "code_comment_conflict" in skipped_cats
-        assert "code_func_name" in skipped_cats
-        assert "code_func_args" in skipped_cats
-
-    # ── default / unknown file_type ──────────────────────────────────────────
-
-    def test_default_does_not_inject_code_func_name(self):
-        _, errors, data = self._call(DOC_WITH_CODE, file_type="")
-        cats = {e["category"] for e in errors}
-        assert "code_func_name" not in cats
-
-    def test_default_does_not_inject_code_func_args(self):
-        _, errors, data = self._call(DOC_WITH_CODE, file_type="")
-        cats = {e["category"] for e in errors}
-        assert "code_func_args" not in cats
-
-    def test_default_still_injects_code_comment_conflict(self):
-        _, errors, data = self._call(DOC_WITH_CODE, file_type="")
-        cats = {e["category"] for e in errors}
-        assert "code_comment_conflict" in cats
+    def test_default_scopes_out_code_internal(self):
+        self._assert_scoped_out("")

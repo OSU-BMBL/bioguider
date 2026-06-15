@@ -52,11 +52,14 @@ TUTORIAL_FILES = [
     f"{SEURAT_VIGNETTES_DIR}/spatial_vignette.Rmd",
 ]
 
-# Stress test levels (errors per category)
-STRESS_LEVELS = [5, 10, 20, 40, 60, 100, 150, 200, 300]
+# Stress test levels. NOTE: each level is now a TOTAL-errors budget for the
+# file, spread evenly across the scorable categories (see
+# inject_errors_at_level / config.min_per_category_from_total), not a
+# per-category minimum. Aligned with config.TOTAL_ERROR_LEVELS.
+STRESS_LEVELS = [50, 100, 200, 300]
 
-# Quick test levels
-QUICK_STRESS_LEVELS = [10, 40, 100]
+# Quick test levels (total-errors budget)
+QUICK_STRESS_LEVELS = [50, 100, 200]
 
 # Output directory
 OUTPUT_BASE = "outputs/single_file_stress"
@@ -201,9 +204,18 @@ def inject_errors_at_level(
     output_dir: str,
     file_basename: str,
     file_type: str = "",
+    level_is_total: bool = True,
 ) -> Dict[str, Any]:
     """
     Inject errors into content at a specific level.
+
+    ``error_count`` is interpreted as a TOTAL-errors budget for this (single)
+    file when ``level_is_total`` is True (the default): it is spread evenly
+    across the scorable categories via
+    ``config.min_per_category_from_total`` so the error-level axis measures
+    "more total errors" rather than "more errors per category" (which forced
+    the injector to fabricate no-op padding). Set ``level_is_total=False`` to
+    restore the legacy per-category-minimum behaviour.
 
     ``file_type`` is the extension (".md", ".rmd", ".rst", ...). It is
     forwarded to ``LLMErrorInjector.inject`` so file-type-gated categories
@@ -216,9 +228,22 @@ def inject_errors_at_level(
     """
     injector = LLMErrorInjector(llm)
 
+    if level_is_total:
+        from bioguider.managers.config import (
+            min_per_category_from_total,
+            SCORABLE_CATEGORIES,
+        )
+        min_per_category = min_per_category_from_total(
+            target_total_errors=error_count,
+            n_files=1,
+            n_categories=len(SCORABLE_CATEGORIES),
+        )
+    else:
+        min_per_category = error_count
+
     corrupted, manifest = injector.inject(
         original_content,
-        min_per_category=error_count,
+        min_per_category=min_per_category,
         max_words=50000,  # Don't limit words for tutorials
         file_type=file_type,
     )
