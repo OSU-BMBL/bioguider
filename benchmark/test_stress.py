@@ -416,7 +416,7 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
     attributable solely to the fixing strategy, not injection randomness.
 
     Environment variables:
-      E004_MODELS      Comma-separated model keys (default: gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss)
+      E004_MODELS      Comma-separated model keys (default: gpt-4o,gpt-5.4,kimi-k2.5,glm-5.1,gpt-oss)
       E004_ERROR_LEVEL Errors per category to inject (default: 10)
 
     Run:
@@ -429,7 +429,7 @@ def test_e004_pipeline_vs_prompt(llm, test_output_dir):
     from bioguider.utils.constants import EvaluationTypeEnum
     from langchain_openai import ChatOpenAI
 
-    _default_models = "gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss"
+    _default_models = "gpt-4o,gpt-5.4,kimi-k2.5,glm-5.1,gpt-oss"
     TARGET_MODELS = [m.strip() for m in os.environ.get("E004_MODELS", _default_models).split(",") if m.strip()]
     ERROR_LEVEL = int(os.environ.get("E004_ERROR_LEVEL", "10"))
     test_file = DEFAULT_TEST_FILE

@@ -134,6 +134,22 @@ class CollectionTask(AgentTask):
             ),
         ]
 
+    @staticmethod
+    def _route_after_plan(state) -> str:
+        """Route the plan step's output.
+
+        When the plan step concludes that no actions are needed (empty plan),
+        it has effectively reached a conclusion on its own — there is nothing
+        for the execute step to run. Skip straight to the observe step, which
+        already knows how to produce the final answer from the current
+        information (see ``CollectionObserveStep._execute_directly``'s
+        "No plan provided" branch). Otherwise run the planned actions.
+        """
+        plan = state.get("plan_actions")
+        if plan is None or (isinstance(plan, str) and len(plan.strip()) == 0):
+            return "observe_step"
+        return "execute_step"
+
     def _compile(self, repo_path: str, gitignore_path: str, **kwargs):
         self.repo_path = repo_path
         self.gitignore_path = gitignore_path
@@ -152,7 +168,9 @@ class CollectionTask(AgentTask):
         graph.add_node("execute_step", self.steps[1].execute)
         graph.add_node("observe_step", self.steps[2].execute)
         graph.add_edge(START, "plan_step")
-        graph.add_edge("plan_step", "execute_step")
+        graph.add_conditional_edges(
+            "plan_step", self._route_after_plan, {"execute_step", "observe_step"}
+        )
         graph.add_edge("execute_step", "observe_step")
         graph.add_conditional_edges("observe_step", check_observe_step, {"plan_step", END})
 

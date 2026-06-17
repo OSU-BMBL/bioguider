@@ -14,7 +14,7 @@ system tests use. Subsequent runs reuse the existing clone.
 
 Environment variables:
   PHAROKKA_MODELS       Comma-separated model keys
-                        (default: gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss)
+                        (default: gpt-4o,gpt-5.4,kimi-k2.5,glm-5.1,gpt-oss)
   PHAROKKA_ERROR_LEVEL  Errors per category to inject (default: 10)
 
 Run:
@@ -50,11 +50,7 @@ PHAROKKA_DOC_REL = "docs/plotting.md"
 
 # E004's default model list minus Claude (which is "claude-sonnet-4-6" in MODELS
 # but already absent from the E004 default).
-# Default model set. glm-5 is intentionally omitted (its proxy deployment is
-# deprecated, HTTP 410). To run it once the proxy is fixed, either add "glm-5"
-# back to this string or run with:
-#     PHAROKKA_MODELS=gpt-4o,gpt-5.4,kimi-k2.5,glm-5,gpt-oss
-DEFAULT_MODELS = "gpt-4o,gpt-5.4,kimi-k2.5,gpt-oss"
+DEFAULT_MODELS = "gpt-4o,gpt-5.4,kimi-k2.5,glm-5.1,gpt-oss"
 
 
 @pytest.fixture(scope="module")

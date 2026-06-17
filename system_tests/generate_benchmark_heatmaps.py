@@ -460,6 +460,130 @@ def _write_fix_rate_heatmap_for_level(
     plt.close(fig)
 
 
+def _merge_replicate_rows(model: str, level: int, rows: List[dict]) -> dict:
+    """Merge replicate result rows for one ``(model, level)`` into one row.
+
+    Multiple benchmark runs at the same error level are replicates of the
+    same ``<model>+<strategy>`` combos. To get a stable per-level signal we
+    pool them: ``category_breakdown`` ``fixed``/``unfixed``/``injected`` are
+    summed per category across replicates, and ``precision_scorable`` is
+    averaged (it is the precision baseline the F1 recompute uses). The merged
+    row carries only the fields ``_recompute_row_metrics`` reads.
+    """
+    cat_acc: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {"fixed": 0, "unfixed": 0, "injected": 0}
+    )
+    precisions: List[float] = []
+    for r in rows:
+        for c in r.get("category_breakdown") or []:
+            cat = c.get("category")
+            if cat is None:
+                continue
+            acc = cat_acc[cat]
+            acc["fixed"] += int(c.get("fixed", 0))
+            acc["unfixed"] += int(c.get("unfixed", 0))
+            acc["injected"] += int(c.get("injected", c.get("fixed", 0) + c.get("unfixed", 0)))
+        precisions.append(float(r.get("precision_scorable", r.get("precision", 1.0)) or 0.0))
+
+    breakdown = [
+        {"category": cat, "fixed": v["fixed"], "unfixed": v["unfixed"], "injected": v["injected"]}
+        for cat, v in sorted(cat_acc.items())
+    ]
+    mean_prec = float(np.mean(precisions)) if precisions else 1.0
+    return {
+        "model": model,
+        "error_count": level,
+        "category_breakdown": breakdown,
+        "precision_scorable": mean_prec,
+    }
+
+
+def aggregate_runs_by_level(
+    run_dirs: List[str], levels: FrozenSet[int] | None = None
+) -> Dict[int, List[dict]]:
+    """Group result rows from many run dirs by error level, merging replicates.
+
+    Args:
+        run_dirs: directories each containing ``STRESS_TEST_RESULTS.json``.
+        levels:   if given, keep only these error levels.
+
+    Returns ``{level: [merged_row_per_model, ...]}``. Run dirs missing the
+    results file are skipped silently.
+    """
+    # level -> model -> [raw rows]
+    pool: Dict[int, Dict[str, List[dict]]] = defaultdict(lambda: defaultdict(list))
+    for run_dir in run_dirs:
+        path = os.path.join(run_dir, "STRESS_TEST_RESULTS.json")
+        if not os.path.exists(path):
+            continue
+        with open(path) as fh:
+            results = json.load(fh).get("results", [])
+        for r in results:
+            ec = int(r.get("error_count", -1))
+            if levels is not None and ec not in levels:
+                continue
+            pool[ec][r["model"]].append(r)
+
+    merged: Dict[int, List[dict]] = {}
+    for level, by_model in pool.items():
+        merged[level] = [
+            _merge_replicate_rows(model, level, rows)
+            for model, rows in by_model.items()
+        ]
+    return merged
+
+
+def generate_category_heatmaps_for_levels(
+    base_dir: str,
+    levels: List[int],
+    *,
+    out_dir: str | None = None,
+    excluded: FrozenSet[str] = frozenset(),
+    content_cats: FrozenSet[str] | None = None,
+    hygiene_cats: FrozenSet[str] | None = None,
+) -> List[str]:
+    """Emit one CONTENT/HYGIENE F1 heatmap per requested error level.
+
+    Scans ``base_dir/run_*`` for ``STRESS_TEST_RESULTS.json``, pools all
+    replicate runs per level, and writes (per level) a two-panel figure
+    ``category_f1_heatmap_level_<L>.png`` — panel A = CONTENT F1, panel B =
+    HYGIENE F1, rows = ``<model>+<strategy>`` grouped by strategy.
+
+    Args:
+        base_dir: e.g. ``outputs/pipeline_stress``.
+        levels:   error levels to render (e.g. ``[20, 40, 100, 150]``).
+        out_dir:  where PNGs land (defaults to ``base_dir``).
+        excluded: categories to drop from numerator+denominator (default: none).
+
+    Returns the list of written PNG paths.
+    """
+    if content_cats is None or hygiene_cats is None:
+        content_cats, hygiene_cats = _content_hygiene_sets()
+    out_dir = out_dir or base_dir
+    os.makedirs(out_dir, exist_ok=True)
+
+    import glob
+
+    run_dirs = sorted(glob.glob(os.path.join(base_dir, "run_*")))
+    by_level = aggregate_runs_by_level(run_dirs, frozenset(levels))
+
+    written: List[str] = []
+    for level in levels:
+        results = by_level.get(level)
+        if not results:
+            print(f"no runs found for error level {level} — skipping")
+            continue
+        out_path = os.path.join(out_dir, f"category_f1_heatmap_level_{level}.png")
+        _write_f1_heatmap_for_level(
+            results, level, out_path,
+            excluded=excluded, content_cats=content_cats, hygiene_cats=hygiene_cats,
+            suffix_label="",
+        )
+        written.append(out_path)
+        print(f"wrote {out_path}  ({len(results)} model+strategy rows pooled)")
+    return written
+
+
 def _parse_argv(argv: List[str]) -> Tuple[str, FrozenSet[str]] | None:
     """Tiny arg parser: ``<run-dir> [--exclude cat1,cat2,...]``."""
     if len(argv) < 2:

@@ -50,7 +50,7 @@ PlanAgentResultJsonSchema = {
     "required": ["actions"],
 }
 
-_LITELLM_PROXY_MODEL_SET = {"gpt-4o", "gpt-5.4", "kimi-k2.5", "glm-5", "gpt-oss", "gpt-oss-120b"}
+_LITELLM_PROXY_MODEL_SET = {"gpt-4o", "gpt-5.4", "kimi-k2.5", "glm-5.1", "gpt-oss", "gpt-oss-120b"}
 # Models that reject a custom temperature parameter
 _TEMP_RESTRICTED_MODELS = {"gpt-5", "gpt-5.4", "o1", "o3"}
 
