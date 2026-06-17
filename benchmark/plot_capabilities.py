@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Fixed cluster order. Models / modes not listed here are appended after.
-LLM_ORDER = ["gpt-4o", "gpt-5.4", "kimi-k2.5", "glm-5", "gpt-oss"]
+LLM_ORDER = ["gpt-4o", "gpt-5.4", "kimi-k2.5", "glm-5.1", "gpt-oss"]
 MODE_ORDER = ["prompt", "native"]
 
 METRICS = [

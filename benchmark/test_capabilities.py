@@ -31,9 +31,10 @@ import pytest
 
 from benchmark.capabilities.runner import run_model
 
-# gpt-5.4 / glm-5 are excluded by default (dead/throttled proxy deployments —
-# see benchmark/shared.py MODELS notes). Add them back via CAPABILITY_MODELS.
-DEFAULT_MODELS = "gpt-4o,gpt-oss,kimi-k2.5"
+# gpt-5.4 is excluded by default (throttled proxy deployment — see
+# benchmark/shared.py MODELS notes); add it back via CAPABILITY_MODELS.
+# glm-5 (the old deployment) is dead (HTTP 410); glm-5.1 replaces it.
+DEFAULT_MODELS = "gpt-4o,gpt-oss,kimi-k2.5,glm-5.1"
 
 
 def _models() -> List[str]:
