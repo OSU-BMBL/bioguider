@@ -802,6 +802,9 @@ def save_results(results: List[StressLevelResult], output_dir: str):
                 "yaml_violations": r.yaml_violations,
                 "section_violations": r.section_violations,
                 "duration_seconds": round(r.duration_seconds, 2),
+                "prompt_tokens": r.prompt_tokens,
+                "completion_tokens": r.completion_tokens,
+                "total_tokens": r.total_tokens,
                 "category_breakdown": [
                     {
                         "category": cr.category,

@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import List
 
 import pytest
+from langchain_core.callbacks import UsageMetadataCallbackHandler
 from langchain_openai import ChatOpenAI
 
 from benchmark.shared import (
@@ -137,7 +138,7 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
         combo = f"{model_name}+{prompt_name}"
         t0 = time.time()
         try:
-            fixed_content, _ = fix_with_model(
+            fixed_content, token_usage = fix_with_model(
                 llm,
                 corrupted_content,
                 original_content,
@@ -164,8 +165,14 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
                 duration_seconds=duration,
                 category_results=category_results,
                 model_name=combo,
+                prompt_tokens=token_usage.get("prompt_tokens", 0),
+                completion_tokens=token_usage.get("completion_tokens", 0),
+                total_tokens=token_usage.get("total_tokens", 0),
             )
-            print(f"  {combo:<42} F1={result.f1_score:.3f} fix={result.fix_rate:.1%} time={duration:.1f}s")
+            print(
+                f"  {combo:<42} F1={result.f1_score:.3f} fix={result.fix_rate:.1%} "
+                f"time={duration:.1f}s tokens={token_usage.get('total_tokens', 0)}"
+            )
             return sr
         except Exception as e:
             print(f"  {combo:<42} ERROR: {e}")
@@ -174,6 +181,19 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
     def _run_pipeline(model_name: str) -> "StressLevelResult | None":
         combo = f"{model_name}+pipeline"
         t0 = time.time()
+        # Sum token usage across every internal LLM call the pipeline makes
+        # (evaluation task + content generator + markdown polish). The handler
+        # is attached at construction so it propagates to all .invoke calls on
+        # this model instance, including with_structured_output / bind_tools.
+        usage_cb = UsageMetadataCallbackHandler()
+        # Per-call LLM timeout. Slow proxy models (glm-5.1, gpt-5.4) need far
+        # more than the old 120s, especially at high error levels where the
+        # generator emits a long document. Override with PHAROKKA_TIMEOUT.
+        call_timeout = int(os.environ.get("PHAROKKA_TIMEOUT", "600"))
+        # Retry transient proxy disconnects (APIConnectionError / "Server
+        # disconnected"), which the tenacity layer does not catch (it only
+        # retries 429s). Override with PHAROKKA_MAX_RETRIES.
+        call_retries = int(os.environ.get("PHAROKKA_MAX_RETRIES", "4"))
         try:
             model_config = MODELS.get(model_name, {"type": "litellm", "model": model_name})
             model_id = model_config.get("model", model_name)
@@ -183,9 +203,10 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
                 model_llm = ChatAnthropic(
                     model=model_id,
                     api_key=os.environ.get("CLAUDE_API_KEY"),
-                    timeout=300,
-                    max_retries=1,
+                    timeout=call_timeout,
+                    max_retries=call_retries,
                     max_tokens=8192,
+                    callbacks=[usage_cb],
                 )
             else:
                 proxy_key, proxy_base_url = resolve_proxy_credentials()
@@ -193,8 +214,9 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
                     model=model_id,
                     api_key=proxy_key,
                     base_url=proxy_base_url,
-                    timeout=120,
-                    max_retries=1,
+                    timeout=call_timeout,
+                    max_retries=call_retries,
+                    callbacks=[usage_cb],
                 )
             report_path = os.path.join(
                 test_output_dir,
@@ -223,6 +245,12 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
             result, category_results = evaluate_fixes(
                 original_content, corrupted_content, fixed_content, manifest, llm
             )
+            # Aggregate per-model token usage collected by the callback.
+            prompt_tok = completion_tok = total_tok = 0
+            for _m, u in (usage_cb.usage_metadata or {}).items():
+                prompt_tok += int(u.get("input_tokens", 0))
+                completion_tok += int(u.get("output_tokens", 0))
+                total_tok += int(u.get("total_tokens", 0))
             sr = StressLevelResult(
                 error_count=error_level,
                 total_errors_injected=total_injected,
@@ -235,27 +263,45 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
                 duration_seconds=duration,
                 category_results=category_results,
                 model_name=combo,
+                prompt_tokens=prompt_tok,
+                completion_tokens=completion_tok,
+                total_tokens=total_tok,
             )
-            print(f"  {combo:<42} F1={result.f1_score:.3f} fix={result.fix_rate:.1%} time={duration:.1f}s")
+            print(
+                f"  {combo:<42} F1={result.f1_score:.3f} fix={result.fix_rate:.1%} "
+                f"time={duration:.1f}s tokens={total_tok}"
+            )
             return sr
         except Exception as e:
             print(f"  {combo:<42} ERROR: {e}")
             return None
 
-    # ── Run 3 strategies × N models in parallel ──────────────────────────────
-    n_strategies = 3  # bioguider, simple, pipeline
+    # ── Run selected strategies × N models in parallel ───────────────────────
+    # PHAROKKA_STRATEGIES selects which strategies run (comma-separated subset
+    # of bioguider,simple,pipeline). Default runs all three. Use "pipeline" to
+    # measure the full BioGuider pipeline's token usage + time in isolation.
+    _all_strategies = ["bioguider", "simple", "pipeline"]
+    strategies = [
+        s.strip()
+        for s in os.environ.get("PHAROKKA_STRATEGIES", ",".join(_all_strategies)).split(",")
+        if s.strip() in _all_strategies
+    ] or _all_strategies
+    print(f"Strategies : {strategies}")
     # Cap concurrency: all models share one proxy endpoint, which throttles
     # (HTTP 429) and times out sub-calls when too many tasks run at once.
     # Override with PHAROKKA_MAX_WORKERS if needed.
     max_workers = int(os.environ.get("PHAROKKA_MAX_WORKERS", "4"))
-    n_tasks = len(target_models) * n_strategies
+    n_tasks = len(target_models) * len(strategies)
     print(f"\nRunning {n_tasks} tasks, {min(max_workers, n_tasks)} at a time ...")
     with ThreadPoolExecutor(max_workers=min(max_workers, n_tasks)) as pool:
         futures = {}
         for model_name in target_models:
-            futures[pool.submit(_run_prompt, model_name, "bioguider")] = f"{model_name}+bioguider"
-            futures[pool.submit(_run_prompt, model_name, "simple")] = f"{model_name}+simple"
-            futures[pool.submit(_run_pipeline, model_name)] = f"{model_name}+pipeline"
+            if "bioguider" in strategies:
+                futures[pool.submit(_run_prompt, model_name, "bioguider")] = f"{model_name}+bioguider"
+            if "simple" in strategies:
+                futures[pool.submit(_run_prompt, model_name, "simple")] = f"{model_name}+simple"
+            if "pipeline" in strategies:
+                futures[pool.submit(_run_pipeline, model_name)] = f"{model_name}+pipeline"
         for future in _as_completed(futures):
             sr = future.result()
             if sr is not None:

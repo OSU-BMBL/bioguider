@@ -52,8 +52,14 @@ def test_output_dir():
 
 @pytest.fixture
 def test_pipeline_output_dir():
-    """Create output directory for test."""
+    """Create output directory for test.
+
+    Base dir is overridable via PIPELINE_OUTPUT_BASE so a self-contained
+    experiment (e.g. a fixed N-repeat sweep) can be isolated from unrelated
+    historical run_* directories.
+    """
+    base = os.environ.get("PIPELINE_OUTPUT_BASE", "outputs/pipeline_stress")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join("outputs/pipeline_stress", f"run_{timestamp}")
+    output_dir = os.path.join(base, f"run_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
