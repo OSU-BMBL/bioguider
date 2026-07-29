@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BioGuider Benchmark v2 — Pipeline Schematic</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --c-bg: #f8fafc;
+    --c-canvas: #ffffff;
+    --c-border: #cbd5e1;
+    --c-border-strong: #94a3b8;
+    --c-text-main: #0f172a;
+    --c-text-sub: #64748b;
+    --c-accent: #dc2626;
+    --font-ui: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-ui);
+    background: var(--c-bg);
+    padding: 40px 24px;
+    min-height: 100vh;
+    color: var(--c-text-main);
+    font-size: 13px;
+  }
+
+  .diagram-container { max-width: 1200px; margin: 0 auto; }
+
+  .diagram-canvas {
+    background: var(--c-canvas);
+    border: 1px solid var(--c-border);
+    padding: 32px;
+  }
+
+  /* Header */
+  .diagram-header {
+    border-bottom: 1px solid var(--c-border);
+    padding-bottom: 16px;
+    margin-bottom: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .diagram-header .left .diagram-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--c-text-main);
+    margin-bottom: 4px;
+  }
+
+  .diagram-header .left .diagram-subtitle {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--c-text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-family: var(--font-mono);
+  }
+
+  .diagram-header .right {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1.6;
+  }
+
+  /* Section header */
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--c-border);
+  }
+
+  .pipeline-section { margin-bottom: 32px; }
+
+  /* Pipeline row */
+  .pipeline {
+    display: grid;
+    grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr 24px 1fr;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .stage {
+    border: 1px solid var(--c-border-strong);
+    background: var(--c-canvas);
+    padding: 14px 16px;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .stage-id {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--c-text-sub);
+    letter-spacing: 0.12em;
+  }
+
+  .stage-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--c-text-main);
+    margin: 6px 0 4px;
+  }
+
+  .stage-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-sub);
+    line-height: 1.5;
+  }
+
+  .stage.focal {
+    border: 2px solid var(--c-text-main);
+  }
+
+  /* Pipeline connector (between stages) */
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .connector-line {
+    width: 100%;
+    height: 1px;
+    background: var(--c-text-main);
+  }
+
+  .connector-arrow {
+    position: absolute;
+    right: -1px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-left: 6px solid var(--c-text-main);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+  }
+
+  .connector-label {
+    position: absolute;
+    bottom: calc(50% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--c-text-sub);
+    letter-spacing: 0.1em;
+    background: var(--c-canvas);
+    padding: 0 3px;
+    white-space: nowrap;
+  }
+
+  /* Two-column lower section: Config + Metrics */
+  .lower {
+    display: grid;
+    grid-template-columns: 1fr 2px 2fr;
+    gap: 0;
+    margin-top: 8px;
+  }
+
+  .lower-divider {
+    border-left: 1px dashed var(--c-border);
+    margin: 0 24px;
+  }
+
+  /* Config block */
+  .config {
+    border: 1px solid var(--c-border-strong);
+    padding: 16px;
+    background: var(--c-canvas);
+  }
+
+  .config-row {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 12px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--c-border);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .config-row:last-child { border-bottom: none; }
+  .config-row .key { color: var(--c-text-sub); text-transform: uppercase; letter-spacing: 0.05em; font-size: 10px; }
+  .config-row .val { color: var(--c-text-main); }
+
+  /* Metrics grid */
+  .metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  .metric {
+    border: 1px solid var(--c-border-strong);
+    background: var(--c-canvas);
+    padding: 14px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 110px;
+  }
+
+  .metric.new {
+    border-color: var(--c-accent);
+  }
+
+  .metric-id {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--c-text-sub);
+    letter-spacing: 0.12em;
+  }
+
+  .metric-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--c-text-main);
+    margin: 6px 0 4px;
+  }
+
+  .metric-formula {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-main);
+    background: var(--c-bg);
+    padding: 4px 6px;
+    border: 1px solid var(--c-border);
+    margin-top: 8px;
+    display: inline-block;
+  }
+
+  .metric-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-sub);
+    line-height: 1.5;
+    margin-top: 6px;
+  }
+
+  .badge-new {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--c-accent);
+    color: var(--c-canvas);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    padding: 2px 6px;
+  }
+
+  /* Branch arrow from EVALUATOR down to METRICS */
+  .branch-arrows {
+    margin: 14px 0 8px;
+    height: 24px;
+    position: relative;
+  }
+  .branch-arrows svg { width: 100%; height: 100%; display: block; }
+
+  /* Legend */
+  .legend {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--c-border);
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--c-text-sub);
+    letter-spacing: 0.06em;
+  }
+
+  .legend-label {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-right: 4px;
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 8px; }
+
+  .legend-swatch {
+    width: 18px;
+    height: 12px;
+    border: 1px solid var(--c-border-strong);
+    background: var(--c-canvas);
+  }
+  .legend-swatch.focal { border: 2px solid var(--c-text-main); }
+  .legend-swatch.accent { border: 1px solid var(--c-accent); background: var(--c-canvas); }
+  .legend-swatch.solid-accent { background: var(--c-accent); border-color: var(--c-accent); }
+
+  /* Colophon */
+  .colophon {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--c-border);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--c-text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media (max-width: 1080px) {
+    .pipeline { grid-template-columns: 1fr; gap: 12px; }
+    .pipeline .connector { display: none; }
+    .lower { grid-template-columns: 1fr; }
+    .lower-divider { display: none; }
+    .metrics { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="diagram-container">
+  <div class="diagram-canvas">
+
+    <!-- HEADER -->
+    <div class="diagram-header">
+      <div class="left">
+        <div class="diagram-title">BioGuider Benchmark v2 — Pipeline Schematic</div>
+        <div class="diagram-subtitle">DWG-BG-V2-001 / Architecture / Sheet 1 of 1</div>
+      </div>
+      <div class="right">
+        REV. 02 / 2026-04-29<br>
+        BIOGUIDER TEAM
+      </div>
+    </div>
+
+    <!-- TIER 1: PIPELINE -->
+    <div class="pipeline-section">
+      <div class="section-label">A — Repair pipeline (left → right)</div>
+      <div class="pipeline">
+        <!-- Stage 01: BASELINE -->
+        <div class="stage">
+          <div>
+            <div class="stage-id">01 / INPUT</div>
+            <div class="stage-name">Baseline</div>
+          </div>
+          <div class="stage-meta">
+            *.Rmd vignette<br>
+            satijalab/seurat<br>
+            10 candidates
+          </div>
+        </div>
+
+        <div class="connector">
+          <div class="connector-label">INJECT</div>
+          <div class="connector-line"></div>
+          <div class="connector-arrow"></div>
+        </div>
+
+        <!-- Stage 02: CORRUPTED -->
+        <div class="stage">
+          <div>
+            <div class="stage-id">02 / DET. INJECTOR</div>
+            <div class="stage-name">Corrupted</div>
+          </div>
+          <div class="stage-meta">
+            force_deterministic=True<br>
+            prose_only=True<br>
+            36 cats: 22+11+3
+          </div>
+        </div>
+
+        <div class="connector">
+          <div class="connector-label">PROMPT</div>
+          <div class="connector-line"></div>
+          <div class="connector-arrow"></div>
+        </div>
+
+        <!-- Stage 03: REPAIR (focal) -->
+        <div class="stage focal">
+          <div>
+            <div class="stage-id">03 / REPAIR</div>
+            <div class="stage-name">LLM + prompt</div>
+          </div>
+          <div class="stage-meta">
+            model: gpt-4o<br>
+            prompts: BG-v3 / Generic<br>
+            via LiteLLM proxy
+          </div>
+        </div>
+
+        <div class="connector">
+          <div class="connector-label">OUTPUT</div>
+          <div class="connector-line"></div>
+          <div class="connector-arrow"></div>
+        </div>
+
+        <!-- Stage 04: FIXED -->
+        <div class="stage">
+          <div>
+            <div class="stage-id">04 / ARTEFACT</div>
+            <div class="stage-name">Fixed</div>
+          </div>
+          <div class="stage-meta">
+            *.fixed.Rmd<br>
+            persisted to disk<br>
+            replays offline
+          </div>
+        </div>
+
+        <div class="connector">
+          <div class="connector-label">SCORE</div>
+          <div class="connector-line"></div>
+          <div class="connector-arrow"></div>
+        </div>
+
+        <!-- Stage 05: EVALUATOR (focal) -->
+        <div class="stage focal">
+          <div>
+            <div class="stage-id">05 / EVALUATOR V2</div>
+            <div class="stage-name">Score fixes</div>
+          </div>
+          <div class="stage-meta">
+            deterministic<br>
+            no LLM call<br>
+            unified codepath
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BRANCH ARROWS down from evaluator -->
+    <div class="branch-arrows">
+      <svg viewBox="0 0 1200 24" preserveAspectRatio="none">
+        <!-- Vertical line down from evaluator (right side) -->
+        <line x1="1080" y1="0" x2="1080" y2="12" stroke="#0f172a" stroke-width="1"/>
+        <!-- Horizontal trunk -->
+        <line x1="180" y1="12" x2="1080" y2="12" stroke="#0f172a" stroke-width="1"/>
+        <!-- Three drop legs -->
+        <line x1="200" y1="12" x2="200" y2="22" stroke="#0f172a" stroke-width="1"/>
+        <line x1="600" y1="12" x2="600" y2="22" stroke="#0f172a" stroke-width="1"/>
+        <line x1="1000" y1="12" x2="1000" y2="22" stroke="#0f172a" stroke-width="1"/>
+        <!-- Arrowheads at each leg bottom -->
+        <polygon points="194,22 206,22 200,28" fill="#0f172a"/>
+        <polygon points="594,22 606,22 600,28" fill="#0f172a"/>
+        <polygon points="994,22 1006,22 1000,28" fill="#0f172a"/>
+      </svg>
+    </div>
+
+    <!-- TIER 2: SPEC + METRICS side by side -->
+    <div class="lower">
+
+      <!-- LEFT: Configuration block -->
+      <div>
+        <div class="section-label">B — Test configuration</div>
+        <div class="config">
+          <div class="config-row"><span class="key">Models</span><span class="val">gpt-4o, kimi-k2.5, glm-5, gpt-5.4, gpt-oss-120b</span></div>
+          <div class="config-row"><span class="key">Skills</span><span class="val">bioguider-v3 / skill_generic</span></div>
+          <div class="config-row"><span class="key">Levels</span><span class="val">[5, 10, 20, 40, 60, 100, 150, 200, 300]</span></div>
+          <div class="config-row"><span class="key">Vignettes</span><span class="val">de, cell_cycle, dim_reduction, ... ×10</span></div>
+          <div class="config-row"><span class="key">Categories</span><span class="val">CONTENT 22 · HYGIENE 11 · UNSCORABLE 3</span></div>
+          <div class="config-row"><span class="key">Cells</span><span class="val">450 (10 × 9 × 5) for E001-v2</span></div>
+          <div class="config-row"><span class="key">Determinism</span><span class="val">byte-identical inputs across models &amp; skills</span></div>
+        </div>
+      </div>
+
+      <div class="lower-divider"></div>
+
+      <!-- RIGHT: Output metrics -->
+      <div>
+        <div class="section-label">C — Evaluator outputs (per cell)</div>
+        <div class="metrics">
+
+          <!-- Metric 1: F1 / P / R -->
+          <div class="metric">
+            <div>
+              <div class="metric-id">M-01</div>
+              <div class="metric-name">F1 · Precision · Recall</div>
+              <div class="metric-formula">F1 = 2·P·R / (P+R)</div>
+            </div>
+            <div class="metric-meta">
+              recall = injected fixed<br>
+              precision = TP / (TP+FP)<br>
+              scorable subset reported
+            </div>
+          </div>
+
+          <!-- Metric 2: Hard FP NEW -->
+          <div class="metric new">
+            <div class="badge-new">NEW V2</div>
+            <div>
+              <div class="metric-id">M-02 / HARD FP</div>
+              <div class="metric-name">Protected regions</div>
+              <div class="metric-formula">code_fence + yaml + section</div>
+            </div>
+            <div class="metric-meta">
+              code blocks<br>
+              YAML frontmatter<br>
+              section header lines
+            </div>
+          </div>
+
+          <!-- Metric 3: Soft FP NEW -->
+          <div class="metric new">
+            <div class="badge-new">NEW V2</div>
+            <div>
+              <div class="metric-id">M-03 / SOFT FP</div>
+              <div class="metric-name">Collateral damage</div>
+              <div class="metric-formula">SequenceMatcher diff</div>
+            </div>
+            <div class="metric-meta">
+              line-level changes<br>
+              outside known errors<br>
+              outside protected regions
+            </div>
+          </div>
+
+        </div>
+
+        <div style="margin-top: 14px; padding: 10px 12px; border: 1px solid var(--c-border); background: var(--c-bg); font-family: var(--font-mono); font-size: 10px; color: var(--c-text-sub); line-height: 1.5;">
+          <span style="color: var(--c-text-main); font-weight: 500;">SINK:</span>
+          AGGREGATE_TABLE.csv · AGGREGATE_PROTECTION.csv · AGGREGATE_CATEGORY_DETAIL.csv
+          <span style="color: var(--c-text-sub);">→</span>
+          R/ggplot2 → outputs/figures/fig{1..4}.{pdf,png}
+        </div>
+      </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+      <span class="legend-label">LEGEND</span>
+      <div class="legend-item"><span class="legend-swatch"></span> standard stage</div>
+      <div class="legend-item"><span class="legend-swatch focal"></span> focal stage</div>
+      <div class="legend-item"><span class="legend-swatch accent"></span> output metric</div>
+      <div class="legend-item"><span class="legend-swatch solid-accent"></span> NEW V2 (added in 2026-04-29 redesign)</div>
+    </div>
+
+    <!-- COLOPHON -->
+    <div class="colophon">
+      <span>BIOGUIDER · BENCHMARK v2 · DWG-BG-V2-001</span>
+      <span>SCALE 1:1 · UNITS DIMENSIONLESS · NTS</span>
+      <span>2026-04-29</span>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

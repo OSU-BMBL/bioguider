@@ -55,5 +55,32 @@ class CodeStructureBuilder:
                     function_or_class[4], # doc string
                     function_or_class[5], # params
                 )
+
+            # argparse command-line interface (Python files only, for now)
+            if file.endswith(".py"):
+                try:
+                    cli_iface = file_handler.get_cli_interface()
+                except Exception as e:
+                    logger.error(f"Error getting CLI interface for {file}: {e}")
+                    cli_iface = None
+                if cli_iface is not None:
+                    for arg in cli_iface.arguments:
+                        self.code_structure_db.insert_cli_argument(
+                            path=file,
+                            dest=arg.dest,
+                            option_strings=arg.option_strings,
+                            prog=cli_iface.prog,
+                            description=cli_iface.description,
+                            subcommand=arg.subcommand,
+                            arg_type=arg.arg_type,
+                            default_value=arg.default,
+                            action=arg.action,
+                            nargs=arg.nargs,
+                            choices=arg.choices,
+                            required=arg.required,
+                            metavar=arg.metavar,
+                            help=arg.help,
+                            lineno=arg.lineno,
+                        )
         
 

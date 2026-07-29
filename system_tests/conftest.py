@@ -8,9 +8,9 @@ import logging
 
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 from bioguider.utils.utils import increase_token_usage
-from bioguider.agents.agent_utils import get_llm, get_configured_llm
+from bioguider.agents.agent_utils import get_configured_llm
 
-load_dotenv()
+load_dotenv(override=True)
 
 def get_openai():
     return ChatOpenAI(
@@ -19,15 +19,11 @@ def get_openai():
     )
 
 
-def get_azure_openai():
-    return get_llm(
-        api_key=os.environ.get("OPENAI_API_KEY", None),
-        model_name=os.environ.get("OPENAI_MODEL", None),
-        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", None),
-        api_version=os.environ.get("OPENAI_API_VERSION", None),
-        azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME", None),
-        max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 16384)),  # Increased for tutorial generation
-    )
+def get_litellm():
+    # Honor LLM_PROVIDER (kimi / minimax / azure). When unset, falls back to the
+    # azure branch, which still passes base_url=OPENAI_BASE_URL — i.e. identical
+    # to the previous proxy behavior when OPENAI_BASE_URL is set.
+    return get_configured_llm()
 
 
 def get_deepseek():
@@ -40,20 +36,24 @@ def get_deepseek():
     )"""
     return None
 
+def get_gpt_oss():
+    return get_configured_llm("gpt-oss")
 
 @pytest.fixture(scope="module")
 def minimax_llm():
     return get_configured_llm("minimax")
 
+@pytest.fixture(scope="module")
+def gpt_oss_llm():
+    return get_gpt_oss()
 
 @pytest.fixture(scope="module")
 def kimi_llm():
     return get_configured_llm("kimi")
 
-
 @pytest.fixture(scope="module")
 def llm():
-    return get_configured_llm("azure")
+    return get_litellm()
 
 @pytest.fixture(scope="module")
 def project_structure():
@@ -238,7 +238,7 @@ def plan_actions():
 
 @pytest.fixture(scope="module")
 def root_path():
-    return "/bmbl_data/shaohong/projects/github" # "/home/ubuntu/projects/github" # 
+    return "/home/ubuntu/projects/github" # "/bmbl_data/shaohong/projects/github"
 
 @pytest.fixture(scope="module")
 def data_folder():

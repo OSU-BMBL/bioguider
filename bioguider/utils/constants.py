@@ -16,6 +16,13 @@ class ProjectTypeEnum(Enum):
     pipeline="pipeline"
     unknown="unknown type"
 
+class EvaluationTypeEnum(Enum):
+    README = "readme"
+    TUTORIAL = "tutorial"
+    INSTALLATION = "installation"
+    USERGUIDE = "userguide"
+    SUBMISSION_REQUIREMENTS = "submission_requirements"
+
 class PrimaryLanguageEnum(Enum):
     python="python"
     R="R"

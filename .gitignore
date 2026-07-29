@@ -137,6 +137,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local-only secret-bearing docs (onboarding sheets, runbooks with real keys).
+# Anything matching *.local.* is for local sharing only and must never be staged.
+*.local.md
+*.local.html
+*.local.txt
+docs/BENCHMARK_ONBOARDING.local.md
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -180,3 +187,6 @@ data/
 tests/data/
 
 bioguider_debug/
+
+# Meeting recordings & transcripts
+Meeting/

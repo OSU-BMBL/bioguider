@@ -17,7 +17,31 @@ from .output_manager import OutputManager
 from .llm_content_generator import LLMContentGenerator
 from .llm_cleaner import LLMCleaner
 
+# New unified modules (Phase 1 refactoring)
+from .constants import (
+    EvaluationScore,
+    FileCategory,
+    ErrorCategory,
+    FixStatus,
+    EditType,
+    GenerationLimits,
+    CANONICAL_README_TITLES,
+)
+from .config import (
+    LLMGenerationConfig,
+    InjectionConfig,
+    MetricsConfig,
+)
+from .unified_metrics import (
+    UnifiedMetricsEvaluator,
+    EvaluationResult,
+    ErrorEvaluation,
+    CategoryMetrics,
+    evaluate_fixes,  # Backward compatible wrapper
+)
+
 __all__ = [
+    # Models
     "EvaluationReport",
     "SuggestionItem",
     "StyleProfile",
@@ -25,6 +49,7 @@ __all__ = [
     "DocumentPlan",
     "OutputArtifact",
     "GenerationManifest",
+    # Pipeline components
     "EvaluationReportLoader",
     "SuggestionExtractor",
     "RepoReader",
@@ -34,6 +59,22 @@ __all__ = [
     "OutputManager",
     "LLMContentGenerator",
     "LLMCleaner",
+    # Constants
+    "EvaluationScore",
+    "FileCategory",
+    "ErrorCategory",
+    "FixStatus",
+    "EditType",
+    "GenerationLimits",
+    "CANONICAL_README_TITLES",
+    # Config
+    "LLMGenerationConfig",
+    "InjectionConfig",
+    "MetricsConfig",
+    # Metrics
+    "UnifiedMetricsEvaluator",
+    "EvaluationResult",
+    "ErrorEvaluation",
+    "CategoryMetrics",
+    "evaluate_fixes",
 ]
-
-

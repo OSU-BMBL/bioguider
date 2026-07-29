@@ -13,6 +13,124 @@ from typing import Dict, Any, List, Tuple, Optional
 
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.agents.common_conversation import CommonConversation
+from bioguider.managers.config import (
+    UNSCORABLE_CATEGORIES,
+    CONTENT_CATEGORIES,
+    HYGIENE_CATEGORIES,
+    compute_scorable_breakdown,
+)
+from bioguider.generation.unified_metrics import _naked_count
+
+
+def check_protected_regions(baseline: str, revised: str) -> dict:
+    """Return violation counts for code fences, YAML frontmatter, and section headers."""
+    # Code fence comparison
+    fence_pattern = r'(```[^\n]*\n.*?```)'
+    baseline_fences = re.findall(fence_pattern, baseline, re.DOTALL)
+    revised_fences = re.findall(fence_pattern, revised, re.DOTALL)
+    if len(baseline_fences) != len(revised_fences):
+        code_fence_violations = abs(len(baseline_fences) - len(revised_fences))
+    else:
+        code_fence_violations = sum(
+            1 for b, r in zip(baseline_fences, revised_fences) if b != r
+        )
+
+    # YAML frontmatter comparison
+    yaml_pattern = r'\A---\n(.*?)\n---'
+    baseline_yaml = re.search(yaml_pattern, baseline, re.DOTALL)
+    revised_yaml = re.search(yaml_pattern, revised, re.DOTALL)
+    if baseline_yaml is None and revised_yaml is None:
+        yaml_violations = 0
+    elif baseline_yaml is None or revised_yaml is None:
+        yaml_violations = 1
+    else:
+        yaml_violations = 0 if baseline_yaml.group(1) == revised_yaml.group(1) else 1
+
+    # Section header comparison
+    header_pattern = r'^#{1,6}\s+.+$'
+    baseline_headers = re.findall(header_pattern, baseline, re.MULTILINE)
+    revised_headers = re.findall(header_pattern, revised, re.MULTILINE)
+    if baseline_headers == revised_headers:
+        section_violations = 0
+    else:
+        # Count differing positions plus any count difference
+        common_len = min(len(baseline_headers), len(revised_headers))
+        section_violations = abs(len(baseline_headers) - len(revised_headers)) + sum(
+            1 for b, r in zip(baseline_headers[:common_len], revised_headers[:common_len]) if b != r
+        )
+
+    return {
+        "code_fence_violations": code_fence_violations,
+        "yaml_violations": yaml_violations,
+        "section_violations": section_violations,
+    }
+
+
+def count_collateral_damage(baseline: str, revised: str, errors: list) -> list:
+    """Find prose changes outside injected error regions and protected areas."""
+    baseline_lines = baseline.splitlines()
+    revised_lines = revised.splitlines()
+
+    # Pre-build set of line indices inside code fences or YAML frontmatter
+    def _protected_indices(lines: list) -> set:
+        protected = set()
+        in_fence = False
+        in_yaml = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if i == 0 and stripped == '---':
+                in_yaml = True
+                protected.add(i)
+                continue
+            if in_yaml:
+                protected.add(i)
+                if stripped == '---':
+                    in_yaml = False
+                continue
+            if stripped.startswith('```'):
+                protected.add(i)
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                protected.add(i)
+        return protected
+
+    baseline_protected = _protected_indices(baseline_lines)
+
+    matcher = SequenceMatcher(None, baseline_lines, revised_lines)
+    collateral = []
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == 'equal':
+            continue
+
+        changed_baseline = "\n".join(baseline_lines[i1:i2])
+        changed_revised = "\n".join(revised_lines[j1:j2])
+
+        # Exclusion 1: overlap with an injected error snippet
+        is_error_related = False
+        for err in errors:
+            orig = err.get("original_snippet", "")
+            mut = err.get("mutated_snippet", "")
+            if orig and orig in changed_baseline:
+                is_error_related = True
+                break
+            if mut and mut in changed_baseline:
+                is_error_related = True
+                break
+        if is_error_related:
+            continue
+
+        # Exclusion 2: all changed baseline lines are inside protected regions
+        if i1 < i2 and all(idx in baseline_protected for idx in range(i1, i2)):
+            continue
+
+        collateral.append({
+            "original": changed_baseline,
+            "changed": changed_revised,
+        })
+
+    return collateral
 
 
 @dataclass
@@ -54,13 +172,39 @@ class BenchmarkResult:
     recall: float = 0.0
     f1_score: float = 0.0
     fix_rate: float = 0.0
-    
+
+    # Scorable-only metrics — UNSCORABLE_CATEGORIES excluded. Headline numbers
+    # for the paper figure; the `function` category is injected but not scored
+    # because BioGuider's locator uses function names as anchors (structurally
+    # unfixable by design).
+    true_positives_scorable: int = 0
+    false_negatives_scorable: int = 0
+    false_positives_scorable: int = 0
+    total_errors_scorable: int = 0
+    precision_scorable: float = 0.0
+    recall_scorable: float = 0.0
+    f1_score_scorable: float = 0.0
+    fix_rate_scorable: float = 0.0
+
+    # Paper-table CONTENT vs HYGIENE split.
+    total_injected_content: int = 0
+    fixed_content: int = 0
+    f1_score_content: float = 0.0
+    total_injected_hygiene: int = 0
+    fixed_hygiene: int = 0
+    f1_score_hygiene: float = 0.0
+
+    # Protected region violations (Hard FP) from check_protected_regions()
+    code_fence_violations: int = 0
+    yaml_violations: int = 0
+    section_violations: int = 0
+
     # Detailed breakdowns
     per_category: Dict[str, Dict[str, int]] = field(default_factory=dict)
     per_file: Dict[str, Dict[str, int]] = field(default_factory=dict)
     error_details: List[ErrorMetrics] = field(default_factory=list)
     fp_details: List[FalsePositive] = field(default_factory=list)
-    
+
     def compute_derived_metrics(self):
         """Compute precision, recall, F1 from TP/FP/FN."""
         # Precision = TP / (TP + FP)
@@ -68,26 +212,75 @@ class BenchmarkResult:
             self.precision = self.true_positives / (self.true_positives + self.false_positives)
         else:
             self.precision = 0.0
-        
+
         # Recall = TP / (TP + FN)
         if self.true_positives + self.false_negatives > 0:
             self.recall = self.true_positives / (self.true_positives + self.false_negatives)
         else:
             self.recall = 0.0
-        
+
         # F1 = 2 * (precision * recall) / (precision + recall)
         if self.precision + self.recall > 0:
             self.f1_score = 2 * (self.precision * self.recall) / (self.precision + self.recall)
         else:
             self.f1_score = 0.0
-        
+
         # Fix rate = TP / (TP + FN)
         total_errors = self.true_positives + self.false_negatives
         if total_errors > 0:
             self.fix_rate = self.true_positives / total_errors
         else:
             self.fix_rate = 0.0
-    
+
+        # Scorable-only metrics — shared helper so stress-test figures and
+        # unified_metrics stay in sync on the UNSCORABLE_CATEGORIES carve-out.
+        b = compute_scorable_breakdown(
+            self.error_details,
+            false_positives_total=self.false_positives,
+        )
+        self.true_positives_scorable = b["tp_scorable"]
+        self.false_negatives_scorable = b["fn_scorable"]
+        self.false_positives_scorable = b["fp_scorable"]
+        self.total_errors_scorable = b["total_scorable"]
+        self.precision_scorable = b["precision_scorable"]
+        self.recall_scorable = b["recall_scorable"]
+        self.f1_score_scorable = b["f1_score_scorable"]
+        self.fix_rate_scorable = b["fix_rate_scorable"]
+
+        # CONTENT vs HYGIENE split. Precision mirrors the scorable precision
+        # (FPs are not attributed to a group); recall is group-local.
+        fixed_c = sum(
+            1 for e in self.error_details
+            if e.category in CONTENT_CATEGORIES and e.is_fixed
+        )
+        total_c = sum(
+            1 for e in self.error_details
+            if e.category in CONTENT_CATEGORIES
+        )
+        fixed_h = sum(
+            1 for e in self.error_details
+            if e.category in HYGIENE_CATEGORIES and e.is_fixed
+        )
+        total_h = sum(
+            1 for e in self.error_details
+            if e.category in HYGIENE_CATEGORIES
+        )
+        recall_c = fixed_c / total_c if total_c > 0 else 0.0
+        recall_h = fixed_h / total_h if total_h > 0 else 0.0
+        prec_s = self.precision_scorable
+        self.total_injected_content = total_c
+        self.fixed_content = fixed_c
+        self.f1_score_content = (
+            2 * prec_s * recall_c / (prec_s + recall_c)
+            if (prec_s + recall_c) > 0 else 0.0
+        )
+        self.total_injected_hygiene = total_h
+        self.fixed_hygiene = fixed_h
+        self.f1_score_hygiene = (
+            2 * prec_s * recall_h / (prec_s + recall_h)
+            if (prec_s + recall_h) > 0 else 0.0
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -101,6 +294,21 @@ class BenchmarkResult:
             "recall": round(self.recall, 4),
             "f1_score": round(self.f1_score, 4),
             "fix_rate": round(self.fix_rate, 4),
+            "unscorable_categories": sorted(UNSCORABLE_CATEGORIES),
+            "total_errors_scorable": self.total_errors_scorable,
+            "true_positives_scorable": self.true_positives_scorable,
+            "false_negatives_scorable": self.false_negatives_scorable,
+            "false_positives_scorable": self.false_positives_scorable,
+            "precision_scorable": round(self.precision_scorable, 4),
+            "recall_scorable": round(self.recall_scorable, 4),
+            "f1_score_scorable": round(self.f1_score_scorable, 4),
+            "fix_rate_scorable": round(self.fix_rate_scorable, 4),
+            "total_injected_content": self.total_injected_content,
+            "fixed_content": self.fixed_content,
+            "f1_score_content": round(self.f1_score_content, 4),
+            "total_injected_hygiene": self.total_injected_hygiene,
+            "fixed_hygiene": self.fixed_hygiene,
+            "f1_score_hygiene": round(self.f1_score_hygiene, 4),
             "per_category": self.per_category,
             "per_file": self.per_file,
             "error_details": [
@@ -329,10 +537,12 @@ class BenchmarkEvaluator:
             category = err.get("category", "unknown")
             orig = err.get("original_snippet", "")
             mut = err.get("mutated_snippet", "")
-            
+            mutated_token = err.get("mutated_token", "")
+
             # Determine if error was fixed
             is_fixed, status = self._check_error_fixed(
-                category, orig, mut, baseline, corrupted, revised
+                category, orig, mut, baseline, corrupted, revised,
+                mutated_token=mutated_token,
             )
             
             error_metrics.append(ErrorMetrics(
@@ -345,13 +555,27 @@ class BenchmarkEvaluator:
                 status=status,
             ))
         
-        # Detect false positives if LLM available and enabled
+        # Deterministic FP: collateral damage (always computed, no LLM needed)
         false_positives = []
+        collateral_changes = count_collateral_damage(
+            baseline, revised, injection_manifest.get("errors", [])
+        )
+        for change in collateral_changes:
+            false_positives.append(FalsePositive(
+                file_path=file_path,
+                change_description="Collateral prose change",
+                severity="harmful",
+                original_text=change["original"][:200],
+                changed_text=change["changed"][:200],
+            ))
+
+        # Semantic FP: optional, needs LLM (additive)
         if detect_semantic_fp and self.fp_detector:
-            false_positives = self.fp_detector.detect_false_positives(
+            semantic_fps = self.fp_detector.detect_false_positives(
                 baseline, revised, injection_manifest.get("errors", []), file_path
             )
-        
+            false_positives.extend(semantic_fps)
+
         return error_metrics, false_positives
     
     def _check_error_fixed(
@@ -361,11 +585,19 @@ class BenchmarkEvaluator:
         mut: str,
         baseline: str,
         corrupted: str,
-        revised: str
+        revised: str,
+        mutated_token: str = "",
     ) -> Tuple[bool, str]:
         """
         Check if a specific error was fixed.
-        
+
+        ``mutated_token`` is the optional token the injector recorded as the
+        specific substring it introduced/changed (e.g. ``"--cores"`` for
+        cli_unknown_flag). When provided for CLI categories, the fix check
+        uses a whitespace-anchored token search instead of whole-line
+        substring matching — this is robust to incidental edits the LLM may
+        make to the surrounding line (e.g. collapsing a double space).
+
         Returns:
             Tuple of (is_fixed, status)
         """
@@ -379,8 +611,13 @@ class BenchmarkEvaluator:
                 return True, "fixed_to_valid"
         
         elif category == "link":
-            wellformed = re.search(r"\[[^\]]+\]\([^\s)]+\)", revised) is not None
-            return wellformed, "fixed_to_valid" if wellformed else "unchanged"
+            if orig and orig in revised:
+                return True, "fixed_to_baseline"
+            elif mut and mut in revised:
+                return False, "unchanged"
+            else:
+                # Neither original nor mutated snippet present — link was rewritten
+                return True, "rewritten"
         
         elif category == "duplicate":
             dup_before = corrupted.count(mut) if mut else 0
@@ -425,8 +662,17 @@ class BenchmarkEvaluator:
         
         elif category == "inline_code":
             raw = mut.strip('`') if mut else ""
-            rewrapped = f"`{raw}`" if raw else ""
-            if raw and rewrapped and rewrapped in revised and mut not in revised:
+            if not raw:
+                return False, "unchanged"
+            is_fixed = _naked_count(revised, raw) < _naked_count(corrupted, raw)
+            return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
+
+        elif category == "inline_code_mismatch":
+            # Markup was moved off a code token onto a plain word; the spurious
+            # wrapped word (mutated_token, e.g. `and`) is the anomaly to remove.
+            if orig and orig in revised:
+                return True, "fixed_to_baseline"
+            if mutated_token and mutated_token not in revised:
                 return True, "fixed_to_valid"
             return False, "unchanged"
         
@@ -450,12 +696,27 @@ class BenchmarkEvaluator:
             is_fixed = var_after < var_before
             return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
         
+        # CLI/Config categories injected by the new ``_inject_cli_consistency``
+        # path: the manifest carries the specific token that was introduced
+        # or changed by the mutation, so we can ask the precise question
+        # "is that token still present, as a standalone whitespace-bounded
+        # match, in the revised document?" — robust to incidental
+        # whitespace/quoting edits on the same line.  When ``mutated_token``
+        # is empty (legacy manifests), fall back to whole-line matching.
+        elif category in {"cli_flag_typo", "cli_unknown_flag", "cli_program_rename"}:
+            if mutated_token:
+                pattern = re.compile(rf"(?<!\S){re.escape(mutated_token)}(?!\S)")
+                is_fixed = pattern.search(revised) is None
+            else:
+                is_fixed = bool(mut) and mut not in revised
+            return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"
+
         # Biology-specific and CLI/CONFIG categories
         elif category in {
             "gene_symbol_case", "species_swap", "ref_genome_mismatch", "modality_confusion",
             "normalization_error", "umi_vs_read", "batch_effect", "qc_threshold", "file_format",
             "strandedness", "coordinates", "units_scale", "sample_type", "contamination",
-            "param_name", "default_value", "path_hint"
+            "param_name", "default_value", "path_hint",
         }:
             is_fixed = mut and mut not in revised
             return is_fixed, "fixed_to_valid" if is_fixed else "unchanged"

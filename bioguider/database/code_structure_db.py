@@ -87,10 +87,93 @@ WHERE name = ? AND parent = ? AND path = ?;
 """
 
 code_structure_select_by_name_and_parent_query = f"""
-SELECT id, name, path, start_lineno, end_lineno, parent, doc_string, params, reference_to, reference_by, datetime 
-FROM {CODE_STRUCTURE_TABLE_NAME} 
+SELECT id, name, path, start_lineno, end_lineno, parent, doc_string, params, reference_to, reference_by, datetime
+FROM {CODE_STRUCTURE_TABLE_NAME}
 WHERE name = ? AND parent = ?;
 """
+
+code_structure_select_by_name_like_query = f"""
+SELECT id, name, path, start_lineno, end_lineno, parent, doc_string, params, reference_to, reference_by, datetime
+FROM {CODE_STRUCTURE_TABLE_NAME}
+WHERE name LIKE ?;
+"""
+
+code_structure_select_all_names_query = f"""
+SELECT DISTINCT name FROM {CODE_STRUCTURE_TABLE_NAME};
+"""
+
+# --------------------------------------------------------------------------- #
+# argparse command-line-interface table
+# --------------------------------------------------------------------------- #
+
+CLI_ARGUMENT_TABLE_NAME = "CliArgument"
+
+cli_argument_create_table_query = f"""
+CREATE TABLE IF NOT EXISTS {CLI_ARGUMENT_TABLE_NAME} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path VARCHAR(512) NOT NULL,
+    prog VARCHAR(256),
+    description TEXT,
+    subcommand VARCHAR(256) NOT NULL DEFAULT '',
+    dest VARCHAR(256) NOT NULL,
+    option_strings TEXT,
+    arg_type VARCHAR(128),
+    default_value TEXT,
+    action VARCHAR(64),
+    nargs VARCHAR(32),
+    choices TEXT,
+    required INTEGER,
+    metavar VARCHAR(128),
+    help TEXT,
+    lineno INTEGER,
+    datetime TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
+    UNIQUE (path, subcommand, dest)
+);
+"""
+
+cli_argument_insert_query = f"""
+INSERT INTO {CLI_ARGUMENT_TABLE_NAME}(
+    path, prog, description, subcommand, dest, option_strings, arg_type,
+    default_value, action, nargs, choices, required, metavar, help, lineno, datetime
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+ON CONFLICT(path, subcommand, dest) DO UPDATE SET
+    prog=excluded.prog, description=excluded.description, option_strings=excluded.option_strings,
+    arg_type=excluded.arg_type, default_value=excluded.default_value, action=excluded.action,
+    nargs=excluded.nargs, choices=excluded.choices, required=excluded.required,
+    metavar=excluded.metavar, help=excluded.help, lineno=excluded.lineno,
+    datetime=strftime('%Y-%m-%d %H:%M:%f', 'now');
+"""
+
+cli_argument_select_by_path_query = f"""
+SELECT id, path, prog, description, subcommand, dest, option_strings, arg_type,
+       default_value, action, nargs, choices, required, metavar, help, lineno, datetime
+FROM {CLI_ARGUMENT_TABLE_NAME}
+WHERE path = ?;
+"""
+
+cli_argument_select_all_query = f"""
+SELECT id, path, prog, description, subcommand, dest, option_strings, arg_type,
+       default_value, action, nargs, choices, required, metavar, help, lineno, datetime
+FROM {CLI_ARGUMENT_TABLE_NAME};
+"""
+
+_CLI_ARGUMENT_COLUMNS = (
+    "id", "path", "prog", "description", "subcommand", "dest", "option_strings",
+    "arg_type", "default_value", "action", "nargs", "choices", "required",
+    "metavar", "help", "lineno", "datetime",
+)
+
+
+def _row_to_cli_argument(row) -> Dict[str, Any]:
+    d = dict(zip(_CLI_ARGUMENT_COLUMNS, row))
+    for k in ("option_strings", "choices"):
+        if d.get(k):
+            try:
+                d[k] = json.loads(d[k])
+            except (TypeError, ValueError):
+                pass
+    return d
 
 class CodeStructureDb:
     def __init__(self, author: str, repo_name: str, data_folder: str = None):
@@ -105,6 +188,7 @@ class CodeStructureDb:
         try:
             cursor = self.connection.cursor()
             cursor.execute(code_structure_create_table_query)
+            cursor.execute(cli_argument_create_table_query)
             self.connection.commit()
             return True
         except Exception as e:
@@ -472,6 +556,61 @@ class CodeStructureDb:
             self.connection.close()
             self.connection = None
 
+    def select_by_name_like(self, name: str) -> List[Dict[str, Any]]:
+        """Select all code structures whose name contains the given substring (case-insensitive LIKE)."""
+        res = self._connect_to_db()
+        if not res:
+            return []
+        res = self._ensure_tables()
+        if not res:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(code_structure_select_by_name_like_query, (f"%{name}%",))
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "path": row[2],
+                    "start_lineno": row[3],
+                    "end_lineno": row[4],
+                    "parent": row[5],
+                    "doc_string": row[6],
+                    "params": row[7],
+                    "reference_to": row[8],
+                    "reference_by": row[9],
+                    "datetime": row[10],
+                }
+                for row in rows
+            ]
+        except Exception as e:
+            logging.error(e)
+            return []
+        finally:
+            self.connection.close()
+            self.connection = None
+
+    def select_all_names(self) -> List[str]:
+        """Return all distinct function/class names stored in the database."""
+        res = self._connect_to_db()
+        if not res:
+            return []
+        res = self._ensure_tables()
+        if not res:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(code_structure_select_all_names_query)
+            rows = cursor.fetchall()
+            return [row[0] for row in rows]
+        except Exception as e:
+            logging.error(e)
+            return []
+        finally:
+            self.connection.close()
+            self.connection = None
+
     def delete_code_structure(self, id: int) -> bool:
         """Delete a code structure entry by ID."""
         res = self._connect_to_db()
@@ -488,6 +627,104 @@ class CodeStructureDb:
         except Exception as e:
             logging.error(e)
             return False
+        finally:
+            self.connection.close()
+            self.connection = None
+
+    # ----------------------------------------------------------------- #
+    # argparse CLI arguments
+    # ----------------------------------------------------------------- #
+
+    def insert_cli_argument(
+        self,
+        path: str,
+        dest: str,
+        option_strings: Optional[List[str]] = None,
+        prog: Optional[str] = None,
+        description: Optional[str] = None,
+        subcommand: Optional[str] = None,
+        arg_type: Optional[str] = None,
+        default_value: Optional[str] = None,
+        action: Optional[str] = None,
+        nargs: Optional[str] = None,
+        choices: Optional[List[str]] = None,
+        required: Optional[bool] = None,
+        metavar: Optional[str] = None,
+        help: Optional[str] = None,
+        lineno: Optional[int] = None,
+    ) -> bool:
+        """Insert (or upsert) a single argparse argument definition."""
+        res = self._connect_to_db()
+        if not res:
+            return False
+        res = self._ensure_tables()
+        if not res:
+            return False
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                cli_argument_insert_query,
+                (
+                    path or "",
+                    prog,
+                    description,
+                    subcommand or "",
+                    dest,
+                    json.dumps(option_strings) if option_strings is not None else None,
+                    arg_type,
+                    default_value,
+                    action,
+                    nargs,
+                    json.dumps(choices) if choices is not None else None,
+                    None if required is None else (1 if required else 0),
+                    metavar,
+                    help,
+                    lineno,
+                ),
+            )
+            self.connection.commit()
+            return True
+        except Exception as e:
+            logging.error(e)
+            return False
+        finally:
+            self.connection.close()
+            self.connection = None
+
+    def select_cli_arguments_by_path(self, path: str) -> List[Dict[str, Any]]:
+        """Return all argparse arguments extracted from a given file path."""
+        res = self._connect_to_db()
+        if not res:
+            return []
+        res = self._ensure_tables()
+        if not res:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(cli_argument_select_by_path_query, (path,))
+            return [_row_to_cli_argument(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logging.error(e)
+            return []
+        finally:
+            self.connection.close()
+            self.connection = None
+
+    def select_all_cli_arguments(self) -> List[Dict[str, Any]]:
+        """Return every argparse argument stored in the database."""
+        res = self._connect_to_db()
+        if not res:
+            return []
+        res = self._ensure_tables()
+        if not res:
+            return []
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(cli_argument_select_all_query)
+            return [_row_to_cli_argument(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logging.error(e)
+            return []
         finally:
             self.connection.close()
             self.connection = None

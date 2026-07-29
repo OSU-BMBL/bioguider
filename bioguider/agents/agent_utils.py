@@ -50,6 +50,10 @@ PlanAgentResultJsonSchema = {
     "required": ["actions"],
 }
 
+_LITELLM_PROXY_MODEL_SET = {"gpt-4o", "gpt-5.4", "kimi-k2.5", "glm-5.1", "gpt-oss", "gpt-oss-120b"}
+# Models that reject a custom temperature parameter
+_TEMP_RESTRICTED_MODELS = {"gpt-5", "gpt-5.4", "o1", "o3"}
+
 def get_openai():
     return get_llm(
         api_key=os.environ.get("OPENAI_API_KEY"),
@@ -58,18 +62,26 @@ def get_openai():
         api_version=os.environ.get("OPENAI_API_VERSION"),
         azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
         max_tokens=os.environ.get("OPENAI_MAX_OUTPUT_TOKENS"),
+        base_url=os.environ.get("OPENAI_BASE_URL"),
     )
 
 def get_configured_llm(provider: str = None):
-    """Create an LLM instance based on the specified provider.
+    """Create an LLM instance based on the configured provider.
 
     Args:
-        provider: LLM provider to use ("minimax" or "azure").
-                  If None, reads from the LLM_PROVIDER environment variable (defaults to "azure").
+        provider: LLM provider to use ("kimi", "minimax", or "azure").
+                  If None, reads from the LLM_PROVIDER environment variable
+                  (defaults to "azure").
 
     Supported providers:
-    - "minimax": Uses MINIMAX_API_KEY, MINIMAX_MODEL, MINIMAX_BASE_URL
-    - "azure": Uses OPENAI_API_KEY, OPENAI_MODEL, AZURE_OPENAI_ENDPOINT, etc.
+    - "kimi":    KIMI_API_KEY, KIMI_MODEL, KIMI_BASE_URL, KIMI_MAX_OUTPUT_TOKENS
+    - "minimax": MINIMAX_API_KEY, MINIMAX_MODEL, MINIMAX_BASE_URL, MINIMAX_MAX_OUTPUT_TOKENS
+    - "gpt-oss": GPT_OSS_API_KEY, GPT_OSS_MODEL, GPT_OSS_BASE_URL, GPT_OSS_MAX_OUTPUT_TOKENS
+    - "azure":   OPENAI_API_KEY, OPENAI_MODEL, AZURE_OPENAI_ENDPOINT, OPENAI_API_VERSION,
+                 OPENAI_DEPLOYMENT_NAME, OPENAI_MAX_OUTPUT_TOKENS, OPENAI_BASE_URL
+
+    The minimax/kimi endpoints are OpenAI-shaped, so their *_BASE_URL is passed
+    through to get_llm() (which routes any base_url model through ChatOpenAI).
     """
     if provider is None:
         provider = os.environ.get("LLM_PROVIDER", "azure")
@@ -79,7 +91,15 @@ def get_configured_llm(provider: str = None):
         return get_llm(
             api_key=os.environ.get("MINIMAX_API_KEY"),
             model_name=os.environ.get("MINIMAX_MODEL", "minimax-m2.5"),
+            base_url=os.environ.get("MINIMAX_BASE_URL"),
             max_tokens=int(os.environ.get("MINIMAX_MAX_OUTPUT_TOKENS", 16384)),
+        )
+    elif provider == "kimi":
+        return get_llm(
+            api_key=os.environ.get("KIMI_API_KEY"),
+            model_name=os.environ.get("KIMI_MODEL", "kimi-k2.5"),
+            base_url=os.environ.get("KIMI_BASE_URL"),
+            max_tokens=int(os.environ.get("KIMI_MAX_OUTPUT_TOKENS", 16384)),
         )
     elif provider == "azure":
         return get_llm(
@@ -89,15 +109,19 @@ def get_configured_llm(provider: str = None):
             api_version=os.environ.get("OPENAI_API_VERSION"),
             azure_deployment=os.environ.get("OPENAI_DEPLOYMENT_NAME"),
             max_tokens=int(os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", 16384)),
+            base_url=os.environ.get("OPENAI_BASE_URL"),
         )
-    elif provider == "kimi":
+    elif provider == "gpt-oss":
         return get_llm(
-            api_key=os.environ.get("KIMI_API_KEY"),
-            model_name=os.environ.get("KIMI_MODEL", "kimi-k2.5"),
-            max_tokens=int(os.environ.get("KIMI_MAX_OUTPUT_TOKENS", 16384)),
+            api_key=os.environ.get("GPT_OSS_API_KEY"),
+            model_name=os.environ.get("GPT_OSS_MODEL", "gpt-oss-120b"),
+            base_url=os.environ.get("GPT_OSS_BASE_URL"),
+            max_tokens=int(os.environ.get("GPT_OSS_MAX_OUTPUT_TOKENS", 16384)),
         )
     else:
-        raise ValueError(f"Unsupported LLM_PROVIDER: {provider}. Use 'minimax' or 'azure'.")
+        raise ValueError(
+            f"Unsupported LLM_PROVIDER: {provider}. Use 'kimi', 'minimax', or 'azure'."
+        )
 
 def get_llm(
     api_key: str,
@@ -107,16 +131,18 @@ def get_llm(
     azure_deployment: str=None,
     temperature: float = 0.0,
     max_tokens: int = 16384,  # Set high by default - enough for any document type
+    base_url: str = None,
 ):
     """
     Create an LLM instance with appropriate parameters based on model type and API version.
-    
-    Handles parameter compatibility across different models and API versions:
-    - DeepSeek models: Use max_tokens parameter
-    - GPT models (newer): Use max_completion_tokens parameter
-    - GPT-5+: Don't support custom temperature (uses default)
+
+    When OPENAI_BASE_URL / base_url is set, all supported models are routed through the
+    LiteLLM proxy (OpenAI-shaped API) and Azure credentials are ignored.
     """
-    
+    # Treat empty strings as unset so pydantic/os.environ mix doesn't leak Azure path
+    azure_endpoint = azure_endpoint or None
+    base_url = base_url or None
+
     if model_name.startswith("deepseek"):
         chat = ChatDeepSeek(
             api_key=api_key,
@@ -124,37 +150,23 @@ def get_llm(
             temperature=temperature,
             max_tokens=max_tokens,
         )
-    elif model_name.lower().startswith("minimax"):
-        base_url = os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.io/v1")
-        chat = ChatOpenAI(
-            api_key=api_key,
-            model=model_name,
-            base_url=base_url,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    elif model_name.lower().startswith("kimi"):
-        base_url = os.environ.get("KIMI_BASE_URL", "https://api.moonshot.ai/v1")
-        chat = ChatOpenAI(
-            api_key=api_key,
-            model=model_name,
-            base_url=base_url,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    elif model_name.startswith("gpt"):
+    elif base_url is not None or model_name.startswith("gpt") or model_name in _LITELLM_PROXY_MODEL_SET:
         llm_params = {
             "api_key": api_key,
             "model": model_name,
         }
-        # Handle temperature parameter based on model capabilities
-        # GPT-5+ models don't support custom temperature values
-        supports_temperature = not any(restricted in model_name for restricted in ["gpt-5", "o1", "o3"])
+        # Exact-match set: only the true gpt-5/o-family blocks temperature
+        supports_temperature = model_name not in _TEMP_RESTRICTED_MODELS
         if supports_temperature:
             llm_params["temperature"] = temperature
 
-        if azure_endpoint is None:
-            # OpenAI
+        if base_url is not None:
+            # LiteLLM proxy — all supported models through a single OpenAI-shaped endpoint
+            llm_params["base_url"] = base_url
+            llm_params["max_tokens"] = max_tokens
+            chat = ChatOpenAI(**llm_params)
+        elif azure_endpoint is None:
+            # Plain OpenAI
             llm_params["max_tokens"] = max_tokens
             chat = ChatOpenAI(**llm_params)
         else:
@@ -162,7 +174,6 @@ def get_llm(
             llm_params["azure_endpoint"] = azure_endpoint
             llm_params["api_version"] = api_version
             llm_params["deployment_name"] = azure_deployment
-            # Determine token limit parameter name based on API version
             # Newer APIs (2024-08+) use max_completion_tokens instead of max_tokens
             use_completion_tokens = api_version and api_version >= "2024-08-01-preview"
             token_param = "max_completion_tokens" if use_completion_tokens else "max_tokens"
@@ -214,10 +225,7 @@ def read_file(
     file_path = str(file_path).strip()
     if not os.path.isfile(file_path):
         return None
-    # Use errors="replace" so a stray non-UTF-8 byte (e.g. a binary or
-    # latin-1 README) does not raise UnicodeDecodeError and abort the whole
-    # page generation.
-    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+    with open(file_path, 'r') as f:
         content = f.read()
         return content
 

@@ -87,8 +87,8 @@ def test_collection_task_for_installation(llm, step_callback, root_path):
     assert results is not None
     assert isinstance(results, list)
     
-def test_CollectionTask_on_telescope(kimi_llm, step_callback, root_path):
-    llm = kimi_llm
+def test_CollectionTask_on_telescope(gpt_oss_llm, step_callback, root_path):
+    llm = gpt_oss_llm
     repo_path = f"{root_path}/telescope"
     gitignore_path = f"{root_path}/telescope/.gitignore"
     

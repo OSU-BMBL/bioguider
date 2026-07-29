@@ -1,183 +1,80 @@
-
 # AGENTS.md
 
-## Project Overview
-
-BioGuider implements a modular, multi-agent architecture for systematically evaluating the quality, completeness, and correctness of documentation in open-source biomedical software repositories.
-
-The overall evaluation workflow is decomposed into two high-level modules:
-
-1. **Collect Module** — identifies, retrieves, and structures documentation-relevant artifacts from the repository
-2. **Evaluation Module** — assesses the collected artifacts using predefined quality and consistency criteria
-
-Each module is implemented as a coordinated set of large language model (LLM) agents equipped with task-specific tools.
-
----
-
-## Collect Module
-
-### Purpose
-
-The **Collect Module** is responsible for discovering, extracting, and organizing all repository files that are relevant to documentation evaluation.
-Its goal is to construct a **curated documentation corpus** from repositories with heterogeneous layouts.
-
-Target documentation categories include:
-
-* Project overview / README
-* Installation instructions
-* User guides and API references
-* Tutorials and vignettes
-
----
-
-### Available Tools
-
-LLM agents in the Collect Module may use the following tools:
-
-* **Directory Reader**
-  Traverses the repository directory tree and enumerates files and subdirectories.
-
-* **File Reader**
-  Loads the full content of text-based files, including Markdown, R Markdown, Python, and R source files.
-
-* **Relevance Classifier**
-  Determines whether a file is relevant to a specific documentation category
-  (`README`, `Installation`, `User Guide / API`, `Tutorial / Vignette`).
-
-* **Content Summarizer**
-  Produces concise semantic summaries of documentation files to support downstream reasoning.
-
-* **Content Extractor**
-  Extracts specific sections or segments (e.g., installation steps, tutorial workflows, API usage examples) from larger documents.
-
-* **Python AST REPL Tool**
-  Executes Python code in a controlled environment to perform repository-level analyses, such as:
-
-  * Counting source files by language
-  * Inspecting abstract syntax trees (ASTs)
-  * Computing simple repository statistics
-
----
-
-### Agent Roles
-
-The Collect Module operates using a **plan–execute–verify loop** with three specialized agents.
-
-#### 1. Design Agent
-
-**Responsibility:** High-level planning.
-
-Given the collection objective, the Design Agent generates a structured sequence of actions that may combine reasoning steps and tool invocations.
-
-Example planning actions include:
-
-* Running Python code to quantify repository composition (e.g., number of Python vs. R files)
-* Traversing documentation-related directories (e.g., `./man`, `./vignettes`, `./docs`)
-* Identifying and summarizing README, `.Rd`, or Markdown files
-* Extracting executable tutorial sections from notebooks or vignette files
-
-The output of the Design Agent is an **ordered action plan**.
-
----
-
-#### 2. Execute Agent
-
-**Responsibility:** Action execution.
-
-The Execute Agent carries out the action plan produced by the Design Agent by invoking the specified tools in sequence. It records all intermediate outputs, including:
-
-* Retrieved file contents
-* Extracted documentation sections
-* Generated summaries
-* Results of Python code execution
-
-These outputs are passed to the Observe Agent for verification.
-
----
-
-#### 3. Observe Agent
-
-**Responsibility:** Goal verification and feedback.
-
-The Observe Agent inspects the outputs produced by the Execute Agent and determines whether the collection objective has been satisfied.
-
-Specifically, it checks whether:
-
-* All required documentation categories are present
-* Extracted content is sufficiently complete and unambiguous
-* Additional files or sections need to be collected
-
-If gaps or deficiencies are detected, the Observe Agent generates corrective feedback or refinement suggestions, which may trigger an additional planning cycle.
-
----
-
-## Evaluation Module
-
-### Purpose
-
-The **Evaluation Module** assesses the collected documentation artifacts against predefined quality criteria, including:
-
-* Completeness
-* Clarity and readability
-* Reproducibility
-* Technical correctness
-
----
-
-### Documentation Quality Assessment
-
-For each documentation category (`README`, `Installation`, `User Guide / API`, `Tutorial / Vignette`), the Evaluation Agent applies category-specific evaluation rubrics.
-
-These rubrics assess aspects such as:
-
-* Discoverability and organization
-* Dependency specification
-* Workflow clarity
-* Example completeness
-* Result interpretability
-
----
-
-### Code–Documentation Consistency Evaluation
-
-For **User Guides / APIs** and **Tutorials / Vignettes**, BioGuider additionally evaluates consistency between documentation and source code.
-
-This process consists of two stages.
-
-#### 1. Source Code Structure Indexing
-
-BioGuider scans the repository source code and constructs a structured code index capturing:
-
-* Function and class names
-* Argument names and signatures
-* Return values
-* Inline documentation and docstrings
-
----
-
-#### 2. Consistency Verification
-
-The Evaluation Agent compares documented code usage against the indexed source code structure. It verifies:
-
-* Whether referenced functions and classes exist
-* Whether argument names, order, and defaults are correct
-* Whether documented behavior matches source-level definitions
-
-This analysis enables BioGuider to identify:
-
-* Outdated examples
-* Incorrect API usage
-* Documentation–implementation mismatches
-
-Such issues can negatively impact usability and reproducibility.
-
----
-
-## Summary
-
-By integrating **planning, execution, observation, and evaluation** within a modular multi-agent architecture, BioGuider provides a scalable and automated framework for documentation assessment.
-
-The separation between the Collect and Evaluation modules ensures robustness across diverse repository structures while enabling fine-grained, code-aware analysis of documentation quality and consistency.
-
----
-
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+## What this is
+
+BioGuider is an AI-powered toolkit that evaluates and rewrites documentation (README, installation, user guide, tutorial, submission-requirements) for biomedical software repositories. It clones a target repo, indexes it with a FAISS-backed RAG, asks LLMs (Azure OpenAI by default, with Anthropic / DeepSeek / Gemini adapters) to score each doc category, then runs a generation pipeline that plans and applies edits — plus a benchmark harness that injects synthetic errors to measure fix quality.
+
+There is no CLI entry point or web server; everything is driven programmatically through the three managers in `bioguider/managers/` or exercised via `pytest` in `system_tests/`.
+
+## Environment
+
+- Python 3.11, managed by Poetry. `poetry install` installs both runtime and dev deps (`pyproject.toml`). `requirements.txt` exists for non-Poetry setups but is not the source of truth.
+- Tests use pytest 8. Lint with `ruff check bioguider/` (no project-specific ruff config — it runs defaults).
+- Version bumps: `bump2version patch|minor|major` (config in `.bumpversion.cfg`, writes tags and commits).
+- Runtime config lives in `.env` at the repo root (loaded via `python-dotenv` / `pydantic-settings`). Required keys for the default Azure OpenAI path: `OPENAI_API_TYPE=azure`, `OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `OPENAI_DEPLOYMENT_NAME`, `OPENAI_MODEL`, `OPENAI_API_VERSION`, `OPENAI_TEXT_EMBEDDING_DEPLOYMENT_NAME`, `OPENAI_MAX_INPUT_TOKENS`, `OPENAI_MAX_OUTPUT_TOKENS`. Optional alternatives: `CLAUDE_API_KEY`, `GEMINI_API_KEY`, `DEEPSEEK_API_KEY`.
+
+## Commands you'll actually run
+
+- `poetry install` — create the venv and install deps.
+- `pytest tests/` — fast unit tests. Must be run from the repo root because `tests/conftest.py` opens `./logs/test.log` unconditionally (create `logs/` if missing).
+- `pytest tests/test_rmarkdown_processor.py::TestName::test_case -v` — single test.
+- `pytest system_tests/` — integration tests that call real LLMs, clone real public repos (Seurat, scanpy, etc.), and populate `data/` and `outputs/`. These are slow and cost money — do not run them unthinkingly. Start with a single file, e.g. `pytest system_tests/test_evaluation_readme_task.py -s`.
+- `pytest system_tests/test_comprehensive_benchmark.py` — runs the stress-test benchmark (error injection at multiple levels, writes to `outputs/benchmark_<ts>/`).
+- `python system_tests/analyze_benchmark_results.py` — post-process benchmark output into summary tables.
+- `ruff check bioguider/` — lint.
+- `bump2version patch` — cut a release (updates `pyproject.toml` and tags).
+
+## High-level architecture
+
+Three orchestrator classes in `bioguider/managers/` drive everything; each composes small single-responsibility components and exposes a thin `.run()` / `.evaluate()` method. Start reading here when touching behavior.
+
+**`EvaluationManager` (`evaluation_manager.py`)** — given a repo URL or local path:
+1. `RAG.initialize_repo()` clones the repo into `data/.adalflow/repos/<author>_<repo>/`, builds FAISS indices (separate doc and code retrievers, 256-dim vectors).
+2. `CodeStructureBuilder` populates `CodeStructureDb` (AST tree) and file-by-file summaries are cached in `SummarizedFilesDb`. Both are sqlite, keyed by `(author, repo_name)`, stored under `data/`.
+3. `IdentificationTask` detects primary language, project type, and metadata.
+4. A family of `Evaluation*Task` classes (one per doc category) collect candidate files and call the LLM with the per-category prompt; each returns `(evaluation_dict, files_list)`. Adding a new doc category means subclassing `EvaluationTask` (`bioguider/agents/evaluation_task.py`) and implementing `_collect_files` and `_evaluate`.
+5. `prepare_refined_repo()` mirrors step 1 for a second, "refined" repo — used when evaluating the output of the generation pipeline against the original.
+
+**`DocumentationGenerationManager` (`generation_manager.py`)** — the focus of the current `refactor/document-generation` branch. Takes an evaluation report JSON plus a repo path and runs a strict 9-step pipeline (documented in the class docstring). Each step is a small component in `bioguider/generation/`:
+- `EvaluationReportLoader` → `SuggestionExtractor` → `RepoReader` → `StyleAnalyzer` → `ChangePlanner` → `DocumentRenderer` + `LLMContentGenerator` (which internally uses `TruncationHandler`, `RMarkdownProcessor`, and prompts from `bioguider/generation/prompts/`) → `LLMCleaner` → `OutputManager`.
+- Edits are typed: `full_replace` triggers a single LLM call that merges every suggestion for that file into one cohesive document; other edit types are applied section-by-section through `DocumentRenderer.apply_edit`.
+- Outputs land in `outputs/<repo_key>/<timestamp>/` with revised files, `.original` backups, `manifest.json`, and a human-readable `GENERATION_REPORT.md` written by the nested `GenerationReportWriter` class.
+- `GenerationConfig` in `bioguider/managers/config.py` toggles `debug_output`, `clean_output`, `write_originals`, `max_files`, `target_files`.
+
+**`BenchmarkManager` (`benchmark_manager.py`, extends `BaseTestManager`)** — evaluation harness for the generation pipeline:
+1. Select target files per category (`FILE_CATEGORIES` in `managers/config.py`).
+2. Clone the baseline repo into a tmp directory, extract project terminology.
+3. `inject_errors_parallel` uses a `ThreadPoolExecutor` to LLM-inject N errors per category (`ERROR_CATEGORIES` spans text/structure/code/biology/cli_config — ~40 error types total).
+4. Run `DocumentationGenerationManager.run()` against the corrupted repo.
+5. `UnifiedMetricsEvaluator` (`bioguider/generation/unified_metrics.py`) scores the fixes with precision/recall/F1/fix-rate; optional semantic-FP detection uses another LLM call.
+6. Results serialize to `BENCHMARK_MANIFEST.json`, `BENCHMARK_RESULTS.json`, `STRESS_TEST_TABLE.csv`, and a markdown summary.
+- `prepare_model_comparison` / `evaluate_model_comparison` produce a directory layout where humans can drop in fixes from other models (GPT-4, Codex, Gemini) for head-to-head comparison.
+
+**Agent task conventions.** Every non-trivial agent capability in `bioguider/agents/` is expressed as a PEO (Plan → Execute → Observe) triple of files: `<name>_plan_step.py`, `<name>_execute_step.py`, `<name>_observe_step.py`, glued by `<name>_task.py`. Examples: `collection_*`, `identification_*`, `dockergeneration_*`, `consistency_*`. `common_step.py` / `peo_common_step.py` provide the base classes. When adding a new capability, follow the same quadruple.
+
+**Persistence / state layout.**
+- `data/.adalflow/repos/<author>_<repo>/` — cloned repo sources + FAISS db.
+- `data/*.sqlite` — `SummarizedFilesDb` and `CodeStructureDb` caches.
+- `outputs/<author>_<repo>/<timestamp>/` — generation output.
+- `outputs/benchmark_<ts>/level_<N>/` — stress-test artifacts.
+- `outputs/model_comparison_<ts>/` — multi-model comparison runs.
+- `logs/` — pytest and generation logs (`test.log` is opened by `tests/conftest.py`).
+- `bioguider_debug/` — ad-hoc debug dumps from `GenerationConfig.debug_output`.
+- All of `data/`, `outputs/`, `bioguider_debug/`, `tests/data/` are gitignored — treat them as regeneratable.
+
+## Things that trip people up
+
+- `bioguider/__init__.py` is empty. Always import from specific submodules (`bioguider.managers.evaluation_manager`, `bioguider.generation`, `bioguider.agents.evaluation_readme_task`, etc.).
+- `ProjectSettings.target_repo` defaults to an empty string that will fail `DirectoryPath` validation at runtime. Always construct settings via `SettingsManager.initialize_with_params(...)` rather than `Setting()`.
+- RAG FAISS vectors are hard-coded to 256 dimensions in `bioguider/rag/rag.py`. The embedding deployment in `.env` must be configured to match, or queries will fail at `FAISSRetriever` init.
+- `tests/conftest.py` hard-codes `./logs/test.log` and a `root_path` fixture pointing at `/bmbl_data/shaohong/projects/github` (a server path). Tests depending on `root_path` only run on that host.
+- `system_tests/` are real integration tests — they will clone repos and spend LLM tokens. Flag before running them in bulk.
+- The `refactor/document-generation` branch has been progressively breaking the generation pipeline into the small modules listed above (Phase 1 through 2.5 per the commit log). When touching generation, prefer the `bioguider/generation/*` components over anything that looks monolithic — the monolithic version may still be referenced in older tests.
+- `DeepSeekConversation.chat` swallows exceptions and returns them stringified (see `bioguider/conversation.py`). Don't assume a successful return type.
+- The `RepoAgent/` subdirectory is a vendored third-party library (OpenBMB/RepoAgent), not part of the bioguider package. Don't edit it.
+
+## Security
+
+The committed `.env` at the repo root currently contains live API keys (Azure OpenAI, Anthropic, Gemini). It is in `.gitignore` so it won't be pushed, but rotate the keys if this repo has ever been shared and never stage `.env` manually.

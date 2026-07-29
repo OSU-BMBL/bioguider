@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BioGuider Benchmark — What & Why (for biomedical readers)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --c-bg: #f8fafc;
+      --c-canvas: #ffffff;
+      --c-border: #cbd5e1;
+      --c-border-strong: #94a3b8;
+      --c-text-main: #0f172a;
+      --c-text-sub: #64748b;
+      --c-text-dim: #94a3b8;
+      --c-accent: #b45309;
+      --c-accent-bg: #fef3c7;
+      --c-rule: #0f172a;
+      --font-ui: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--font-ui);
+      background: var(--c-bg);
+      color: var(--c-text-main);
+      padding: 32px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .container { max-width: 1500px; margin: 0 auto; }
+
+    .canvas {
+      background: var(--c-canvas);
+      border: 1px solid var(--c-border-strong);
+      padding: 32px;
+    }
+
+    /* Header */
+    .head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      border-bottom: 2px solid var(--c-rule);
+      padding-bottom: 14px;
+      margin-bottom: 24px;
+    }
+    .title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+    .sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-top: 4px;
+    }
+    .meta {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      line-height: 1.6;
+    }
+    .rev {
+      display: inline-block;
+      color: var(--c-text-main);
+      border: 1px solid var(--c-text-main);
+      padding: 2px 8px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* Section headers */
+    .section {
+      margin-top: 28px;
+    }
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      color: var(--c-text-main);
+      border: 1px solid var(--c-text-main);
+      padding: 3px 8px;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--c-text-main);
+    }
+    .section-sub {
+      flex: 1;
+      border-bottom: 1px solid var(--c-border);
+      margin-left: 4px;
+    }
+
+    /* Thesis / rationale box */
+    .thesis {
+      border: 1px solid var(--c-border-strong);
+      padding: 18px 22px;
+      background: var(--c-canvas);
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .thesis-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--c-text-sub);
+      padding-top: 2px;
+    }
+    .thesis-body p {
+      font-size: 13.5px;
+      line-height: 1.7;
+    }
+    .thesis-body p + p { margin-top: 10px; }
+    .thesis-body strong { font-weight: 600; }
+    .q-word {
+      font-weight: 600;
+      color: var(--c-accent);
+    }
+
+    /* Spike-in experimental design — 4-step horizontal flow */
+    .design {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      border: 1px solid var(--c-border);
+    }
+    .design-step {
+      padding: 18px 20px;
+      border-right: 1px dashed var(--c-border);
+      position: relative;
+    }
+    .design-step:last-child { border-right: none; }
+    .design-step::after {
+      content: '▶';
+      position: absolute;
+      right: -9px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--c-text-dim);
+      font-size: 14px;
+      background: var(--c-canvas);
+      width: 18px;
+      text-align: center;
+      z-index: 2;
+    }
+    .design-step:last-child::after { display: none; }
+    .design-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--c-text-main);
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+    .design-head {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .design-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .design-body {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--c-text-main);
+    }
+    .design-analogy {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      border-top: 1px dashed var(--c-border);
+      padding-top: 8px;
+      margin-top: 10px;
+      line-height: 1.55;
+    }
+
+    /* Axes we measure — 3 tiles */
+    .axes {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+    }
+    .axis {
+      border: 1px solid var(--c-border);
+      padding: 14px 16px;
+    }
+    .axis-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .axis-q {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+    .axis-body {
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--c-text-main);
+    }
+    .axis-metric {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--c-text-sub);
+      border-top: 1px dashed var(--c-border);
+      padding-top: 8px;
+      margin-top: 10px;
+      line-height: 1.6;
+    }
+
+    /* Error category ladder */
+    .ladder {
+      display: grid;
+      grid-template-columns: 140px 1fr 1fr 1fr;
+      border: 1px solid var(--c-border);
+    }
+    .ladder-row {
+      display: contents;
+    }
+    .ladder-cell {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--c-border);
+      border-right: 1px dashed var(--c-border);
+    }
+    .ladder-row:last-child .ladder-cell { border-bottom: none; }
+    .ladder-cell:last-child { border-right: none; }
+    .ladder-head {
+      background: #f1f5f9;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--c-text-sub);
+      padding: 8px 16px;
+    }
+    .ladder-level {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--c-text-main);
+      letter-spacing: 0.08em;
+    }
+    .ladder-sub {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      margin-top: 3px;
+    }
+    .ladder-examples {
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .ladder-ex-label {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--c-text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 3px;
+    }
+    .ladder-ex-list {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--c-text-main);
+      line-height: 1.65;
+    }
+    .new-row .ladder-cell {
+      background: #fffbeb;
+    }
+    .new-tag {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border: 1px solid var(--c-accent);
+      color: var(--c-accent);
+      letter-spacing: 0.1em;
+      margin-left: 6px;
+    }
+
+    /* Example before/after */
+    .example {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .ex-col {
+      border: 1px solid var(--c-border);
+    }
+    .ex-head {
+      padding: 10px 14px;
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--c-border);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .ex-head-bad { color: var(--c-accent); background: var(--c-accent-bg); }
+    .ex-body {
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.8;
+      white-space: pre-wrap;
+    }
+    .hl { background: var(--c-accent-bg); padding: 0 3px; color: var(--c-accent); font-weight: 600; }
+    .hl-good { background: #dcfce7; padding: 0 3px; color: #166534; font-weight: 600; }
+
+    /* Models row */
+    .models {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+    }
+    .model-card {
+      border: 1px solid var(--c-border);
+      padding: 14px 16px;
+    }
+    .model-card-baseline { border-color: var(--c-text-main); }
+    .model-name {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .model-role {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    .model-note {
+      font-size: 11.5px;
+      color: var(--c-text-sub);
+      line-height: 1.55;
+    }
+
+    /* Why it matters footer */
+    .why {
+      border-left: 3px solid var(--c-rule);
+      padding: 14px 18px;
+      background: #f8fafc;
+    }
+    .why-head {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--c-text-sub);
+      margin-bottom: 8px;
+    }
+    .why-body p {
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .why-body p + p { margin-top: 8px; }
+    .why-body strong { font-weight: 600; }
+
+    /* Footer */
+    .footer {
+      margin-top: 28px;
+      border-top: 1px solid var(--c-border);
+      padding-top: 14px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: start;
+    }
+    .foot-left {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      line-height: 1.7;
+    }
+    .foot-left strong { color: var(--c-text-main); font-weight: 600; }
+    .legend {
+      border: 1px solid var(--c-border-strong);
+      padding: 12px 16px;
+      min-width: 260px;
+    }
+    .legend-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--c-text-main);
+      border-bottom: 1px solid var(--c-border);
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .legend-row {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 10px;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--c-text-sub);
+      padding: 3px 0;
+    }
+    .swatch {
+      display: inline-block;
+      width: 16px;
+      height: 10px;
+      border: 1px solid var(--c-border);
+    }
+    .swatch-accent { background: var(--c-accent-bg); border-color: var(--c-accent); }
+    .swatch-solid { background: var(--c-text-main); border-color: var(--c-text-main); }
+    .swatch-new {
+      background: #fffbeb;
+      border-color: var(--c-accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="canvas">
+
+      <!-- HEADER -->
+      <div class="head">
+        <div>
+          <div class="title">BioGuider Benchmark — What It Measures & Why</div>
+          <div class="sub">Plain-language overview · For biomedical researchers · Not a code spec</div>
+        </div>
+        <div class="meta">
+          <div>Companion to error_injection_v2.html</div>
+          <div>2026-04-16</div>
+          <div class="rev">REV A — Overview</div>
+        </div>
+      </div>
+
+      <!-- SECTION 0: the research question -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">0</div>
+          <div class="section-title">The research question</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="thesis">
+          <div class="thesis-label">The setup</div>
+          <div class="thesis-body">
+            <p>BioGuider is an <strong>automated documentation fixer</strong> for biomedical software repositories. It reads a package's README, installation guide, and tutorials, spots flaws (typos, broken links, wrong gene symbols, unclear instructions), and rewrites the sections that need help — so that a biologist who just cloned <em>Seurat</em> or <em>scanpy</em> can actually run the example.</p>
+            <p>The hard question isn't "does it produce output?" — every language model produces output. The hard question is: <span class="q-word">does the fix land on the right errors, and does it stop there?</span> A model that rewrites your entire README from scratch loses your voice and your lab's conventions. A model that misses three-quarters of the bugs is useless.</p>
+            <p>Measuring this on real-world docs is impossible — you don't have a ground-truth "correct" version to compare against. So we borrow a trick from wet-lab QC: <strong>spike in a known amount of contamination, then measure recovery</strong>.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 1: the spike-in design -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">1</div>
+          <div class="section-title">The experiment — spike-in recovery</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="design">
+
+          <div class="design-step">
+            <div class="design-num">STEP 01</div>
+            <div class="design-head">Start with a clean sample</div>
+            <div class="design-tag">Ground truth</div>
+            <div class="design-body">Take a real, known-good tutorial — the Seurat <em>differential expression</em> vignette. Thousands of researchers have read it; the maintainers have vetted it. Treat this as the pristine reference.</div>
+            <div class="design-analogy">Analogy: your reference genome, pre-alignment.</div>
+          </div>
+
+          <div class="design-step">
+            <div class="design-num">STEP 02</div>
+            <div class="design-head">Inject known errors</div>
+            <div class="design-tag">Controlled corruption</div>
+            <div class="design-body">Use a separate "attacker" model to introduce <strong>N specific, labeled errors</strong> into the tutorial — typos, flipped cell-type markers, wrong hyperparameters, swapped accession IDs. Every error is logged with its exact original and mutated text.</div>
+            <div class="design-analogy">Analogy: spiked-in ERCC controls at a known concentration.</div>
+          </div>
+
+          <div class="design-step">
+            <div class="design-num">STEP 03</div>
+            <div class="design-head">Run models on corrupted version</div>
+            <div class="design-tag">The thing we're measuring</div>
+            <div class="design-body">Hand the corrupted document to each candidate language model and ask it to fix all errors. The model doesn't see the clean version — only the corrupted one, and its own prior knowledge of biology and good writing.</div>
+            <div class="design-analogy">Analogy: your pipeline processes the sample blind to the spike-in identity.</div>
+          </div>
+
+          <div class="design-step">
+            <div class="design-num">STEP 04</div>
+            <div class="design-head">Score recovery</div>
+            <div class="design-tag">Quantify</div>
+            <div class="design-body">For each logged error, check whether the model's output restored the original correct text. Compute <strong>precision</strong> (did it avoid breaking things that weren't broken?) and <strong>recall</strong> (did it catch the planted errors?) and combine into an <strong>F1 score</strong>.</div>
+            <div class="design-analogy">Analogy: your final ERCC recovery curve — %detected vs. %ground-truth.</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SECTION 2: three axes of the benchmark -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">2</div>
+          <div class="section-title">What we actually benchmark against — three axes</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="axes">
+
+          <div class="axis">
+            <div class="axis-q">Axis A</div>
+            <div class="axis-title">Dose-response — does it hold up at scale?</div>
+            <div class="axis-body">Run the same experiment at increasing error density: <strong>10 → 30 → 50 → 100 → 200 → 300 errors</strong> injected into the same document. A good model fixes a 10-error version near-perfectly; we want to know the breakpoint — the error count at which performance collapses. Models that fail gracefully at 300 errors are qualitatively different from ones that cliff-edge at 50.</div>
+            <div class="axis-metric">↳ Figure 1: F1 vs. error count, one line per model.</div>
+          </div>
+
+          <div class="axis">
+            <div class="axis-q">Axis B</div>
+            <div class="axis-title">Model comparison — which tool for the job?</div>
+            <div class="axis-body">Same corrupted document, five different models. Compare: a closed-source flagship (GPT-5.4), two mid-tier open-weight models (Kimi-K2.5, GLM-5), a small open-source baseline (GPT-OSS), and a legacy baseline (GPT-4o). We learn which family of models actually reads biomedical text carefully — and whether the premium tier is worth the premium price.</div>
+            <div class="axis-metric">↳ Figure 2: mean F1 per model with 95% CI across all error doses.</div>
+          </div>
+
+          <div class="axis">
+            <div class="axis-q">Axis C</div>
+            <div class="axis-title">Domain specificity — does it know biology?</div>
+            <div class="axis-body">Errors are stratified into <strong>generic text</strong>, <strong>bio-generic</strong>, and <strong>biomed-app-specific</strong> categories (see Section 3). A model can ace typos and still fumble a swapped cell-type marker. The heatmap tells us <em>where</em> each model breaks down — which is the actionable insight for choosing a model for a given lab's docs.</div>
+            <div class="axis-metric">↳ Figure 3: fix-rate heatmap, rows = models, columns = error categories.</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SECTION 3: error category ladder -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">3</div>
+          <div class="section-title">The error taxonomy — what we inject, and why</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="ladder">
+
+          <!-- header row -->
+          <div class="ladder-row">
+            <div class="ladder-cell ladder-head">Difficulty</div>
+            <div class="ladder-cell ladder-head">What it tests</div>
+            <div class="ladder-cell ladder-head">Example injections</div>
+            <div class="ladder-cell ladder-head">Why it matters</div>
+          </div>
+
+          <!-- LEVEL 1 -->
+          <div class="ladder-row">
+            <div class="ladder-cell">
+              <div class="ladder-level">LEVEL 1</div>
+              <div class="ladder-sub">Generic text</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-examples">Whether the model can proofread at all. Basic literacy, not biology.</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-ex-label">Categories</div>
+              <div class="ladder-ex-list">typo · broken link · duplicated sentence · broken markdown list · missing code-fence language tag</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-examples">Floor test. Any model worth considering should score near-perfectly here. Failures indicate the model isn't even reading carefully.</div>
+            </div>
+          </div>
+
+          <!-- LEVEL 2 -->
+          <div class="ladder-row">
+            <div class="ladder-cell">
+              <div class="ladder-level">LEVEL 2</div>
+              <div class="ladder-sub">Bio-generic</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-examples">Whether the model knows general bioinformatics vocabulary — the kind a competent graduate student picks up in year one.</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-ex-label">Categories</div>
+              <div class="ladder-ex-list">gene-symbol case (tp53 → TP53) · species swap (mm10 ↔ GRCh38) · UMI vs. read count · batch correction vs. normalization terminology · 0- vs. 1-based coordinates · FASTQ/BAM/MTX file-format mix-ups</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-examples">Tests whether the model has basic bio-literacy. Most modern LLMs do well; differences start to emerge on subtle cases like UMI/read confusion.</div>
+            </div>
+          </div>
+
+          <!-- LEVEL 3 NEW -->
+          <div class="ladder-row new-row">
+            <div class="ladder-cell">
+              <div class="ladder-level">LEVEL 3 <span class="new-tag">NEW</span></div>
+              <div class="ladder-sub">Biomed-app-specific</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-examples">Whether the model understands the <strong>specific analytical context</strong> of modern biomedical tools — scRNA-seq clustering, differential expression, annotation workflows. This is the hard tier.</div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-ex-label">Categories (added in this refactor)</div>
+              <div class="ladder-ex-list">
+                <strong>reproducibility drift</strong> — set.seed(42) changed, Seurat v4 ↔ v5<br>
+                <strong>analysis hyperparameter</strong> — Leiden resolution 0.5 → 2.0, UMAP n_neighbors drift<br>
+                <strong>statistical test mis-naming</strong> — "Wilcoxon" called "t-test", FDR ↔ Bonferroni<br>
+                <strong>annotation ID-space confusion</strong> — GEO accession GSE → GSM, Ensembl ID corrupted<br>
+                <strong>cell-type marker errors</strong> — CD4 ↔ CD8 swap, FOXP3 → RORC
+              </div>
+            </div>
+            <div class="ladder-cell">
+              <div class="ladder-examples">This is what separates a model that can generically fix English prose from one that can actually steward a biomedical tutorial. A wrong marker gene in a tutorial sends every downstream user off the rails. This tier is what a biologist should care about most.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SECTION 4: worked example -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">4</div>
+          <div class="section-title">A worked example — what one test cell looks like</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="example">
+
+          <div class="ex-col">
+            <div class="ex-head ex-head-bad">Corrupted input (5 injected errors shown)</div>
+            <div class="ex-body"># Differential Expression in <span class="hl">Seurat v5</span>
+
+<span class="hl">set.seed(43)</span>
+markers &lt;- FindMarkers(
+  pbmc,
+  ident.1 = <span class="hl">"CD8_T_cell"</span>,
+  ident.2 = "B_cell",
+  test.use = <span class="hl">"t.test"</span>,
+  <span class="hl">resolution = 2.0</span>
+)
+# data from <span class="hl">GSM123456</span></div>
+          </div>
+
+          <div class="ex-col">
+            <div class="ex-head">Target (original, what the fixer should recover)</div>
+            <div class="ex-body"># Differential Expression in <span class="hl-good">Seurat v4</span>
+
+<span class="hl-good">set.seed(42)</span>
+markers &lt;- FindMarkers(
+  pbmc,
+  ident.1 = <span class="hl-good">"CD4_T_cell"</span>,
+  ident.2 = "B_cell",
+  test.use = <span class="hl-good">"wilcox"</span>,
+  <span class="hl-good">resolution = 0.5</span>
+)
+# data from <span class="hl-good">GSE123456</span></div>
+          </div>
+
+        </div>
+        <div style="margin-top: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--c-text-sub); line-height: 1.6;">
+          Five errors, one per biomed-app category: reproducibility_drift (Seurat v4→v5), reproducibility_drift (seed 42→43), celltype_marker (CD4→CD8), stat_test_misnaming (wilcox→t.test), analysis_hyperparam (resolution 0.5→2.0), annotation_id_space (GSE→GSM). A fix-rate of 5/5 = perfect recall on this cell. A model that silently leaves "Seurat v5" alone (plausibly thinking it's an upgrade) would score 4/5 and get penalized — that's the point.
+        </div>
+      </div>
+
+      <!-- SECTION 5: models under test -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">5</div>
+          <div class="section-title">Models under test</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="models">
+
+          <div class="model-card">
+            <div class="model-name">gpt-5.4</div>
+            <div class="model-role">Flagship</div>
+            <div class="model-note">Closed-source. Current upper-bound baseline. Expensive per call — establishes the ceiling.</div>
+          </div>
+
+          <div class="model-card">
+            <div class="model-name">kimi-k2.5</div>
+            <div class="model-role">Long-context</div>
+            <div class="model-note">Open-weight. Strong Chinese-English bilingual; tests whether an alternative architecture performs on biomedical prose.</div>
+          </div>
+
+          <div class="model-card">
+            <div class="model-name">glm-5</div>
+            <div class="model-role">Reasoning-tuned</div>
+            <div class="model-note">Open-weight. Reasoning-oriented fine-tuning; hypothesized to help with structured-edit tasks.</div>
+          </div>
+
+          <div class="model-card">
+            <div class="model-name">gpt-oss</div>
+            <div class="model-role">Small / cheap</div>
+            <div class="model-note">Fully open-source. Establishes the floor — how much quality do you give up for $0.02/call vs $0.20?</div>
+          </div>
+
+          <div class="model-card model-card-baseline">
+            <div class="model-name">gpt-4o</div>
+            <div class="model-role">Legacy baseline</div>
+            <div class="model-note">Previous-generation frontier. Kept for continuity with earlier benchmark runs — anchors the trend.</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SECTION 6: why a biologist should care -->
+      <div class="section">
+        <div class="section-label">
+          <div class="section-num">6</div>
+          <div class="section-title">Why this matters for biomedical researchers</div>
+          <div class="section-sub"></div>
+        </div>
+        <div class="why">
+          <div class="why-head">The use case</div>
+          <div class="why-body">
+            <p>The documentation of a biomedical package is the <strong>primary UX</strong> for every first-time user — and in many labs, first-time users are rotating graduate students who will decide whether to adopt or abandon a tool within 30 minutes. A tutorial with a swapped marker gene, a drifted seed, or a broken install command costs real research hours and, occasionally, publishable conclusions. Package maintainers know this; most don't have time to systematically audit their own docs.</p>
+            <p>BioGuider aims to be an automated auditor — but <strong>you can't deploy an auditor you can't trust</strong>. A benchmark like this one is how we decide, empirically, whether a given language model is careful enough to let loose on community documentation. The output isn't a single number; it's a structured profile of <em>where</em> each model fails, so we can either pick a model that covers the cases we care about, or refuse to automate the cases where no current model is good enough.</p>
+            <p>The <span class="q-word">biomed-app-specific tier (Level 3)</span> is the one that matters most for this goal. Generic typo fixing is commodity; knowing that <em>CD4 is the helper-T marker and swapping it for CD8 is a scientific error, not a stylistic choice</em> is not. That's the line we are measuring.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- FOOTER -->
+      <div class="footer">
+        <div class="foot-left">
+          <div><strong>Target document:</strong> Seurat DE vignette (de_vignette.Rmd) — single-file stress bench, one highly-cited tutorial from a widely-used scRNA-seq package.</div>
+          <div><strong>Companion sheet:</strong> error_injection_v2.html — technical block diagram for engineers (code paths, retry logic, file outputs).</div>
+          <div><strong>Out of scope for this overview:</strong> LiteLLM proxy plumbing, category fallback logic, retry behaviour, CSV/JSON artifact schemas.</div>
+        </div>
+        <div class="legend">
+          <div class="legend-title">Legend</div>
+          <div class="legend-row">
+            <div><span class="swatch swatch-new"></span></div>
+            <div>new in current refactor (Level 3 categories)</div>
+          </div>
+          <div class="legend-row">
+            <div><span class="swatch swatch-accent"></span></div>
+            <div>corrupted / injected error text</div>
+          </div>
+          <div class="legend-row">
+            <div><span style="display:inline-block; width:16px; height:10px; background:#dcfce7; border:1px solid #86efac;"></span></div>
+            <div>original / recovered correct text</div>
+          </div>
+          <div class="legend-row">
+            <div><span class="swatch swatch-solid"></span></div>
+            <div>baseline / legacy reference</div>
+          </div>
+          <div class="legend-row">
+            <div>▶</div>
+            <div>experimental flow, left → right</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
