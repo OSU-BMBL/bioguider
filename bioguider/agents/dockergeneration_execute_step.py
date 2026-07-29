@@ -12,68 +12,42 @@ from bioguider.agents.agent_utils import (
 )
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.dockergeneration_task_utils import (
-    DockerGenerationWorkflowState, 
+    DockerGenerationWorkflowState,
     generate_Dockerfile_tool,
 )
+from bioguider.agents.prompt_utils import OUTPUT_FORMAT_STRICT_REACT
 
 logger = logging.getLogger(__name__)
 
 DOCKERGENERATION_EXECUTION_SYSTEM_PROMPT = """You are an expert in software containerization and reproducibility engineering.
-You are given a **plan** and must complete it strictly using Python code and the available tools.
+You are given a **plan** and must complete it strictly using the available tools.
 
 ---
 ### **Available Tools**
 {tools}
 
 ---
-### **Your Task**  
-Follow the given plan step by step using the exact format below:
 
-```
-Thought: Describe what you are thinking or planning to do next.  
-Action: The tool you are going to use (must be one of: {tool_names})  
-Action Input: The input to the selected action  
-Observation: The result returned by the action
-```
+""" + OUTPUT_FORMAT_STRICT_REACT + """
 
-You may repeat the **Thought → Action → Action Input → Observation** loop as needed.  
+### **Docker-specific final-turn requirement**
+In addition to the standard Final Answer format above, the terminating turn MUST end with
+one extra plain-text line identifying the generated Dockerfile (no code fences):
 
-Once all steps in the plan have been executed, end the loop and output all the results and generated Dockerfile using this format:
+**Dockerfile file name**: <docker file path>
 
-```
-Thought: I have completed the plan.
-Final Answer:
-Action: {{tool_name}}
-Action Input: {{file_name1}}
-Action Observation: {{Observation1}}
----
-Action: {{tool_name}}
-Action Input: {{file_name2}}
-Action Observation: {{Observation2}}
----
-**Dockerfile file name**: {{docker file path}}
-...
-```
+Place this line on its own, after the last `---` separator. Emit it verbatim — the
+downstream parser looks for the exact substring `**Dockerfile file name**:`.
 
 ---
 
-### **Important Notes**
-
-- You must strictly follow the provided plan.  
-- **Do not take any additional or alternative actions**, even if:  
-  - No relevant result is found  
-  - The file content is missing, empty, or irrelevant  
-- If no information is found in a step, simply proceed to the next action in the plan without improvising.  
-- Only use the tools specified in the plan actions. No independent decisions or extra steps are allowed.
----
-
-### **Plan**  
+### **Plan**
 {plan_actions}
 
 ### **Plan Thoughts**
 {plan_thoughts}
 
-### **Actions Already Taken**  
+### **Actions Already Taken**
 {agent_scratchpad}
 
 ---

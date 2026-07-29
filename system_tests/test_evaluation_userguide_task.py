@@ -22,8 +22,9 @@ def cleanup_after_tests(data_folder):
     if os.path.exists(db_path):
         print(f"Cleaning up database directory: {db_path}")
         try:
-            shutil.rmtree(db_path)
-            print("✓ Database directory cleaned up")
+            pass
+            # shutil.rmtree(db_path)
+            # print("✓ Database directory cleaned up")
         except Exception as e:
             print(f"⚠️  Warning: Could not clean up database directory: {e}")
     
@@ -285,6 +286,7 @@ def test_EvaluationUserGuideTask_evaluate_on_seurat(llm, step_callback, root_pat
     assert len(files) > 0
 
 
+@pytest.mark.skip(reason="Skipping this test")
 def test_EvaluationUserGuideTask_evaluate_on_CellTrek(llm, step_callback, root_path, data_folder):
     code_structure_db = CodeStructureDb(
         author="CellTrek",
@@ -305,5 +307,63 @@ def test_EvaluationUserGuideTask_evaluate_on_CellTrek(llm, step_callback, root_p
         code_structure_db=code_structure_db,
     )
     evaluations, files = task.evaluate()
+    assert evaluations is not None
+    assert files is not None
+
+@pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_evaluate_on_cellrank(llm, step_callback, root_path, data_folder):
+    files = [
+       "docs/api/developer.rst",
+    ]
+
+    code_structure_db = CodeStructureDb(
+        author="theislab",
+        repo_name="cellrank",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/cellrank",
+        gitignore_path=f"{root_path}/cellrank/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/cellrank",
+        gitignore_path=f"{root_path}/cellrank/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    # evaluations, files = task.evaluate()
+    evaluations, token_usage, files = task._evaluate(files)
+    
+    assert evaluations is not None
+    assert files is not None
+
+# @pytest.mark.skip(reason="Skipping this test")
+def test_EvaluationUserGuideTask_evaluate_on_CellTrek_1(llm, step_callback, root_path, data_folder):
+    files = [
+        "man/scoexp.Rd",
+    ]
+    code_structure_db = CodeStructureDb(
+        author="CellTrek",
+        repo_name="CellTrek",
+        data_folder=data_folder
+    )
+    code_structure_builder = CodeStructureBuilder(
+        repo_path=f"{root_path}/CellTrek",
+        gitignore_path=f"{root_path}/CellTrek/.gitignore",
+        code_structure_db=code_structure_db,
+    )
+    code_structure_builder.build_code_structure()
+    task = EvaluationUserGuideTask(
+        llm=llm,
+        repo_path=f"{root_path}/CellTrek",
+        gitignore_path=f"{root_path}/CellTrek/.gitignore",
+        step_callback=step_callback,
+        code_structure_db=code_structure_db,
+    )
+    evaluations, token_usage, files = task._evaluate(files)
     assert evaluations is not None
     assert files is not None

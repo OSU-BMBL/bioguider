@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, Optional, TypedDict
 import logging
 from langchain_openai.chat_models.base import BaseChatOpenAI
 
+from bioguider.agents.common_agent import CommonAgent
 from bioguider.utils.constants import DEFAULT_TOKEN_USAGE
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ class CommonStep(ABC):
             tuple[dict, dict[str, int]]: The updated state and token usage.
         """
         pass
+
+    def _get_agent(self):
+        return CommonAgent(llm=self.llm)
 
 
 

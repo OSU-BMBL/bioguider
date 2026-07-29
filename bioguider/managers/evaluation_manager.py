@@ -1,10 +1,9 @@
-import os
 from pathlib import Path
 
 from bioguider.agents.evaluation_tutorial_task import EvaluationTutorialTask
 from bioguider.agents.evaluation_userguide_task import EvaluationUserGuideTask
 from bioguider.database.code_structure_db import CodeStructureDb
-from bioguider.utils.constants import PrimaryLanguageEnum, ProjectMetadata, ProjectTypeEnum
+from bioguider.utils.constants import ProjectMetadata
 
 from ..agents.identification_task import IdentificationTask
 from ..rag.rag import RAG
@@ -14,7 +13,6 @@ from ..database.summarized_file_db import SummarizedFilesDb
 from ..agents.evaluation_readme_task import EvaluationREADMETask
 from ..agents.evaluation_installation_task import EvaluationInstallationTask
 from ..agents.evaluation_submission_requirements_task import EvaluationSubmissionRequirementsTask
-from ..agents.collection_task import CollectionTask
 
 class EvaluationManager:
     def __init__(self, llm, step_callback):
@@ -23,6 +21,7 @@ class EvaluationManager:
         self.step_callback = step_callback
         self.repo_url: str | None = None
         self.project_metadata: ProjectMetadata | None = None
+        self.refined_project_metadata: ProjectMetadata | None = None
 
     def prepare_refined_repo(self, refined_repo_url: str):
         self.prepare_repo(refined_repo_url)
@@ -62,6 +61,45 @@ class EvaluationManager:
         )
         code_structure_builder.build_code_structure()
 
+    def _get_repo_context(self, refined: bool):
+        if refined:
+            repo_path = self.refined_rag.repo_dir
+            summary_db = self.refined_summary_file_db
+            code_db = self.refined_code_structure_db
+            metadata = self.refined_project_metadata
+        else:
+            repo_path = self.rag.repo_dir
+            summary_db = self.summary_file_db
+            code_db = self.code_structure_db
+            metadata = self.project_metadata
+        return (
+            repo_path,
+            Path(repo_path, ".gitignore"),
+            metadata,
+            summary_db,
+            code_db,
+        )
+
+    def _base_task_kwargs(self, refined: bool, include_summary_db: bool = True) -> dict:
+        repo_path, gitignore_path, metadata, summary_db, _code_db = self._get_repo_context(refined)
+        kwargs = {
+            "llm": self.llm,
+            "repo_path": repo_path,
+            "gitignore_path": gitignore_path,
+            "meta_data": metadata,
+            "step_callback": self.step_callback,
+        }
+        if include_summary_db:
+            kwargs["summarized_files_db"] = summary_db
+        return kwargs
+
+    def _evaluate_task(self, task_cls, refined: bool, include_summary_db: bool = True, **kwargs):
+        task = task_cls(
+            **self._base_task_kwargs(refined=refined, include_summary_db=include_summary_db),
+            **kwargs,
+        )
+        return task.evaluate()
+
     def _identify_project(
         self, repo_path: str, gitignore_path: str, summary_file_db: SummarizedFilesDb
     ) -> ProjectMetadata:
@@ -97,28 +135,11 @@ class EvaluationManager:
         return self.project_metadata
     
     def evaluate_readme(self) -> tuple[any, list[str]]:
-        task = EvaluationREADMETask(
-            llm=self.llm,
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            meta_data=self.project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.summary_file_db,
-        )
-        # readme_files = self._find_readme_files()
-        results, readme_files = task.evaluate()
+        results, readme_files = self._evaluate_task(EvaluationREADMETask, refined=False)
         return results, readme_files
     
     def evaluate_installation(self):
-        evaluation_task = EvaluationInstallationTask(
-            llm=self.llm,
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            meta_data=self.project_metadata,
-            step_callback=self.step_callback,
-        )
-        evaluation, files = evaluation_task.evaluate()
-        return evaluation, files
+        return self._evaluate_task(EvaluationInstallationTask, refined=False)
     
     def evaluate_submission_requirements(
         self,
@@ -126,46 +147,29 @@ class EvaluationManager:
         installation_files: list[str] | None = None,
         installation_evaluation: dict[str] | None = None,
     ):
-        evaluation_task = EvaluationSubmissionRequirementsTask(
-            llm=self.llm,
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            meta_data=self.project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.summary_file_db,
+        return self._evaluate_task(
+            EvaluationSubmissionRequirementsTask,
+            refined=False,
             readme_files_evaluation=readme_files_evaluation,
             installation_files=installation_files,
             installation_evaluation=installation_evaluation,
         )
-        evaluation, files = evaluation_task.evaluate()
-
-        return evaluation, files
 
     def evaluate_userguide(self):
-        evaluation_task = EvaluationUserGuideTask(
-            llm=self.llm,
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            meta_data=self.project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.summary_file_db,
-            code_structure_db=self.code_structure_db,
+        _, _, _, _, code_db = self._get_repo_context(refined=False)
+        return self._evaluate_task(
+            EvaluationUserGuideTask,
+            refined=False,
+            code_structure_db=code_db,
         )
-        evaluation, files = evaluation_task.evaluate()
-        return evaluation, files
     
     def evaluate_tutorial(self):
-        evaluation_task = EvaluationTutorialTask(
-            llm=self.llm,
-            repo_path=self.rag.repo_dir,
-            gitignore_path=Path(self.rag.repo_dir, ".gitignore"),
-            meta_data=self.project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.summary_file_db,
-            code_structure_db=self.code_structure_db,
+        _, _, _, _, code_db = self._get_repo_context(refined=False)
+        return self._evaluate_task(
+            EvaluationTutorialTask,
+            refined=False,
+            code_structure_db=code_db,
         )
-        evaluation, files = evaluation_task.evaluate()
-        return evaluation, files
 
     def identify_refined_project(self, metadata: dict | None = None) -> ProjectMetadata:
         if metadata is not None:
@@ -179,55 +183,33 @@ class EvaluationManager:
         return self.refined_project_metadata
 
     def evaluate_refined_readme(self, readme_files: list[str]) -> tuple[dict, list[str]]:
-        task = EvaluationREADMETask(
-            llm=self.llm,
-            repo_path=self.refined_rag.repo_dir,
-            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
-            meta_data=self.refined_project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.refined_summary_file_db,
+        return self._evaluate_task(
+            EvaluationREADMETask,
+            refined=True,
             collected_files=readme_files,
         )
-        results, readme_files = task.evaluate()
-        return results, readme_files
 
     def evaluate_refined_installation(self, installation_files: list[str]) -> tuple[dict, list[str]]:
-        task = EvaluationInstallationTask(
-            llm=self.llm,
-            repo_path=self.refined_rag.repo_dir,
-            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
-            meta_data=self.refined_project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.refined_summary_file_db,
+        return self._evaluate_task(
+            EvaluationInstallationTask,
+            refined=True,
             collected_files=installation_files,
         )
-        results, installation_files = task.evaluate()
-        return results, installation_files
 
     def evaluate_refined_tutorial(self, tutorial_files: list[str]) -> tuple[dict, list[str]]:
-        task = EvaluationTutorialTask(
-            llm=self.llm,
-            repo_path=self.refined_rag.repo_dir,
-            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
-            meta_data=self.refined_project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.refined_summary_file_db,
+        _, _, _, _, code_db = self._get_repo_context(refined=True)
+        return self._evaluate_task(
+            EvaluationTutorialTask,
+            refined=True,
             collected_files=tutorial_files,
-            code_structure_db=self.refined_code_structure_db,
+            code_structure_db=code_db,
         )
-        results, tutorial_files = task.evaluate()
-        return results, tutorial_files
 
     def evaluate_refined_userguide(self, userguide_files: list[str]) -> tuple[dict, list[str]]:
-        task = EvaluationUserGuideTask(
-            llm=self.llm,
-            repo_path=self.refined_rag.repo_dir,
-            gitignore_path=Path(self.refined_rag.repo_dir, ".gitignore"),
-            meta_data=self.refined_project_metadata,
-            step_callback=self.step_callback,
-            summarized_files_db=self.refined_summary_file_db,
+        _, _, _, _, code_db = self._get_repo_context(refined=True)
+        return self._evaluate_task(
+            EvaluationUserGuideTask,
+            refined=True,
             collected_files=userguide_files,
-            code_structure_db=self.refined_code_structure_db,
+            code_structure_db=code_db,
         )
-        results, userguide_files = task.evaluate()
-        return results, userguide_files

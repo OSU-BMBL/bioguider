@@ -8,51 +8,56 @@ from bioguider.agents.agent_utils import (
     PlanAgentResultJsonSchema,
     PlanAgentResult,
 )
-from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
+from bioguider.agents.common_agent import CommonAgent
+from bioguider.agents.common_agent_2step import CommonAgentTwoSteps
 from bioguider.agents.peo_common_step import PEOCommonStep
 from bioguider.agents.collection_task_utils import CollectionWorkflowState
-from bioguider.agents.prompt_utils import COLLECTION_GOAL, COLLECTION_PROMPTS
+from bioguider.agents.prompt_utils import (
+    COLLECTION_GOAL,
+    COLLECTION_PROMPTS,
+    OUTPUT_FORMAT_STRICT_PLAN,
+)
 
-COLLECTION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""### **Goal**  
-You are an expert developer specializing in the biomedical domain. 
+COLLECTION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""### **Goal**
+You are an expert developer specializing in the biomedical domain.
 **{goal}**
 
 {related_file_description}
 ---
 
-### **Repository File Structure**  
-Below is the 2-level file structure of the repository (`f` = file, `d` = directory, `l` - symlink, `u` - unknown):  
+### **Repository File Structure**
+Below is the 2-level file structure of the repository (`f` = file, `d` = directory, `l` - symlink, `u` - unknown):
 {repo_structure}
 
 ---
 
-### **Function Tools**  
-You have access to the following function tools:  
+### **Function Tools**
+You have access to the following function tools:
 {tools}
 
 ---
 
-### **Intermediate Steps**  
-Here are the results from previous steps:  
+### **Intermediate Steps**
+Here are the results from previous steps:
 {intermediate_steps}
 
 ---
 
-### **Intermediate Thoughts**  
-- **Analysis**: {intermediate_analysis}  
+### **Intermediate Thoughts**
+- **Analysis**: {intermediate_analysis}
 - **Thoughts**: {intermediate_thoughts}
 
 ---
 
 ### **Instructions**
 
-1. We will iterate through multiple **Plan -> Execution -> Observation** loops as needed.  
-   - All variables and tool outputs are **persisted across rounds**, so you can build on prior results.  
-   - Develop your plan **incrementally**, and reflect on intermediate observations before proceeding.  
+1. We will iterate through multiple **Plan -> Execution -> Observation** loops as needed.
+   - All variables and tool outputs are **persisted across rounds**, so you can build on prior results.
+   - Develop your plan **incrementally**, and reflect on intermediate observations before proceeding.
    - Limit each step to **one or two actions** — avoid trying to complete everything in a single step.
 
-2. Your task is to collect all files that are relevant to the goal.  
-   - Start by using the `summarize_file` tool to inspect file content quickly.  
+2. Your task is to collect all files that are relevant to the goal.
+   - Start by using the `summarize_file` tool to inspect file content quickly.
    - If needed, follow up with the `read_file` tool for full content extraction.
 
 3. You may use the `read_directory` tool to explore directory contents, but avoid using it in the first step unless necessary.
@@ -66,16 +71,7 @@ Here are the results from previous steps:
 ### **Important Instructions**
 {important_instructions}
 
-### **Output Format**  
-Your plan **must exactly match** a sequence of steps in the following format, **do not** make up anything:
-
-Step: <tool name>   # Tool name **must be one** of {tool_names}  
-Step Input: <file or directory name>
-
-Step: <tool name>  # Tool name **must be one** of {tool_names}  
-Step Input: <file or directory name>
-...
-""")
+""" + OUTPUT_FORMAT_STRICT_PLAN)
 
 class CollectionPlanStep(PEOCommonStep):
     """
@@ -133,7 +129,7 @@ class CollectionPlanStep(PEOCommonStep):
 
     def _execute_directly(self, state: CollectionWorkflowState):
         system_prompt = self._prepare_system_prompt(state)
-        agent = CommonAgentTwoSteps(llm=self.llm)
+        agent = CommonAgent(llm=self.llm)
         res, _, token_usage, reasoning_process = agent.go(
             system_prompt=system_prompt,
             instruction_prompt="Now, let's begin the collection plan step.",

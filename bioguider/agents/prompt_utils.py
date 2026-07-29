@@ -84,6 +84,151 @@ IDENTIFICATION_GOAL_META_DATA = """Identify the following meta data of the repos
 COT_USER_INSTRUCTION = "First, explain your reasoning process step by step, then provide the answer."
 EVALUATION_INSTRUCTION="Please also clearly explain your reasoning step by step. Now, let's begin the evaluation."
 
+# =========================================================================================
+# Shared strict output-format blocks.
+#
+# Open-source / smaller LLMs (MiniMax, Kimi, etc.) frequently deviate from the desired output
+# format when it is described informally. These shared constants spell out the exact shape
+# that downstream parsers / pydantic schemas expect. Inject them into prompts via a
+# `{output_format}` placeholder so every caller uses the same wording and can be updated in
+# one place.
+#
+# IMPORTANT:
+#  - We include a **literal** JSON example in each block and mark it as "raw JSON".
+#  - We forbid Markdown code fences, extra commentary, and trailing text, because those are
+#    the most common failure modes we have observed with OSS models.
+#  - When these blocks are ``.format``-ed into a template you should pre-escape them
+#    (``{{`` / ``}}``) or use ``ChatPromptTemplate`` with partial variables — that is the
+#    existing convention in this codebase.
+# =========================================================================================
+
+# For *Plan* steps whose final schema is
+# PlanAgentResultJsonSchema = {{"actions": [{{"name": ..., "input": ...}}, ...]}}.
+# Keep the example literal — the {{...}} braces survive ChatPromptTemplate formatting.
+OUTPUT_FORMAT_STRICT_PLAN = """### **Output Format (STRICT — read carefully)**
+You MUST return a **single raw JSON object** — nothing else. No prose before or after, no
+`<think>` blocks, no markdown, no ```json fences, no commentary.
+
+The JSON object has exactly one field:
+
+  - `actions`: an array of step objects. Each step object has exactly two fields:
+      * `name`  — the tool name. MUST be one of: {tool_names}
+      * `input` — the tool input. Either a single string (file / directory name) OR a JSON
+                  object literal (only when the tool explicitly requires structured input).
+
+**Hard rules — any violation means your answer is wrong:**
+  1. Return raw JSON only. Do NOT wrap it in ```json``` / ``` fences.
+  2. Do NOT invent tool names — `name` MUST appear verbatim in {tool_names}.
+  3. Do NOT invent file or directory names — every `input` MUST come from the repository
+     file structure shown above.
+  4. Do NOT add fields other than `actions`, `name`, `input`.
+  5. Plan incrementally: include **at most 2 steps** per round.
+  6. If you have nothing to plan, return `{{"actions": []}}` — never omit the `actions` key.
+
+**Concrete example (copy this shape exactly):**
+{{"actions": [{{"name": "check_file_related_tool", "input": "README.md"}}, {{"name": "summarize_file_tool", "input": {{"file_name": "README.md", "summarize_prompt": "Extract license information."}}}}]}}
+"""
+
+# For *Observe* steps whose final schema is the ObservationResult pydantic model:
+#   class ObservationResult(BaseModel):
+#       Analysis: Optional[str]
+#       FinalAnswer: Optional[str]   # a JSON string of the form {"final_answer": [...]}
+#       Thoughts: Optional[str]
+OUTPUT_FORMAT_STRICT_OBSERVE = """### **Output Format (STRICT — read carefully)**
+You MUST return a **single raw JSON object** — nothing else. No prose before or after,
+no `<think>` blocks, no markdown, no ```json fences, no commentary.
+
+The JSON object has exactly three optional fields:
+
+  - `Analysis`   : string. Your reasoning when you ARE confident and ready to finalize.
+  - `FinalAnswer`: string. A JSON-encoded string of the shape
+                   `{{"final_answer": ["path/to/file1", "path/to/file2", ...]}}`.
+                   Only fill this when you are confident the goal is fully achieved.
+                   Use full relative paths with respect to the repository root.
+  - `Thoughts`   : string. Your reasoning when you are NOT yet ready — describe what is
+                   missing and what you still need to collect in the next round.
+
+**Hard rules — any violation means your answer is wrong:**
+  1. Return raw JSON only. No code fences, no leading/trailing text.
+  2. Fill either (`Analysis` + `FinalAnswer`) OR (`Thoughts`). Not both.
+  3. The value of `FinalAnswer` is a **string**, not a nested JSON object. Example:
+     `"FinalAnswer": "{{\\"final_answer\\": [\\"README.md\\", \\"docs/api.md\\"]}}"`
+  4. Never invent file paths — every path in `final_answer` MUST come from the repository
+     file structure shown above.
+  5. Do NOT rush to finalize. If you are uncertain, use `Thoughts` and leave `FinalAnswer`
+     empty — we will iterate.
+
+**Concrete examples (copy these shapes exactly):**
+Ready to finalize:
+{{"Analysis": "The repository root README.md and docs/user_guide.md both document the public API.", "FinalAnswer": "{{\\"final_answer\\": [\\"README.md\\", \\"docs/user_guide.md\\"]}}", "Thoughts": null}}
+
+Not yet ready:
+{{"Analysis": null, "FinalAnswer": null, "Thoughts": "Still need to inspect docs/reference/ before finalizing — its contents may qualify as a user guide."}}
+"""
+
+# For *Execute* steps that run a LangChain ReAct agent. The prompts are parsed by
+# CustomOutputParser which looks for `Action:` / `Action Input:` lines and `Final Answer:`.
+# We do NOT want JSON here — we want disciplined ReAct text with NO markdown fences.
+OUTPUT_FORMAT_STRICT_REACT = """### **Output Format (STRICT ReAct — read carefully)**
+
+Each turn MUST use EXACTLY the following plain-text format. Do NOT wrap any turn in
+```...``` code fences. Do NOT add commentary outside these lines. Do NOT skip fields.
+
+Thought: <one short sentence describing what you will do next>
+Action: <tool name — MUST be one of: {tool_names}>
+Action Input: <the input for that tool. Either a single string OR a JSON object on a single line>
+
+After you emit `Action Input:`, STOP and wait. The system will append:
+
+Observation: <tool result>
+
+Then continue the loop from `Thought:` again.
+
+**Hard rules — any violation breaks execution:**
+  1. No ```...``` fences anywhere in your output.
+  2. Exactly one `Action:` per turn, followed immediately by exactly one `Action Input:`.
+  3. `Action:` value MUST appear verbatim in {tool_names}.
+  4. `Action Input:` is either a single bare string OR a single-line JSON object. Never
+     emit two `Action Input:` lines in one turn.
+  5. Never fabricate an `Observation:` line yourself — the system emits it.
+  6. Follow the provided Plan exactly. No extra or alternative actions, even if a step
+     returns nothing, is empty, or is irrelevant — just advance to the next planned step.
+
+When the plan is fully executed, emit one terminating turn in this exact shape (again,
+no code fences):
+
+Thought: I have completed the plan.
+Final Answer:
+Action: <tool_name_1>
+Action Input: <input_1>
+Action Observation: <observation_1>
+---
+Action: <tool_name_2>
+Action Input: <input_2>
+Action Observation: <observation_2>
+---
+"""
+
+# Reusable reminder for evaluation prompts whose responses are extracted by
+# `with_structured_output(schema)` downstream. OSS LLMs tend to wrap JSON in code fences
+# and add preambles — both of which break structured extraction. This block is a light
+# discipline reminder we append to every evaluation prompt.
+OUTPUT_FORMAT_STRICT_EVALUATION = """### **Strict Output Discipline**
+Your response will be parsed into a typed schema by a downstream extractor. To keep that
+extraction reliable:
+
+  1. Follow the **Final Report Output** section above exactly — do not rename, reorder,
+     add, or omit any headings/fields.
+  2. Every numeric field MUST be a bare integer (no `%`, no units, no ranges like "80-90").
+  3. Every Yes/No field MUST be exactly `Yes` or `No` — no synonyms, no hedging.
+  4. Do NOT wrap the final report in ```...``` / ```json``` fences.
+  5. Do NOT emit any commentary before `**FinalAnswer**` or after the last listed field.
+  6. When a list of items is required, emit one item per line — never collapse them into a
+     single paragraph.
+  7. If a field is genuinely not applicable, still emit the field with `N/A` (or `0` for
+     numeric fields) — never drop the key.
+"""
+
 class CollectionGoalItemEnum(Enum):
     UserGuide = "User Guide"
     Tutorial = "Tutorials & Vignettes"

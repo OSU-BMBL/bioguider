@@ -8,6 +8,7 @@ from bioguider.agents.agent_utils import get_tool_names_and_descriptions
 from bioguider.agents.common_agent_2step import CommonAgentTwoChainSteps, CommonAgentTwoSteps
 from bioguider.agents.identification_task_utils import IdentificationWorkflowState
 from bioguider.agents.peo_common_step import PEOCommonStep
+from bioguider.agents.prompt_utils import OUTPUT_FORMAT_STRICT_PLAN
 
 ## plan system prompt
 IDENTIFICATION_PLAN_SYSTEM_PROMPT = ChatPromptTemplate.from_template("""### **Goal**
@@ -31,21 +32,15 @@ Analysis: {intermediate_analysis}
 Thoughts: {intermediate_thoughts}
 
 ### **Instruction**
-We will repeat **Plan - Execution - Observation** loops as many times as needed. All the results in each round will be persisted, 
-meaning that states and variables will persisted through multiple rounds of plan execution. Be sure to take advantage of this by 
-developing your collection plan incrementally and reflect on the intermediate observations at each round, instead of coding up 
+We will repeat **Plan - Execution - Observation** loops as many times as needed. All the results in each round will be persisted,
+meaning that states and variables will persisted through multiple rounds of plan execution. Be sure to take advantage of this by
+developing your collection plan incrementally and reflect on the intermediate observations at each round, instead of coding up
 everything in one go. Be sure to take only one or two actions in each step.
 
 ### **Important Instructions**
 {important_instructions}
 
-### **Output**
-You plan should follow this format:
-Step: tool name, should be one of {tool_names}
-Step Input: file name or directory name
-Step: tool name, should be one of {tool_names}
-Step Input: file name or directory name
-""")
+""" + OUTPUT_FORMAT_STRICT_PLAN)
 
 class IdentificationPlanResult(BaseModel):
     """ Identification Plan Result """

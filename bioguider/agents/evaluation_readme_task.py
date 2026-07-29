@@ -4,21 +4,15 @@ from pathlib import Path
 from typing import Callable
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai.chat_models.base import BaseChatOpenAI
-from langchain_openai import AzureChatOpenAI, ChatOpenAI
 
-from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION
+from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, OUTPUT_FORMAT_STRICT_EVALUATION
 from bioguider.utils.gitignore_checker import GitignoreChecker
 
-from ..utils.pyphen_utils import PyphenReadability
+from .evaluation_utils import compute_readability_metrics, run_llm_evaluation
 from bioguider.agents.agent_utils import ( 
     read_file, read_license_file, 
     summarize_file
 )
-from bioguider.agents.common_agent_2step import (
-    CommonAgentTwoChainSteps, 
-    CommonAgentTwoSteps,
-)
-from bioguider.agents.common_agent import CommonAgent
 from bioguider.agents.evaluation_task import EvaluationTask
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
@@ -35,7 +29,7 @@ from bioguider.rag.config import configs
 logger = logging.getLogger(__name__)
 
 README_PROJECT_LEVEL_SYSTEM_PROMPT = """
-You are an expert in evaluating the quality of README files in software repositories. 
+You are an expert in evaluating the quality of README files in software repositories.
 Your task is to analyze the provided README file and identify if it is a project-level README file or a folder-level README file.
 
 ---
@@ -54,10 +48,12 @@ Your task is to analyze the provided README file and identify if it is a project
 
 ### **Output Format**
 Based solely on the file's **path**, **name**, and **content**, classify the README as either a **project-level** or **folder-level** README.
-Output **exactly** the following format:
+Output **exactly** the following format — no prose, no code fences, no extra sections:
 
 **FinalAnswer**
 **Project-level:** [Yes / No]
+
+The `**Project-level:**` value MUST be exactly `Yes` or `No` (no synonyms, no hedging).
 
 ---
 
@@ -69,7 +65,7 @@ Output **exactly** the following format:
 ### **README content**
 {readme_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 STRUCTURED_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -220,7 +216,7 @@ Note: Be thorough and comprehensive. Report EVERY issue you find, even if you're
 ### **LICENSE Summarized Content**
 {license_summarized_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 PROJECT_LEVEL_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -366,7 +362,7 @@ Your output must **exactly match** the following format. Do not add or omit any 
 ### **README content**
 {readme_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 FOLDER_LEVEL_EVALUATION_README_SYSTEM_PROMPT = """
 You are an expert in evaluating the quality of README files in software repositories. 
@@ -434,7 +430,7 @@ For each criterion below, provide a brief assessment followed by specific, actio
 
 ### **README Content:**
 {readme_content}
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 class EvaluationREADMETask(EvaluationTask):
     def __init__(
@@ -453,38 +449,49 @@ class EvaluationREADMETask(EvaluationTask):
 
     def _project_level_evaluate(self, readme_files: list[str]) -> tuple[dict, dict]:
         """
-        Evaluate if the README files are a project-level README file.
+        Determine which README files are project-level.
+
+        The project-level README is the one at the repository **root**; READMEs
+        nested in sub-directories (``docs/``, ``data/``, ``tests/``, vendored
+        sub-packages, ...) are folder-level and must NOT be scored as the project's
+        documentation. The decision is made by path depth rather than by an LLM
+        classifier, which previously mislabeled vendored/data-folder READMEs as
+        project-level — producing junk 0-score cards (Pattern B) — and occasionally
+        demoted the real root README so no scorecard rendered (Pattern D).
+
+        If no readable root-level README exists, the shallowest readable candidate is
+        promoted so a project-level scorecard is still produced.
         """
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
+
+        readable: dict[str, bool] = {}
+        for readme_file in readme_files:
+            content = read_file(Path(self.repo_path, readme_file))
+            readable[readme_file] = content is not None and len(content.strip()) > 0
+            if not readable[readme_file]:
+                logger.error(f"Error in reading file {readme_file}")
+
+        # root-level READMEs (no path separator) are the project-level ones
+        root_files = [f for f in readme_files if "/" not in f and readable[f]]
+        if not root_files:
+            readable_files = [f for f in readme_files if readable[f]]
+            if readable_files:
+                root_files = [min(readable_files, key=lambda f: f.count("/"))]
+        project_level_set = set(root_files)
+
         project_level_evaluations = {}
         for readme_file in readme_files:
-            full_path = Path(self.repo_path, readme_file)
-            readme_content = read_file(full_path)
-            if readme_content is None or len(readme_content.strip()) == 0:
-                logger.error(f"Error in reading file {readme_file}")
-                project_level_evaluations[readme_file] = {
-                    "project_level": "/" in readme_file,
-                    "project_level_reasoning_process": f"Error in reading file {readme_file}" \
-                        if readme_content is None else f"{readme_file} is an empty file.",
-                }
-                continue
-            system_prompt = ChatPromptTemplate.from_template(
-                README_PROJECT_LEVEL_SYSTEM_PROMPT
-            ).format(
-                readme_path=readme_file,
-                readme_content=readme_content,
-            )
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
-            response, _, token_usage, reasoning_process = agent.go(
-                system_prompt=system_prompt,
-                instruction_prompt=EVALUATION_INSTRUCTION,
-                schema=ProjectLevelEvaluationREADMEResult,
-            )
-            total_token_usage = increase_token_usage(total_token_usage, token_usage)
-            self.print_step(step_output=f"README: {readme_file} project level README")
+            is_project = readme_file in project_level_set
+            if not readable[readme_file]:
+                reason = f"{readme_file} could not be read or is empty; treated as non-project-level."
+            elif is_project:
+                reason = f"{readme_file} is at the repository root; treated as the project-level README."
+            else:
+                reason = f"{readme_file} is nested in a sub-directory; treated as a folder-level README."
+            self.print_step(step_output=f"README: {readme_file} -> {'project' if is_project else 'folder'} level")
             project_level_evaluations[readme_file] = {
-                "project_level": response.project_level,
-                "project_level_reasoning_process": reasoning_process,
+                "project_level": is_project,
+                "project_level_reasoning_process": reason,
             }
 
         return project_level_evaluations, total_token_usage
@@ -545,9 +552,8 @@ class EvaluationREADMETask(EvaluationTask):
                     "reasoning_process": f"{readme_file} is an empty file.",
                 }
                 continue
-            readability = PyphenReadability()
-            flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-                _, _, _, _, _ = readability.readability_metrics(readme_content)
+            flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index = \
+                compute_readability_metrics(readme_content)
             system_prompt = ChatPromptTemplate.from_template(
                 STRUCTURED_EVALUATION_README_SYSTEM_PROMPT
             ).format(
@@ -561,11 +567,12 @@ class EvaluationREADMETask(EvaluationTask):
                 smog_index=smog_index,
             )
                         
-            agent = CommonAgentTwoChainSteps(llm=self.llm)
-            response, _, token_usage, reasoning_process = agent.go(
+            response, token_usage, reasoning_process = run_llm_evaluation(
+                llm=self.llm,
                 system_prompt=system_prompt,
                 instruction_prompt=EVALUATION_INSTRUCTION,
                 schema=StructuredEvaluationREADMEResult,
+                chain=True,
             )
             response.overall_score = get_overall_score(
                 [
@@ -618,8 +625,8 @@ class EvaluationREADMETask(EvaluationTask):
             readme_content=readme_content,
             structured_evaluation=structured_reasoning_process,
         )
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        response, _, token_usage, reasoning_process = agent.go(
+        response, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=FreeProjectLevelEvaluationREADMEResult,
@@ -644,9 +651,8 @@ class EvaluationREADMETask(EvaluationTask):
                 overall_improvement_suggestions=[f"{readme_file} is an empty file."],
             ), {**DEFAULT_TOKEN_USAGE}, f"{readme_file} is an empty file."
         
-        readability = PyphenReadability()
-        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index, \
-            _, _, _, _, _ = readability.readability_metrics(readme_content)
+        flesch_reading_ease, flesch_kincaid_grade, gunning_fog_index, smog_index = \
+            compute_readability_metrics(readme_content)
         system_prompt = ChatPromptTemplate.from_template(
             FOLDER_LEVEL_EVALUATION_README_SYSTEM_PROMPT
         ).format(
@@ -657,11 +663,12 @@ class EvaluationREADMETask(EvaluationTask):
             gunning_fog_index=gunning_fog_index,
             smog_index=smog_index,
         )
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
-        response, _, token_usage, reasoning_process = agent.go(
+        response, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=FreeFolderLevelEvaluationREADMEResult,
+            chain=True,
         )
         self.print_step(step_output=f"README: {readme_file} free folder level README")
         self.print_step(step_output=reasoning_process)
@@ -771,4 +778,3 @@ class EvaluationREADMETask(EvaluationTask):
         )
                 
         return found_readme_files
-

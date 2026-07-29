@@ -21,16 +21,32 @@ Here is the output of running docker image with command "docker run":
 ```{docker_run_output}```
 
 ### **Instructions**
-1. Carefully review **Dockerfile**, output of building docker image and output of running docker image, give your
-thoughts and advice as the following format:
-```
-**Thoughts**: you thoughts here
-``` 
-2. Be precise and support your reasoning with evidence from the input.
+1. Carefully review the **Dockerfile**, the `docker build` output, and the `docker run` output.
+2. Diagnose the root cause of any failure and describe a concrete fix that the next round's
+   plan can apply (e.g. a missing apt package, a wrong ENTRYPOINT, a bad working directory).
+3. Be precise and support your reasoning with evidence from the input.
 
 ### **Notes**
-- We are generating Dockerfile over multiple rounds, your thoughts and the output of this step will be persisted, 
-we'll continue with the next round accordingly
+- We are generating the Dockerfile over multiple rounds. Your thoughts will be persisted and
+  fed back into the next planning round, so focus on **actionable** advice.
+
+### **Output Format (STRICT — read carefully)**
+You MUST return a **single raw JSON object** — nothing else. No prose before or after,
+no `<think>` blocks, no markdown, no ```json fences, no commentary.
+
+The JSON object has exactly one field:
+
+  - `thoughts`: string. A concrete, actionable diagnosis and fix suggestion for the next
+                round. Reference specific lines from the Dockerfile or specific error
+                messages from the build/run output as evidence.
+
+**Hard rules — any violation means your answer is wrong:**
+  1. Return raw JSON only. No code fences, no leading/trailing text.
+  2. The `thoughts` value MUST be a plain string — never a nested object or array.
+  3. Keep it focused: one problem, one fix, per sentence.
+
+**Concrete example (copy this shape exactly):**
+{{"thoughts": "The build failed at step 5 with 'E: Unable to locate package libglib2.0-0'. The base image `python:3.11-slim` does not ship glib. Next round, add `apt-get update && apt-get install -y libglib2.0-0` before the pip install step."}}
 """
 
 class DockerGenerationObserveResult(BaseModel):

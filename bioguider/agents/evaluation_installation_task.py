@@ -6,7 +6,11 @@ from markdownify import markdownify as md
 
 from bioguider.agents.agent_utils import read_file
 from bioguider.agents.collection_task import CollectionTask
-from bioguider.agents.prompt_utils import EVALUATION_INSTRUCTION, CollectionGoalItemEnum
+from bioguider.agents.prompt_utils import (
+    EVALUATION_INSTRUCTION,
+    CollectionGoalItemEnum,
+    OUTPUT_FORMAT_STRICT_EVALUATION,
+)
 from bioguider.utils.constants import (
     DEFAULT_TOKEN_USAGE, 
     ProjectMetadata,
@@ -15,10 +19,9 @@ from bioguider.utils.constants import (
     EvaluationInstallationResult,
 )
 from bioguider.rag.data_pipeline import count_tokens
-from .common_agent_2step import CommonAgentTwoSteps, CommonAgentTwoChainSteps
+from .evaluation_utils import run_llm_evaluation
 
 from .evaluation_task import EvaluationTask
-from .agent_utils import read_file
 from bioguider.utils.utils import get_overall_score, increase_token_usage
 
 
@@ -58,7 +61,7 @@ Your task is to analyze the provided files related to installation and generate 
 ### Installation Files Provided:
 {installation_files_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 
 FREE_EVALUATION_INSTALLATION_SYSTEM_PROMPT = """
@@ -136,7 +139,7 @@ Your output must **exactly match** the following format. Do not add or omit any 
 ### Installation Files Provided:
 {installation_files_content}
 
-"""
+""" + OUTPUT_FORMAT_STRICT_EVALUATION
 
 class EvaluationInstallationTask(EvaluationTask):
     def __init__(
@@ -173,30 +176,56 @@ class EvaluationInstallationTask(EvaluationTask):
 """
         return files_content
     
+    @staticmethod
+    def _compute_overall_score(
+        install_available: bool | None,
+        install_tutorial: bool | None,
+        compatible_os: bool | None,
+        hardware_requirements: bool | None,
+        dependency_number: int | None,
+    ) -> int:
+        """Deterministic installation quality score (0-100).
+
+        The four yes/no checks are all-or-nothing, so a project that ships a
+        documented dependency manifest (setup.py / requirements.txt / DESCRIPTION)
+        but no install instructions collapses to a hard 0 — contradicting the
+        free-text rating, which gives such repos partial credit (~20). Floor the
+        score to reflect that a dependency list has real, if minimal, value.
+        """
+        score = get_overall_score(
+            [install_available, install_tutorial, compatible_os, hardware_requirements],
+            [3, 3, 1, 1],
+        )
+        if score == 0 and (dependency_number or 0) > 0:
+            score = 20
+        return score
+
     def _structured_evaluate(self, files: list[str] | None = None) -> tuple[dict|None, dict]:
         if files is None or len(files) == 0:
             return None, {**DEFAULT_TOKEN_USAGE}
-        
+
         files_content = self._collect_install_files_content(files)
         system_prompt = ChatPromptTemplate.from_template(
             STRUCTURED_EVALUATION_INSTALLATION_SYSTEM_PROMPT,
         ).format(
             installation_files_content=files_content,
         )
-        agent = CommonAgentTwoChainSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
+        res, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=StructuredEvaluationInstallationResult,
+            chain=True,
         )
         res: StructuredEvaluationInstallationResult = res
-        res.overall_score = get_overall_score([
-            res.install_available, 
-            res.install_tutorial, 
-            res.compatible_os, 
-            res.hardware_requirements,
-        ], [3, 3, 1, 1])
         res.dependency_number = 0 if res.dependency_number is None else res.dependency_number
+        res.overall_score = self._compute_overall_score(
+            res.install_available,
+            res.install_tutorial,
+            res.compatible_os,
+            res.hardware_requirements,
+            res.dependency_number,
+        )
         self.print_step(step_output=reasoning_process)
         self.print_step(token_usage=token_usage)
 
@@ -219,8 +248,8 @@ class EvaluationInstallationTask(EvaluationTask):
             installation_files_content=files_content,
             structured_evaluation_and_reasoning_process=structured_evaluation_and_reasoning_process,
         )
-        agent = CommonAgentTwoSteps(llm=self.llm)
-        res, _, token_usage, reasoning_process = agent.go(
+        res, token_usage, reasoning_process = run_llm_evaluation(
+            llm=self.llm,
             system_prompt=system_prompt,
             instruction_prompt=EVALUATION_INSTRUCTION,
             schema=FreeEvaluationInstallationResult,
@@ -233,11 +262,51 @@ class EvaluationInstallationTask(EvaluationTask):
         }
         return evaluation, token_usage
     
+    @staticmethod
+    def _build_absent_evaluation() -> EvaluationInstallationResult:
+        """Result used when no installation-related files were found.
+
+        ``_structured_evaluate`` / ``_free_evaluate`` return ``None`` for an empty
+        file list, so without this the downstream subscript ``structured_evaluation
+        ["reasoning_process"]`` raises ``'NoneType' object is not subscriptable`` and
+        the whole Installation page is silently dropped.
+        """
+        msg = (
+            "No installation-related files (e.g., README, INSTALL, setup.py, "
+            "requirements.txt, DESCRIPTION) were found in the repository, so the "
+            "installation quality could not be assessed."
+        )
+        return EvaluationInstallationResult(
+            structured_evaluation=StructuredEvaluationInstallationResult(
+                install_available=False,
+                install_tutorial=False,
+                dependency_number=0,
+                dependency_suggestions=None,
+                compatible_os=False,
+                overall_score=0,
+                hardware_requirements=False,
+            ),
+            free_evaluation=FreeEvaluationInstallationResult(
+                ease_of_access=[msg],
+                clarity_of_dependency=[msg],
+                hardware_requirements=[msg],
+                installation_guide=[msg],
+                compatible_os=[msg],
+                overall_score=[msg],
+            ),
+            structured_reasoning_process=msg,
+            free_reasoning_process=msg,
+        )
+
     def _evaluate(self, files: list[str] | None = None) -> tuple[EvaluationInstallationResult | None, dict, list[str]]:
         total_token_usage = {**DEFAULT_TOKEN_USAGE}
 
         structured_evaluation, structured_token_usage = self._structured_evaluate(files)
         total_token_usage = increase_token_usage(total_token_usage, structured_token_usage)
+        if structured_evaluation is None:
+            # No installation-related files were found. Return a graceful
+            # "installation documentation absent" result instead of crashing.
+            return self._build_absent_evaluation(), total_token_usage, files or []
         evaluation, token_usage = self._free_evaluate(files, structured_evaluation["reasoning_process"])
         total_token_usage = increase_token_usage(total_token_usage, token_usage)
 
