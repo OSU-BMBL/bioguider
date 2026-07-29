@@ -250,9 +250,71 @@ Temperature-0 decoding makes runs approximately, but not exactly, reproducible: 
 
 **Benchmark design.** The figures below are measured on the document-repair benchmark: a single user-guide document (`docs/plotting.md` from the *pharokka* repository) is corrupted by deterministic error injection at four densities — 40, 100, 150, and 200 injected errors per category — and each backbone repairs the identical corrupted document under two strategies: a **single-call prompt** ("simple"), and the **full pipeline** (evaluate → generate → polish). Because injection is deterministic, every backbone at a given error level receives byte-identical input. Replication differs by strategy: pipeline cells were executed as 4–5 replicates, whereas single-call cells were executed once per cell, so the single-call figures are point measurements and should be read as indicative of magnitude rather than as precise estimates.
 
-**Token consumption.** Table M4 reports measured tokens per document repair, pooled across the four error levels. The dominant effect is strategy, not backbone: the full pipeline consumes roughly an order of magnitude more tokens than a single call (for GPT-4o, 53.1 K versus 5.3 K), because it issues several calls per document and each carries repository context. Within a strategy, backbones differ mainly in how verbose their completions are — the prompt-side cost is nearly constant across backbones, while completion tokens vary by a factor of three.
+**Benchmark prompt templates.** The single-call strategies differ only in their instruction preamble; all other conditions — the corrupted document, decoding parameters, and the trailing output directive — are identical. Each request is assembled as the preamble, followed verbatim by the corrupted document, followed by the literal string `\n\nOUTPUT THE COMPLETE FIXED DOCUMENT:`. The preambles are reproduced verbatim below (Table M4 summarises their roles).
 
-**Table M4. Measured token consumption per document (median; prompt / completion split), by backbone and strategy.**
+*Simple prompt* — the baseline used for the single-call figures in Tables M5–M6; it represents what a typical user would ask a general-purpose assistant, with no domain guidance and no rubric:
+
+```text
+Fix all errors in this document and output the corrected version:
+```
+
+*GPT-basic prompt* — an even weaker control, testing whether any instruction beyond "proofread" is required:
+
+```text
+Proofread and fix this document:
+```
+
+*Generic-rubric prompt* — identical wording to the simple prompt, but used in the condition where the evaluation criteria are disclosed to the user without any structured methodology, isolating the contribution of structure from the contribution of criteria:
+
+```text
+Fix all errors in this document and output the corrected version:
+```
+
+*BioGuider prompt* — the domain-specific single-call condition, which encodes the ground-truth rule, the evaluation dimensions, and an explicit repair procedure (shown in a four-backtick fence because the template itself contains triple-backtick markers):
+
+````text
+You are "BioGuider," fixing documentation for biomedical software.
+
+GROUND TRUTH
+- Code blocks (``` fences) are the AUTHORITY. If prose contradicts code
+  (package version, test name, marker gene, parameter value), fix the
+  PROSE to match the CODE.
+
+EVALUATION DIMENSIONS (fix errors in all categories)
+1. Scientific accuracy: gene names, species, statistical tests, parameters,
+   accession IDs must be correct and consistent with code blocks
+2. Markdown formatting: headers, lists, links, inline code, tables,
+   image syntax must follow proper markdown
+3. Prose-code consistency: prose descriptions must agree with adjacent
+   code block contents (versions, function names, parameter values)
+4. Structure: section titles, YAML frontmatter must be correct
+
+HOW TO FIX (BioGuider methodology)
+- Scan the entire document systematically, dimension by dimension
+- Use code blocks as the source of truth for factual claims
+- Fix typos, broken links, wrong gene names, incorrect numbers
+- Restore proper markdown formatting
+- Do NOT add new content or remove existing sections
+- Do NOT modify text inside ``` fences
+- Output the COMPLETE fixed document as markdown
+
+CORRUPTED DOCUMENT TO FIX:
+````
+
+**Table M4. Single-call prompt conditions in the document-repair benchmark.**
+
+| Condition | Preamble | Domain guidance | Rubric disclosed | Role |
+|---|---|---|---|---|
+| Simple | "Fix all errors…" | none | no | Baseline; used for the single-call cost figures in Tables M5–M6 |
+| GPT-basic | "Proofread and fix…" | none | no | Weakest control |
+| Generic rubric | "Fix all errors…" | none | yes | Isolates rubric knowledge from structured methodology |
+| BioGuider | Full template above | yes | yes | Domain-specific single-call condition |
+
+Note that the full pipeline strategy does not use any of these templates: it is driven by the versioned agent templates inventoried in Table M2, which is why its token cost in Table M5 is an order of magnitude higher.
+
+**Token consumption.** Table M5 reports measured tokens per document repair, pooled across the four error levels. The dominant effect is strategy, not backbone: the full pipeline consumes roughly an order of magnitude more tokens than a single call (for GPT-4o, 53.1 K versus 5.3 K), because it issues several calls per document and each carries repository context. Within a strategy, backbones differ mainly in how verbose their completions are — the prompt-side cost is nearly constant across backbones, while completion tokens vary by a factor of three.
+
+**Table M5. Measured token consumption per document (median; prompt / completion split), by backbone and strategy.**
 
 | Backbone | Single-call: total (prompt / completion) | Full pipeline: total (prompt / completion) |
 |---|---|---|
@@ -263,9 +325,9 @@ Temperature-0 decoding makes runs approximately, but not exactly, reproducible: 
 
 *n* per cell: single-call 4–6 runs per backbone; pipeline 18 runs per backbone (6 for GLM-5.1, see coverage note).
 
-**Processing time.** Table M5 reports wall-clock time for the same runs. Latency spans two orders of magnitude and is driven jointly by backbone speed and by the number of calls a strategy issues: single-call repairs complete in tens of seconds, whereas the pipeline issues several sequential calls and takes minutes. Backbone speed is the larger source of spread — GLM-5.1 is roughly seven times slower than gpt-oss-120b under the identical pipeline.
+**Processing time.** Table M6 reports wall-clock time for the same runs. Latency spans two orders of magnitude and is driven jointly by backbone speed and by the number of calls a strategy issues: single-call repairs complete in tens of seconds, whereas the pipeline issues several sequential calls and takes minutes. Backbone speed is the larger source of spread — GLM-5.1 is roughly seven times slower than gpt-oss-120b under the identical pipeline.
 
-**Table M5. Measured wall-clock time per document (seconds; median, with range), by backbone and strategy.**
+**Table M6. Measured wall-clock time per document (seconds; median, with range), by backbone and strategy.**
 
 | Backbone | Single-call: median (range) | Full pipeline: median (range) |
 |---|---|---|
@@ -278,7 +340,7 @@ Temperature-0 decoding makes runs approximately, but not exactly, reproducible: 
 
 **Coverage and unmeasurable configurations.** Two backbones could not be characterised on this benchmark, and the cause is the serving endpoint rather than the pipeline. **GPT-5.4** produced no completed pipeline run in 23 consecutive attempts: every attempt exhausted its retry budget against HTTP 429 rate-limit responses, because the gateway enforces a tokens-per-minute quota that a multi-call, large-context strategy saturates immediately; single-call attempts likewise returned zero tokens after stalling for approximately 950 s. **GLM-5.1** completed the pipeline at three of four error levels (40, 150, 200) but never at 100, and completed single-call repairs at three of four levels (40, 100, 150) but never at 200; its failures were client-side timeouts and mid-stream server disconnections consistent with its very long generation latency. These two exclusions are reported explicitly because omitting them silently would misrepresent the comparison as complete. Both failure modes are reproducible independently of the benchmark harness (see Section 3.9).
 
-> ⚠️ **To complete before submission.** The tables above characterise cost on the single-document repair benchmark. They do **not** yet characterise cost for the batch evaluation over the full repository cohort reported in Results, which remains to be aggregated: (i) per-repository total, prompt, and completion tokens (median and IQR); (ii) the same broken down by evaluation stage, which shows where cost is concentrated; (iii) end-to-end wall-clock time per repository (median and IQR); and (iv) estimated monetary cost per repository at the published rate for the backbone used. Both the token totals and the per-stage breakdown are already persisted in the result objects, so this requires aggregation rather than re-running the pipeline. Also state the concurrency used for the batch run (repositories are evaluated by a synchronous, blocking function, with parallelism supplied by the caller), since wall-clock totals are otherwise not interpretable. Finally, note that the single-call figures in Tables M4–M5 are single replicates per cell; if these are retained in the manuscript, either add replicates or state the replication explicitly in the caption.
+> ⚠️ **To complete before submission.** The tables above characterise cost on the single-document repair benchmark. They do **not** yet characterise cost for the batch evaluation over the full repository cohort reported in Results, which remains to be aggregated: (i) per-repository total, prompt, and completion tokens (median and IQR); (ii) the same broken down by evaluation stage, which shows where cost is concentrated; (iii) end-to-end wall-clock time per repository (median and IQR); and (iv) estimated monetary cost per repository at the published rate for the backbone used. Both the token totals and the per-stage breakdown are already persisted in the result objects, so this requires aggregation rather than re-running the pipeline. Also state the concurrency used for the batch run (repositories are evaluated by a synchronous, blocking function, with parallelism supplied by the caller), since wall-clock totals are otherwise not interpretable. Finally, note that the single-call figures in Tables M5–M6 are single replicates per cell; if these are retained in the manuscript, either add replicates or state the replication explicitly in the caption.
 
 ### 3.9 Reproducibility Artifacts
 

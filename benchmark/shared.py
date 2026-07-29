@@ -352,14 +352,21 @@ MODELS = {
     "gpt-5.2":         {"type": "litellm", "model": "gpt-5.2"},
     "gpt-5.3-codex":   {"type": "litellm", "model": "gpt-5.3-codex"},
     "gpt-5.4":         {"type": "litellm", "model": "gpt-5.4"},
+    # Same model, but via Azure OpenAI directly (bypasses the throttled proxy).
+    # model = the Azure DEPLOYMENT name; auth from AZURE_OPENAI_* / OPENAI_API_VERSION.
+    "gpt-5.4-azure":   {"type": "azure", "model": os.environ.get("OPENAI_DEPLOYMENT_NAME", "gpt-5.4")},
     "gpt-5.4-nano":    {"type": "litellm", "model": "gpt-5.4-nano"},
     # Open weights
     "gpt-oss":         {"type": "litellm", "model": "gpt-oss-120b"},
     # Moonshot Kimi
     "kimi-k2.5":       {"type": "litellm", "model": "kimi-k2.5"},
     "kimi-k2.6":       {"type": "litellm", "model": "kimi-k2.6"},
-    # Zhipu (glm-5 deprecated on the proxy — returns HTTP 410; use glm-5.1)
+    # Zhipu (glm-5 was returning HTTP 410 previously; glm-5.1 is the current default)
+    "glm-5":           {"type": "litellm", "model": "glm-5"},
     "glm-5.1":         {"type": "litellm", "model": "glm-5.1"},
+    # FW-GLM-5.1: same GLM-5.1 model behind a proxy deployment with an increased
+    # gateway timeout (works around the ~450-510s connection cutoff on glm-5.1).
+    "FW-GLM-5.1":      {"type": "litellm", "model": "FW-GLM-5.1"},
     # Minimax
     "minimax-m2.5":    {"type": "litellm", "model": "minimax-m2.5"},
     # DeepSeek (real — v3.2 on the proxy is mis-aliased to Claude, do NOT use)
@@ -473,6 +480,16 @@ def fix_with_model(
             timeout=300,
             max_retries=1,
             max_tokens=8192,
+        )
+    elif model_type == "azure":
+        from langchain_openai import AzureChatOpenAI
+        llm_override = AzureChatOpenAI(
+            azure_deployment=model_id,
+            azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+            api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+            api_version=os.environ.get("OPENAI_API_VERSION"),
+            timeout=300,
+            max_retries=1,
         )
     else:
         proxy_key, proxy_base_url = resolve_proxy_credentials()

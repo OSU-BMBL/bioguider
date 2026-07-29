@@ -30,20 +30,36 @@ import numpy as np
 
 TARGET_LEVELS = [40, 100, 150, 200]
 # Fixed LLM order / styling, matching the other pharokka figures.
-LLM_ORDER = ["gpt-5.4", "gpt-4o", "kimi-k2.5", "glm-5.1", "gpt-oss"]
+# Note: the Azure GPT-5.4 series is labeled "gpt-5.4-azure" in the CSVs, so its
+# style key must match that exactly — otherwise it falls through to color=None
+# and matplotlib auto-assigns a default-cycle color that collides with another
+# line (previously it shared gpt-4o's color).
+LLM_ORDER = ["gpt-5.4-azure", "gpt-5.4", "gpt-4o", "kimi-k2.5", "glm-5.1", "gpt-oss"]
 LLM_COLORS = {
-    "gpt-oss":   "#1f77b4",
-    "gpt-4o":    "#ff7f0e",
-    "gpt-5.4":   "#2ca02c",
-    "kimi-k2.5": "#9467bd",
-    "glm-5.1":   "#d62728",
+    "gpt-oss":       "#1f77b4",
+    "gpt-4o":        "#ff7f0e",
+    "gpt-5.4":       "#2ca02c",
+    "gpt-5.4-azure": "#2ca02c",
+    "kimi-k2.5":     "#9467bd",
+    "glm-5.1":       "#d62728",
 }
 LLM_MARKERS = {
-    "gpt-oss":   "o",
-    "gpt-4o":    "s",
-    "gpt-5.4":   "^",
-    "kimi-k2.5": "v",
-    "glm-5.1":   "D",
+    "gpt-oss":       "o",
+    "gpt-4o":        "s",
+    "gpt-5.4":       "^",
+    "gpt-5.4-azure": "^",
+    "kimi-k2.5":     "v",
+    "glm-5.1":       "D",
+}
+
+
+# Some level cells were measured on an alternate proxy deployment of the SAME
+# underlying model. FW-GLM-5.1 is glm-5.1 behind an endpoint with a higher
+# gateway timeout, used only because the default glm-5.1 endpoint dropped the
+# longer level-200 connections (~450-510s cutoff). It is the same model, so its
+# points belong on the glm-5.1 line rather than as a separate series.
+LLM_ALIASES = {
+    "FW-GLM-5.1": "glm-5.1",
 }
 
 
@@ -51,8 +67,8 @@ def _parse_model(model_str: str):
     """'gpt-4o+pipeline' -> ('gpt-4o', 'pipeline')."""
     if "+" in model_str:
         llm, strategy = model_str.rsplit("+", 1)
-        return llm, strategy
-    return model_str, "unknown"
+        return LLM_ALIASES.get(llm, llm), strategy
+    return LLM_ALIASES.get(model_str, model_str), "unknown"
 
 
 def load_pipeline_rows(base: str, strategy_filter: str = "pipeline"):
@@ -115,29 +131,32 @@ def main() -> None:
     for llm in llms:
         color = LLM_COLORS.get(llm, None)
         marker = LLM_MARKERS.get(llm, "o")
-        tok_x, tok_y, time_x, time_y = [], [], [], []
-        for lvl in TARGET_LEVELS:
+        # Build y-values over the full x-axis with NaN at levels that produced
+        # no successful run. NaN makes matplotlib BREAK the line at that level
+        # rather than drawing a straight segment across it — so a level a model
+        # failed at (e.g. glm-5.1 @ 100 in pipeline mode) shows as a visible gap
+        # instead of a misleading interpolation.
+        tok_y = [float("nan")] * len(TARGET_LEVELS)
+        time_y = [float("nan")] * len(TARGET_LEVELS)
+        any_tok = any_time = False
+        for i, lvl in enumerate(TARGET_LEVELS):
             cell = data.get((llm, lvl))
             if not cell:
                 continue
+            mtok = float(np.mean(cell["tokens"])) if cell["tokens"] else float("nan")
+            mtime = float(np.mean(cell["time"])) if cell["time"] else float("nan")
             if cell["tokens"]:
-                mtok = float(np.mean(cell["tokens"]))
-                tok_x.append(lvl)
-                tok_y.append(mtok)
-            else:
-                mtok = float("nan")
+                tok_y[i] = mtok
+                any_tok = True
             if cell["time"]:
-                mtime = float(np.mean(cell["time"]))
-                time_x.append(lvl)
-                time_y.append(mtime)
-            else:
-                mtime = float("nan")
+                time_y[i] = mtime
+                any_time = True
             summary_rows.append((llm, lvl, mtok, mtime,
                                  len(cell["tokens"]), len(cell["time"])))
-        if tok_x:
-            ax_tok.plot(tok_x, tok_y, marker=marker, color=color, label=llm, lw=2)
-        if time_x:
-            ax_time.plot(time_x, time_y, marker=marker, color=color, label=llm, lw=2)
+        if any_tok:
+            ax_tok.plot(TARGET_LEVELS, tok_y, marker=marker, color=color, label=llm, lw=2)
+        if any_time:
+            ax_time.plot(TARGET_LEVELS, time_y, marker=marker, color=color, label=llm, lw=2)
 
     strat_label = args.strategy.capitalize()
     for ax, title, ylab in [

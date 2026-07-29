@@ -208,6 +208,17 @@ def test_pipeline_vs_prompt_pharokka(llm, test_pipeline_output_dir, pharokka_rep
                     max_tokens=8192,
                     callbacks=[usage_cb],
                 )
+            elif model_type == "azure":
+                from langchain_openai import AzureChatOpenAI
+                model_llm = AzureChatOpenAI(
+                    azure_deployment=model_id,
+                    azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT"),
+                    api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+                    api_version=os.environ.get("OPENAI_API_VERSION"),
+                    timeout=call_timeout,
+                    max_retries=call_retries,
+                    callbacks=[usage_cb],
+                )
             else:
                 proxy_key, proxy_base_url = resolve_proxy_credentials()
                 model_llm = ChatOpenAI(
