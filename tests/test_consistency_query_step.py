@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from bioguider.agents.consistency_query_step import (
+    ConsistencyQueryStep,
     _find_by_anagram,
     _find_by_dot_normalized,
     _find_by_near_match,
@@ -294,3 +295,96 @@ class TestFindBySubstringCoverage:
         result = _find_by_substring(db, "Idents")
         assert len(result) == 1
         assert result[0]["name"] == "Idents"
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: ConsistencyQueryStep._execute_directly — the exact-then-fuzzy
+# cascade a documentation typo must survive.
+#
+# These drive the real step (not the helpers in isolation) to prove that when a
+# doc references a name with a typo, the exact lookups all miss, dot-normalization
+# misses, and the fuzzy fallback resolves it to the real symbol — tagged as a
+# possible mismatch rather than silently dropped or silently accepted.
+# ---------------------------------------------------------------------------
+
+class TestExecuteDirectlyTypo:
+    # The real symbol as defined in the codebase.
+    REAL_ROW = {"id": 1, "name": "FindMarkers", "path": "R/markers.R"}
+
+    def _make_db(self, *, known_rows_by_name, all_names):
+        """Mock CodeStructureDb.
+
+        known_rows_by_name: {exact_name -> [rows]}. Every other exact lookup
+        (including the dot-normalized variants) returns []. select_by_name_like
+        returns [] so the substring tier never fires — this forces resolution
+        down to the anagram/near-match tiers, exercising the true typo path.
+        """
+        db = MagicMock()
+        db.select_by_name.side_effect = lambda n: known_rows_by_name.get(n, [])
+        db.select_by_name_like.return_value = []
+        db.select_all_names.return_value = all_names
+        # The typo has no file_path/parent, so these narrower lookups are never
+        # reached; wire them to empty defensively in case the flow changes.
+        db.select_by_name_and_path.return_value = None
+        db.select_by_name_and_parent.return_value = []
+        db.select_by_name_and_parent_and_path.return_value = None
+        db.select_all_cli_arguments.return_value = []
+        return db
+
+    def _state(self, functions_and_classes):
+        return {
+            "step_output_callback": None,   # _print_step no-ops on None
+            "functions_and_classes": functions_and_classes,
+            "cli_invocations": [],
+        }
+
+    def test_typo_resolves_via_fuzzy_and_is_tagged(self):
+        # Doc misspells 'FindMarkers' as 'FindMarkrs' (dropped 'e').
+        # Not an anagram (different length) → must land in the near_match tier.
+        db = self._make_db(
+            known_rows_by_name={"FindMarkers": [dict(self.REAL_ROW)]},
+            all_names=["FindMarkers"],
+        )
+        step = ConsistencyQueryStep(code_structure_db=db)
+        state = self._state([{"name": "FindMarkrs"}])
+
+        new_state, _tokens = step._execute_directly(state)
+
+        rows = new_state["all_query_rows"]
+        assert len(rows) == 1, "the typo should still resolve to the real symbol"
+        row = rows[0]
+        assert row["name"] == "FindMarkers"
+        assert row["possible_name_mismatch"] is True
+        assert row["doc_referenced_as"] == "FindMarkrs"
+        assert row["match_type"] == "near_match"
+
+    def test_exact_match_is_not_tagged_as_mismatch(self):
+        # A correctly-spelled name resolves on the exact lookup and must NOT be
+        # flagged — the fuzzy path only runs when the exact lookups return nothing.
+        db = self._make_db(
+            known_rows_by_name={"FindMarkers": [dict(self.REAL_ROW)]},
+            all_names=["FindMarkers"],
+        )
+        step = ConsistencyQueryStep(code_structure_db=db)
+        state = self._state([{"name": "FindMarkers"}])
+
+        new_state, _tokens = step._execute_directly(state)
+
+        rows = new_state["all_query_rows"]
+        assert len(rows) == 1
+        assert rows[0]["name"] == "FindMarkers"
+        assert "possible_name_mismatch" not in rows[0]
+
+    def test_unknown_name_is_skipped_after_fuzzy_exhausted(self):
+        # A name with no plausible match (built-in / external) is dropped, not
+        # forced onto an unrelated symbol.
+        db = self._make_db(
+            known_rows_by_name={"FindMarkers": [dict(self.REAL_ROW)]},
+            all_names=["FindMarkers"],
+        )
+        step = ConsistencyQueryStep(code_structure_db=db)
+        state = self._state([{"name": "print"}])
+
+        new_state, _tokens = step._execute_directly(state)
+
+        assert new_state["all_query_rows"] == []
