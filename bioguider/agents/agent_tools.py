@@ -5,7 +5,7 @@ from markdownify import markdownify as md
 from langchain_openai.chat_models.base import BaseChatOpenAI
 from bioguider.database.summarized_file_db import SummarizedFilesDb
 from bioguider.utils.file_utils import get_file_type
-from bioguider.agents.agent_utils import read_directory, read_file, summarize_file
+from bioguider.agents.agent_utils import read_directory, read_file, summarize_file, compute_content_hash
 from bioguider.rag.data_pipeline import count_tokens
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,9 @@ Returns:
         self.summary_file_db = db
         self.summarize_instruction = summaize_instruction
 
-    def _retrive_from_summary_file_db(self, file_path: str, prompt: str = "N/A") -> str | None:
+    def _retrive_from_summary_file_db(
+        self, file_path: str, prompt: str = "N/A", content_hash: str | None = None
+    ) -> str | None:
         if self.summary_file_db is None:
             return None
         return self.summary_file_db.select_summarized_text(
@@ -89,8 +91,12 @@ Returns:
             instruction=self.summarize_instruction,
             summarize_level=self.detailed_level,
             summarize_prompt=prompt,
+            content_hash=content_hash,
         )
-    def _save_to_summary_file_db(self, file_path: str, prompt: str, summarized_text: str, token_usage: dict):
+    def _save_to_summary_file_db(
+        self, file_path: str, prompt: str, summarized_text: str, token_usage: dict,
+        content_hash: str | None = None,
+    ):
         if self.summary_file_db is None:
             return
         self.summary_file_db.upsert_summarized_file(
@@ -100,26 +106,25 @@ Returns:
             summarize_prompt=prompt,
             summarized_text=summarized_text,
             token_usage=token_usage,
+            content_hash=content_hash,
         )
     def run(self, file_path: str, summarize_prompt: str = "N/A") -> str | None:
         if file_path is None:
             return None
         if summarize_prompt is None or len(summarize_prompt) == 0:
             summarize_prompt = "N/A"
-            
+
         file_path = file_path.strip()
         abs_file_path = file_path
         if self.repo_path is not None and self.repo_path not in abs_file_path:
             abs_file_path = os.path.join(self.repo_path, abs_file_path)
         if not os.path.isfile(abs_file_path):
             return f"{file_path} is not a file."
-        summarized_content = self._retrive_from_summary_file_db(
-            file_path=file_path,
-            prompt=summarize_prompt,
-        )
-        if summarized_content is not None:
-            return f"summarized content of file {file_path}: " + summarized_content
 
+        # Read the file first so the cache lookup can be gated on the current
+        # content: a changed file yields a new hash and misses the (stale) cache
+        # entry, forcing a fresh summary. The expensive LLM call is still skipped
+        # on a genuine hit.
         try:
             file_content = read_file(abs_file_path)
             file_content = file_content.replace("{", "{{").replace("}", "}}")
@@ -129,6 +134,16 @@ Returns:
         except Exception as e:
             logger.error(str(e))
             return f"Failed to read {file_path}."
+        content_hash = compute_content_hash(file_content)
+
+        summarized_content = self._retrive_from_summary_file_db(
+            file_path=file_path,
+            prompt=summarize_prompt,
+            content_hash=content_hash,
+        )
+        if summarized_content is not None:
+            return f"summarized content of file {file_path}: " + summarized_content
+
         summarized_content, token_usage = summarize_file(
             self.llm, abs_file_path, file_content, self.detailed_level,
             summary_instructions=self.summarize_instruction,
@@ -139,6 +154,7 @@ Returns:
             prompt=summarize_prompt,
             summarized_text=summarized_content,
             token_usage=token_usage,
+            content_hash=content_hash,
         )
         self._print_token_usage(token_usage)
         return f"summarized content of file {file_path}: " + summarized_content
