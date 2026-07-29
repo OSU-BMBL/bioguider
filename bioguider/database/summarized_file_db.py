@@ -139,8 +139,12 @@ class SummarizedFilesDb:
             self.connection = None
         
     def get_db_file(self):
-        db_path = os.environ.get("DATA_FOLDER", "./data")
-        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}.db")
+        """Get the database file path (matches the file opened by _connect_to_db)."""
+        db_path = self.data_folder
+        if db_path is None:
+            db_path = os.environ.get("DATA_FOLDER", "./data")
+        db_path = os.path.join(db_path, "databases")
+        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}_summarized_file.db")
         return db_path
 
 
