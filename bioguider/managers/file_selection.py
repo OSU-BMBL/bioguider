@@ -24,6 +24,7 @@ class FileCategory(str, Enum):
     TUTORIAL = "tutorial"
     USERGUIDE = "userguide"
     INSTALLATION = "installation"
+    RD_DOC = "rd_doc"
 
 
 @dataclass
@@ -104,6 +105,8 @@ class FileSelector:
                 result.files_by_category[category.value] = (
                     self._find_installation_files()
                 )
+            elif category == FileCategory.RD_DOC:
+                result.files_by_category[category.value] = self._find_rd_doc_files()
 
         result.total_files = sum(
             len(files) for files in result.files_by_category.values()
@@ -182,6 +185,34 @@ class FileSelector:
                             install_files.append(fpath)
 
         return install_files
+
+    def _find_rd_doc_files(self, max_files: int = 20) -> List[str]:
+        """Find R documentation files in man/ directory, capped at max_files.
+
+        Skips auto-generated stubs (files whose only non-comment content is
+        \\name + \\alias + \\title with no \\description or \\arguments).
+        """
+        man_dir = os.path.join(self.repo_path, "man")
+        if not os.path.isdir(man_dir):
+            return []
+
+        rd_files = []
+        for f in sorted(os.listdir(man_dir)):
+            if not f.endswith(".Rd") or f.startswith("."):
+                continue
+            fpath = os.path.join(man_dir, f)
+            try:
+                content = open(fpath, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            # Skip stubs — must have at least \description{} and \arguments{}
+            if r"\description{" not in content or r"\arguments{" not in content:
+                continue
+            rd_files.append(fpath)
+            if len(rd_files) >= max_files:
+                break
+
+        return rd_files
 
 
 class ProjectTermExtractor:

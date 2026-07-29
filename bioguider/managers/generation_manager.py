@@ -25,6 +25,10 @@ from bioguider.generation import (
     LLMContentGenerator,
     LLMCleaner,
 )
+from bioguider.generation.markdown_polisher import (
+    MarkdownPolisher,
+    _accept_polish_if_safe,
+)
 from bioguider.generation.models import (
     GenerationManifest,
     GenerationReport,
@@ -85,6 +89,7 @@ class DocumentationGenerationManager:
         self.renderer = DocumentRenderer()
         self.output = OutputManager(base_outputs_dir=self.config.output_dir)
         self.llm_gen = LLMContentGenerator(llm)
+        self.polisher = MarkdownPolisher(llm)
         self.llm_cleaner = LLMCleaner(llm)
 
     def print_step(self, step_name: str | None = None, step_output: str | None = None):
@@ -407,6 +412,12 @@ class DocumentationGenerationManager:
                 fpath, edits, original_content, suggestions, plan
             )
 
+            # Surface-markdown polish — closes the inline_code / image /
+            # link / typo gap where the evaluation tasks emit no targeted
+            # findings.  Runs BEFORE the cleaner so any new AI-summary
+            # tells the polish call might add still get stripped downstream.
+            content = self._polish_content(fpath, content)
+
             # Clean markdown files
             content = self._clean_content(fpath, content)
 
@@ -588,6 +599,36 @@ class DocumentationGenerationManager:
                 return f"## {title}\n\n{gen_section}" if title else gen_section
 
         return None
+
+    def _polish_content(self, fpath: str, content: str) -> str:
+        """Run the surface-markdown polish pass on a generated document.
+
+        Mirrors ``_clean_content``'s skip rules (no-op on empty content,
+        non-markdown extensions, or when the feature flag is off) and
+        defends against polish errors the same way: failures log a warning
+        and return the unpolished content rather than breaking the run.
+
+        The structural guardrail in ``_accept_polish_if_safe`` makes it
+        impossible for polish to regress fence/header structure or drift
+        more than 10% in length — if it does, we fall back to ``content``.
+        """
+        if not content:
+            return content
+
+        if not fpath.endswith((".md", ".rst", ".Rmd", ".Rd")):
+            return content
+
+        if not self.config.polish_output:
+            return content
+
+        try:
+            self.print_step("PolishingContent", f"Polishing surface markdown for {fpath}...")
+            polished, _usage = self.polisher.polish(content)
+            return _accept_polish_if_safe(content, polished, content)
+        except Exception as e:
+            logger.warning(f"Failed to polish content for {fpath}: {e}")
+
+        return content
 
     def _clean_content(self, fpath: str, content: str) -> str:
         """Clean formatting for markdown files."""

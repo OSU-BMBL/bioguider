@@ -30,6 +30,7 @@ class GenerationConfig:
     write_originals: bool = True
 
     # LLM settings
+    polish_output: bool = True  # Run narrow markdown polish before LLM cleaner
     clean_output: bool = True  # Run LLM cleaner on output
 
 
@@ -110,8 +111,15 @@ ERROR_CATEGORIES = {
     ],
     "code": [
         "inline_code",
+        "inline_code_mismatch",
         "code_lang_tag",
         "emphasis",
+        "code_func_name",
+        "code_func_args",
+    ],
+    "rd_reference": [
+        "rd_func_name",
+        "rd_arg_name",
     ],
     "biology": [
         "bio_term",
@@ -162,11 +170,15 @@ ALL_ERROR_CATEGORIES = frozenset(
 #   means these can no longer be injected without entering code blocks.
 # - code_lang_tag: modifies fence delimiters (code-adjacent); models should
 #   not touch fence syntax.
+# - code_func_name / code_func_args: injected into code fences in prose .md/.rst
+#   files; fixing them requires a code linter, not a documentation evaluator.
 # These errors still appear in per-category detail rows (pre-registered carve-out).
 UNSCORABLE_CATEGORIES = frozenset({
     "function",
     "comment_typo",
     "code_lang_tag",
+    "code_func_name",
+    "code_func_args",
 })
 
 # Scorable categories are everything else (headline F1 denominator).
@@ -194,11 +206,13 @@ CONTENT_CATEGORIES: frozenset = frozenset({
     "coordinates", "units_scale", "sample_type", "contamination",
     # cli_config -- wrong default = wrong analysis
     "default_value",
+    # rd_reference -- wrong API names in .Rd prose are factual errors
+    "rd_func_name", "rd_arg_name",
 })
 
 HYGIENE_CATEGORIES: frozenset = frozenset({
     "typo", "markdown_structure",
-    "inline_code", "link", "duplicate",
+    "inline_code", "inline_code_mismatch", "link", "duplicate",
     "boolean", "emphasis",
     # structure group -- pure markdown formatting
     "list_structure", "table_alignment", "section_title", "image_syntax",
@@ -353,6 +367,10 @@ FILE_CATEGORIES = {
     "installation": {
         "patterns": ["install*.md", "INSTALL*.md", "installation*.md"],
         "description": "Installation documentation",
+    },
+    "rd_doc": {
+        "patterns": ["man/*.Rd"],
+        "description": "R package documentation files (man/ directory)",
     },
 }
 

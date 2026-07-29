@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Union
 
 import matplotlib as mpl
+mpl.use("Agg")  # non-interactive backend — must be set before pyplot import to avoid Tcl/Tk thread crashes
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Optional

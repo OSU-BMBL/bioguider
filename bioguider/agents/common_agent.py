@@ -84,7 +84,11 @@ class CommonAgent:
     def _incre_token_usage(self, token_usage):
         incremental_token_usage = token_usage
         if not isinstance(token_usage, dict):
-            incremental_token_usage = vars(incremental_token_usage)
+            incremental_token_usage = {
+                "total_tokens": getattr(token_usage, "total_tokens", 0),
+                "prompt_tokens": getattr(token_usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(token_usage, "completion_tokens", 0),
+            }
         self.token_usage = increase_token_usage(
             self.token_usage, incremental_token_usage
         )
@@ -120,7 +124,9 @@ class CommonAgent:
             )
             self._incre_token_usage(callback_handler)
         except Exception as e:
-            logger.error(str(e))
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"_invoke_agent error: {type(e).__name__}: {e}\n{tb}")
             raise e
         processed_res = res
         if post_process is not None:

@@ -1,10 +1,22 @@
-"""Verify that error injection never places mutations inside fenced code blocks."""
+"""Verify that error injection respects code-block boundaries.
+
+Prose-targeting categories must never mutate code block content.
+Code-consistency categories (code_func_name, code_func_args,
+code_comment_conflict) are the only ones permitted to modify content
+inside fenced code blocks.  All categories must preserve fence
+delimiters and block count.
+"""
 
 import re
 import pytest
 from unittest.mock import MagicMock
 
 from bioguider.generation.llm_injector import LLMErrorInjector, _CODE_FENCE_RE
+
+# Categories that are explicitly allowed to mutate inside code blocks
+_CODE_CONSISTENCY_CATS = frozenset(
+    {"code_func_name", "code_func_args", "code_comment_conflict"}
+)
 
 
 SAMPLE_DOC = """\
@@ -67,7 +79,8 @@ def _make_injector() -> LLMErrorInjector:
 
 
 class TestProseOnlyInjection:
-    def test_code_blocks_byte_identical(self):
+    def test_code_blocks_structure_preserved(self):
+        """Fence count and delimiters must survive all injection categories."""
         injector = _make_injector()
         corrupted, manifest = injector.inject(
             SAMPLE_DOC, min_per_category=2, force_deterministic=True
@@ -80,12 +93,45 @@ class TestProseOnlyInjection:
             f"Fence count changed: {len(baseline_fences)} -> {len(corrupted_fences)}"
         )
         for i, (base, corr) in enumerate(zip(baseline_fences, corrupted_fences)):
-            assert base == corr, (
-                f"Code block {i} was modified.\n"
-                f"Baseline:\n{base[:200]}\n\nCorrupted:\n{corr[:200]}"
+            assert base.split("\n")[0] == corr.split("\n")[0], (
+                f"Code block {i} fence-open delimiter changed."
+            )
+            assert base.split("\n")[-1] == corr.split("\n")[-1], (
+                f"Code block {i} fence-close delimiter changed."
+            )
+
+    def test_non_code_categories_leave_fences_unchanged(self):
+        """Prose/structure-targeting categories must not modify code-block content."""
+        injector = _make_injector()
+        corrupted, manifest = injector.inject(
+            SAMPLE_DOC, min_per_category=2, force_deterministic=True
+        )
+
+        # Revert code-consistency mutations in reverse order (supplement errors chain)
+        reverted = corrupted
+        for e in reversed(manifest.get("errors", [])):
+            if e["category"] in _CODE_CONSISTENCY_CATS:
+                reverted = reverted.replace(
+                    e["mutated_snippet"], e["original_snippet"], 1
+                )
+
+        baseline_fences = _fence_content(SAMPLE_DOC)
+        reverted_fences = _fence_content(reverted)
+
+        assert len(baseline_fences) == len(reverted_fences)
+        for i, (base, rev) in enumerate(zip(baseline_fences, reverted_fences)):
+            assert base == rev, (
+                f"Non-code-consistency category modified code block {i}.\n"
+                f"Baseline:\n{base[:200]}\n\nReverted:\n{rev[:200]}"
             )
 
     def test_error_snippets_not_exclusively_in_code(self):
+        """Non-code-consistency error snippets must come from the original document.
+
+        Code-consistency categories target code blocks and may produce snippets
+        (especially in the supplement pass) that appear only in the already-corrupted
+        text, not in the original SAMPLE_DOC.  They are excluded from this check.
+        """
         injector = _make_injector()
         _, manifest = injector.inject(
             SAMPLE_DOC, min_per_category=2, force_deterministic=True
@@ -96,6 +142,8 @@ class TestProseOnlyInjection:
         assert len(errors) > 0, "No errors injected"
 
         for err in errors:
+            if err.get("category") in _CODE_CONSISTENCY_CATS:
+                continue  # code-consistency snippets live inside code blocks
             orig = err.get("original_snippet", "")
             if not orig or len(orig) < 2:
                 continue
@@ -126,7 +174,8 @@ class TestProseOnlyInjection:
         result = LLMErrorInjector._replace_prose_only(doc, "Seurat", "REPLACED", spans)
         assert result == doc
 
-    def test_high_error_count_still_prose_only(self):
+    def test_high_error_count_preserves_fence_structure(self):
+        """At high min_per_category, fence count and delimiters must still be intact."""
         injector = _make_injector()
         corrupted, manifest = injector.inject(
             SAMPLE_DOC, min_per_category=5, force_deterministic=True
@@ -135,8 +184,39 @@ class TestProseOnlyInjection:
         baseline_fences = _fence_content(SAMPLE_DOC)
         corrupted_fences = _fence_content(corrupted)
 
+        assert len(baseline_fences) == len(corrupted_fences), (
+            f"Fence count changed at high error count: "
+            f"{len(baseline_fences)} -> {len(corrupted_fences)}"
+        )
         for i, (base, corr) in enumerate(zip(baseline_fences, corrupted_fences)):
-            assert base == corr, (
-                f"Code block {i} modified at high error count.\n"
-                f"Baseline:\n{base[:200]}\n\nCorrupted:\n{corr[:200]}"
+            assert base.split("\n")[0] == corr.split("\n")[0], (
+                f"Code block {i} open delimiter changed at high error count."
+            )
+            assert base.split("\n")[-1] == corr.split("\n")[-1], (
+                f"Code block {i} close delimiter changed at high error count."
+            )
+
+    def test_high_error_count_non_code_leaves_fences_unchanged(self):
+        """At high min_per_category, only code-consistency categories modify fences."""
+        injector = _make_injector()
+        corrupted, manifest = injector.inject(
+            SAMPLE_DOC, min_per_category=5, force_deterministic=True
+        )
+
+        # Reverse order so chained supplement mutations unwind correctly
+        reverted = corrupted
+        for e in reversed(manifest.get("errors", [])):
+            if e["category"] in _CODE_CONSISTENCY_CATS:
+                reverted = reverted.replace(
+                    e["mutated_snippet"], e["original_snippet"], 1
+                )
+
+        baseline_fences = _fence_content(SAMPLE_DOC)
+        reverted_fences = _fence_content(reverted)
+
+        for i, (base, rev) in enumerate(zip(baseline_fences, reverted_fences)):
+            assert base == rev, (
+                f"Non-code-consistency category modified code block {i} "
+                f"at high error count.\n"
+                f"Baseline:\n{base[:200]}\n\nReverted:\n{rev[:200]}"
             )

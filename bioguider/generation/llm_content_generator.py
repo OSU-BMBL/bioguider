@@ -13,6 +13,19 @@ from .truncation_handler import TruncationHandler
 from .rmarkdown_processor import RMarkdownProcessor, ChunkType
 
 
+# Maximum characters of the JSON-serialized merged evaluation report we
+# splice into the generator's prompt.  The historical 6000-char cap was
+# extremely tight: on pharokka-class docs the eval would emit 100+
+# findings and the consistency entries (CLI/code inconsistencies — the
+# repo-aware bits the pipeline exists to surface) were truncated away
+# before the generator ever saw them.  30 000 matches the LLMCleaner /
+# MarkdownPolisher caps and lets the full report through for documents
+# in the typical user-guide / README size range.  Combined with the
+# consistency-first ordering in ``_build_merged_report`` this is robust
+# to future evaluation tasks that emit even more findings.
+_MAX_EVALUATION_REPORT_PROMPT_CHARS = 30_000
+
+
 class LLMContentGenerator:
     """
     Generates documentation content using LLMs.
@@ -107,11 +120,11 @@ class LLMContentGenerator:
         Returns:
             Tuple of (continuation_content, token_usage)
         """
-        from bioguider.agents.agent_utils import get_openai
-
-        llm = get_openai()
-
-        conv = CommonConversation(llm)
+        # Use the LLM this generator was constructed with — NOT a hard-coded
+        # default model.  Otherwise a truncated first pass would have its
+        # continuation written by whatever ``OPENAI_MODEL`` points at, silently
+        # contaminating per-model benchmark results with a different model.
+        conv = CommonConversation(self.llm)
 
         # Calculate total suggestions for the prompt
         total_suggestions = 1
@@ -196,12 +209,11 @@ class LLMContentGenerator:
         context: str = "",
         original_content: str = None,
     ) -> tuple[str, dict]:
-        from bioguider.agents.agent_utils import get_openai
         import os
         import json
         from datetime import datetime
 
-        llm = get_openai()
+        llm = self.llm
 
         conv = CommonConversation(llm)
 
@@ -212,8 +224,18 @@ class LLMContentGenerator:
             "evaluation_report": evaluation_report,
             "context_length": len(context),
             "llm_settings": {
-                "model_name": os.environ.get("OPENAI_MODEL", "gpt-4o"),
-                "azure_deployment": os.environ.get("OPENAI_DEPLOYMENT_NAME"),
+                # Report the model actually in use (self.llm), falling back to
+                # env only if the attribute is missing, so the debug log can't
+                # mislabel which model produced the document.
+                "model_name": (
+                    getattr(llm, "model_name", None)
+                    or os.environ.get("OPENAI_MODEL", "gpt-4o")
+                ),
+                "azure_deployment": (
+                    getattr(llm, "deployment_name", None)
+                    or getattr(llm, "azure_deployment", None)
+                    or os.environ.get("OPENAI_DEPLOYMENT_NAME")
+                ),
                 "max_tokens": getattr(llm, "max_tokens", 16384),
             },
         }
@@ -238,7 +260,7 @@ class LLMContentGenerator:
             system_prompt = self.prompt_loader.format(
                 PromptTemplate.README_COMPREHENSIVE,
                 target_file=target_file,
-                evaluation_report=json.dumps(evaluation_report)[:6000],
+                evaluation_report=json.dumps(evaluation_report)[:_MAX_EVALUATION_REPORT_PROMPT_CHARS],
                 context=context[:4000],
                 original_content=original_content or "",
             )
@@ -256,7 +278,7 @@ class LLMContentGenerator:
             system_prompt = self.prompt_loader.format(
                 PromptTemplate.FULL_DOCUMENT,
                 target_file=target_file,
-                evaluation_report=json.dumps(evaluation_report)[:6000],
+                evaluation_report=json.dumps(evaluation_report)[:_MAX_EVALUATION_REPORT_PROMPT_CHARS],
                 context=context[:4000],
                 original_content=original_content or "",
                 total_suggestions=total_suggestions,

@@ -13,7 +13,7 @@ from langchain_openai import ChatOpenAI
 
 load_dotenv()
 
-MODELS = ["gpt-5.4", "kimi-k2.5", "glm-5", "gpt-oss-120b", "gpt-4o"]
+MODELS = ["gpt-5.4", "kimi-k2.5", "glm-5.1", "gpt-oss-120b", "gpt-4o"]
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OPENAI_BASE_URL"),
