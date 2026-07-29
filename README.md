@@ -243,7 +243,9 @@ hard-coded to a specific server path and will only run on that host.
 
 - Follow the existing module conventions — especially the PEO quadruple for new agent
   capabilities and the small `bioguider/generation/*` components for pipeline work.
-- `RepoAgent/` is a vendored third party (OpenBMB/RepoAgent) — **do not edit it**.
+- `RepoAgent` (OpenBMB/RepoAgent) is an external repository used as a sample target for the
+  evaluation system tests, not a dependency of the package. The `*_RepoAgent` system tests expect a
+  clone at the sibling path in `system_tests/conftest.py`'s `root_path` fixture (e.g. `../RepoAgent`).
 - Cut releases with `bump2version patch|minor|major` (config in `.bumpversion.cfg`).
 
 ## License
