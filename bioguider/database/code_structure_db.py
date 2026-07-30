@@ -730,8 +730,10 @@ class CodeStructureDb:
             self.connection = None
 
     def get_db_file(self) -> str:
-        """Get the database file path."""
-        db_path = os.environ.get("DATA_FOLDER", "./data")
+        """Get the database file path (matches the file opened by _connect_to_db)."""
+        db_path = self.data_folder
+        if db_path is None:
+            db_path = os.environ.get("DATA_FOLDER", "./data")
         db_path = os.path.join(db_path, "databases")
-        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}.db")
+        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}_code_structure.db")
         return db_path

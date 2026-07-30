@@ -62,6 +62,10 @@ poetry install          # creates the venv and installs runtime + dev deps
 A `requirements.txt` is provided for non-Poetry setups, but `pyproject.toml` is the
 source of truth.
 
+For a from-scratch, step-by-step walkthrough — including the `libmagic` system
+dependency, the `logs/` directory requirement, and a troubleshooting table — see
+**[INSTALL.md](INSTALL.md)**.
+
 > **Note:** `pytest` from `tests/` must be run from the repo root — `tests/conftest.py`
 > opens `./logs/test.log` unconditionally, so create `logs/` first if it is missing.
 
@@ -230,6 +234,7 @@ hard-coded to a specific server path and will only run on that host.
 
 ## Documentation
 
+- **[INSTALL.md](INSTALL.md)** — step-by-step installation and troubleshooting
 - **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** — full environment-variable reference
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — component map, extension points, data flow
 - **[docs/BENCHMARK_METHODS.md](docs/BENCHMARK_METHODS.md)** — error-injection benchmark methodology
@@ -243,7 +248,9 @@ hard-coded to a specific server path and will only run on that host.
 
 - Follow the existing module conventions — especially the PEO quadruple for new agent
   capabilities and the small `bioguider/generation/*` components for pipeline work.
-- `RepoAgent/` is a vendored third party (OpenBMB/RepoAgent) — **do not edit it**.
+- `RepoAgent` (OpenBMB/RepoAgent) is an external repository used as a sample target for the
+  evaluation system tests, not a dependency of the package. The `*_RepoAgent` system tests expect a
+  clone at the sibling path in `system_tests/conftest.py`'s `root_path` fixture (e.g. `../RepoAgent`).
 - Cut releases with `bump2version patch|minor|major` (config in `.bumpversion.cfg`).
 
 ## License

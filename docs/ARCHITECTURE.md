@@ -151,7 +151,7 @@ All of these directories are **gitignored and regeneratable**:
 - **`system_tests/`** make real LLM calls, clone real repos, and cost money — run them
   deliberately, one file at a time.
 - **`DeepSeekConversation.chat`** swallows exceptions and returns them stringified.
-- **`RepoAgent/`** is vendored third-party (OpenBMB/RepoAgent) — do not edit it.
+- **`RepoAgent`** (OpenBMB/RepoAgent) is an external repository used as a sample target by the `*_RepoAgent` evaluation system tests — not a dependency of the package. It is expected as a sibling clone (see `root_path` in `system_tests/conftest.py`), not a submodule of this repo.
 - The generation pipeline has been progressively broken into the small
   `bioguider/generation/*` components; prefer those over any monolithic version still
   referenced by older tests.

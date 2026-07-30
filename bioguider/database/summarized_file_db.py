@@ -176,8 +176,11 @@ class SummarizedFilesDb:
             self.connection = None
         
     def get_db_file(self):
-        # Must mirror the path built in _connect_to_db(), otherwise callers
-        # (e.g. test teardown) operate on a file that does not exist.
+        """Get the database file path (matches the file opened by _connect_to_db).
+
+        Must mirror the path built in _connect_to_db(), otherwise callers
+        (e.g. test teardown) operate on a file that does not exist.
+        """
         db_path = self.data_folder
         if db_path is None:
             db_path = os.environ.get("DATA_FOLDER", "./data")

@@ -73,7 +73,7 @@ Three orchestrator classes in `bioguider/managers/` drive everything; each compo
 - `system_tests/` are real integration tests — they will clone repos and spend LLM tokens. Flag before running them in bulk.
 - The `refactor/document-generation` branch has been progressively breaking the generation pipeline into the small modules listed above (Phase 1 through 2.5 per the commit log). When touching generation, prefer the `bioguider/generation/*` components over anything that looks monolithic — the monolithic version may still be referenced in older tests.
 - `DeepSeekConversation.chat` swallows exceptions and returns them stringified (see `bioguider/conversation.py`). Don't assume a successful return type.
-- The `RepoAgent/` subdirectory is a vendored third-party library (OpenBMB/RepoAgent), not part of the bioguider package. Don't edit it.
+- `RepoAgent` (OpenBMB/RepoAgent) is an external repository used as a sample target by the `*_RepoAgent` evaluation system tests — not part of the bioguider package and not a dependency. Those tests clone it to the sibling path defined by `system_tests/conftest.py`'s `root_path` fixture (e.g. `../RepoAgent`); it is no longer a submodule of this repo.
 
 ## Security
 
