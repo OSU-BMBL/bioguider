@@ -1,4 +1,5 @@
 
+import hashlib
 import json
 from json import JSONDecodeError
 import os
@@ -283,10 +284,21 @@ Now, let's start to summarize.
 """)
 
 
+def compute_content_hash(content: str | None) -> str | None:
+    """Stable content fingerprint used to invalidate cached file summaries.
+
+    Returns None when there is no content to hash, in which case callers fall
+    back to the legacy content-agnostic cache lookup.
+    """
+    if content is None:
+        return None
+    return hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+
+
 def summarize_file(
-    llm: BaseChatOpenAI, 
-    name: str | Path, 
-    content: str | None = None, 
+    llm: BaseChatOpenAI,
+    name: str | Path,
+    content: str | None = None,
     level: int = 3,
     summary_instructions: str | None = None,
     summarize_prompt: str = "N/A",
@@ -294,15 +306,24 @@ def summarize_file(
 ) -> Tuple[str, dict]:
     name = str(name).strip()
     if content is None:
-        try:            
+        try:
             with open(name, "r") as fobj:
                 content = fobj.read()
         except Exception as e:
             logger.error(e)
             return ""
+    # Fingerprint the exact content we are about to summarize, so a cached
+    # summary is reused only when the file content is unchanged. This prevents
+    # a stale summary (e.g. from an earlier near-empty README) from being served
+    # after the file is updated.
+    content_hash = compute_content_hash(content)
     # First, query from database
     if db is not None:
-        res = db.select_summarized_text(name, summary_instructions, level)
+        res = db.select_summarized_text(
+            name, summary_instructions, level,
+            summarize_prompt=summarize_prompt,
+            content_hash=content_hash,
+        )
         if res is not None:
             return res, {**DEFAULT_TOKEN_USAGE}
 
@@ -338,8 +359,9 @@ def summarize_file(
             summarize_prompt=summarize_prompt,
             summarized_text=out,
             token_usage=token_usage,
+            content_hash=content_hash,
         )
-    
+
     return out, token_usage
 
   # Set up a prompt template

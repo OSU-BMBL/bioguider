@@ -21,20 +21,31 @@ CREATE TABLE IF NOT EXISTS {SUMMARIZED_FILES_TABLE_NAME} (
     summarize_prompt TEXT,
     summarize_level INTEGER,
     summarized_text TEXT,
+    content_hash TEXT,
     token_usage  VARCHAR(512),
     datetime TEXT NOT NULL DEFAULT (strftime('%Y-%m-%d %H:%M:%f', 'now')),
     UNIQUE (file_path, instruction, summarize_level, summarize_prompt)
 );
 """
 summarized_files_upsert_query = f"""
-INSERT INTO {SUMMARIZED_FILES_TABLE_NAME}(file_path, instruction, summarize_level, summarize_prompt, summarized_text, token_usage, datetime)
-VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
+INSERT INTO {SUMMARIZED_FILES_TABLE_NAME}(file_path, instruction, summarize_level, summarize_prompt, summarized_text, content_hash, token_usage, datetime)
+VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%d %H:%M:%f', 'now'))
 ON CONFLICT(file_path, instruction, summarize_level, summarize_prompt) DO UPDATE SET summarized_text=excluded.summarized_text,
+content_hash=excluded.content_hash,
+token_usage=excluded.token_usage,
 datetime=strftime('%Y-%m-%d %H:%M:%f', 'now');
 """
+# Base lookup (content-agnostic — preserves the pre-content_hash behaviour when
+# no hash is supplied). The `_with_hash` variant additionally requires the stored
+# summary to have been produced from the exact same file content, so a changed
+# file misses the cache and is re-summarized instead of returning a stale entry.
 summarized_files_select_query = f"""
-SELECT summarized_text, datetime FROM {SUMMARIZED_FILES_TABLE_NAME} 
+SELECT summarized_text, datetime FROM {SUMMARIZED_FILES_TABLE_NAME}
 where file_path = ? and instruction = ? and summarize_level = ? and summarize_prompt=?;
+"""
+summarized_files_select_with_hash_query = f"""
+SELECT summarized_text, datetime FROM {SUMMARIZED_FILES_TABLE_NAME}
+where file_path = ? and instruction = ? and summarize_level = ? and summarize_prompt=? and content_hash = ?;
 """
 
 class SummarizedFilesDb:
@@ -52,6 +63,16 @@ class SummarizedFilesDb:
             cursor.execute(
                 summarized_files_create_table_query
             )
+            # Migrate pre-existing databases that were created before the
+            # content_hash column existed. Rows added before the migration keep
+            # content_hash = NULL, so a hashed lookup misses them and they are
+            # transparently re-summarized (self-healing stale caches).
+            cursor.execute(f"PRAGMA table_info({SUMMARIZED_FILES_TABLE_NAME})")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "content_hash" not in columns:
+                cursor.execute(
+                    f"ALTER TABLE {SUMMARIZED_FILES_TABLE_NAME} ADD COLUMN content_hash TEXT"
+                )
             self.connection.commit()
             return True
         except Exception as e:
@@ -89,7 +110,8 @@ class SummarizedFilesDb:
         summarize_level: int,
         summarize_prompt: str,
         summarized_text: str,
-        token_usage: dict | None = None
+        token_usage: dict | None = None,
+        content_hash: str | None = None,
     ):
         token_usage = token_usage if token_usage is not None else {**DEFAULT_TOKEN_USAGE}
         token_usage = json.dumps(token_usage)
@@ -100,8 +122,8 @@ class SummarizedFilesDb:
         try:
             cursor = self.connection.cursor()
             cursor.execute(
-                summarized_files_upsert_query, 
-                (file_path, instruction, summarize_level, summarize_prompt, summarized_text, token_usage, )
+                summarized_files_upsert_query,
+                (file_path, instruction, summarize_level, summarize_prompt, summarized_text, content_hash, token_usage, )
             )
             self.connection.commit()
             return True
@@ -118,15 +140,30 @@ class SummarizedFilesDb:
         instruction: str,
         summarize_level: int,
         summarize_prompt: str = "N/A",
+        content_hash: str | None = None,
     ) -> str | None:
+        """Return a cached summary, or None if there is no matching entry.
+
+        When ``content_hash`` is provided, the cached summary must have been
+        produced from file content with the same hash; otherwise the lookup
+        misses and the caller re-summarizes. Passing ``None`` preserves the
+        legacy content-agnostic behaviour (used by callers that do not track
+        content, and by pre-migration rows).
+        """
         self._connect_to_db()
         self._ensure_tables()
         try:
             cursor = self.connection.cursor()
-            cursor.execute(
-                summarized_files_select_query, 
-                (file_path, instruction, summarize_level, summarize_prompt,)
-            )
+            if content_hash is None:
+                cursor.execute(
+                    summarized_files_select_query,
+                    (file_path, instruction, summarize_level, summarize_prompt,)
+                )
+            else:
+                cursor.execute(
+                    summarized_files_select_with_hash_query,
+                    (file_path, instruction, summarize_level, summarize_prompt, content_hash,)
+                )
             row = cursor.fetchone()
             if row is None:
                 return None
@@ -139,12 +176,15 @@ class SummarizedFilesDb:
             self.connection = None
         
     def get_db_file(self):
-        """Get the database file path (matches the file opened by _connect_to_db)."""
+        """Get the database file path (matches the file opened by _connect_to_db).
+
+        Must mirror the path built in _connect_to_db(), otherwise callers
+        (e.g. test teardown) operate on a file that does not exist.
+        """
         db_path = self.data_folder
         if db_path is None:
             db_path = os.environ.get("DATA_FOLDER", "./data")
         db_path = os.path.join(db_path, "databases")
-        db_path = os.path.join(db_path, f"{self.author}_{self.repo_name}_summarized_file.db")
-        return db_path
+        return os.path.join(db_path, f"{self.author}_{self.repo_name}_summarized_file.db")
 
 
