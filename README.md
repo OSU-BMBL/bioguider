@@ -113,6 +113,10 @@ There is no entry-point script; you drive BioGuider from Python. An LLM handle i
 with `get_configured_llm()` (reads `LLM_PROVIDER`, defaults to Azure). `step_callback` is
 any `callable(step_name=..., step_output=...)` — pass a simple logger, or `None`.
 
+> New here? **[docs/TUTORIAL.md](docs/TUTORIAL.md)** is a runnable end-to-end
+> walkthrough — evaluate one repo, serialize a report, generate revised docs, and
+> read the output — with cost flags at each LLM step.
+
 ### 1. Evaluate a repository
 
 ```python
@@ -235,6 +239,7 @@ hard-coded to a specific server path and will only run on that host.
 ## Documentation
 
 - **[INSTALL.md](INSTALL.md)** — step-by-step installation and troubleshooting
+- **[docs/TUTORIAL.md](docs/TUTORIAL.md)** — hands-on end-to-end walkthrough (evaluate → generate → read output)
 - **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** — full environment-variable reference
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — component map, extension points, data flow
 - **[docs/BENCHMARK_METHODS.md](docs/BENCHMARK_METHODS.md)** — error-injection benchmark methodology
