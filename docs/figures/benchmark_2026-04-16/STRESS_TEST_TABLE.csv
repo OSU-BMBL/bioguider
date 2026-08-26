@@ -1,0 +1,7 @@
+model,error_count,total_injected,fixed,unfixed,fix_rate,precision,recall,f1_score,duration_s
+gpt-5.4+bioguider,10,97,64,33,0.6598,1.0,0.6598,0.795,55.4
+kimi-k2.5+bioguider,10,97,69,28,0.7113,1.0,0.7113,0.8313,91.82
+glm-5+bioguider,10,97,69,28,0.7113,1.0,0.7113,0.8313,499.6
+gpt-oss+bioguider,10,97,64,33,0.6598,1.0,0.6598,0.795,16.91
+gpt-4o+bioguider,10,97,70,27,0.7216,1.0,0.7216,0.8383,35.98
+gpt-5.4+simple,10,97,71,26,0.732,1.0,0.732,0.8452,35.72

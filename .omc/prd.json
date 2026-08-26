@@ -1,0 +1,72 @@
+{
+  "project": "BioGuider benchmark — initial round (10 vignettes × 9 levels × 5 models × 1 prompt)",
+  "plan_ref": "/Users/wang.13246/.claude/plans/plan-what-we-going-hidden-cascade.md",
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Revise BIOGUIDER_PROMPT per Step 1a",
+      "priority": 1,
+      "passes": true,
+      "acceptanceCriteria": [
+        "File system_tests/test_single_file_stress.py contains the literal string 'GROUND TRUTH' inside BIOGUIDER_PROMPT",
+        "File system_tests/test_single_file_stress.py contains the literal string 'rewrite the PROSE to match the CODE' inside BIOGUIDER_PROMPT",
+        "The line 'Changed numeric values' no longer appears in BIOGUIDER_PROMPT (removes the injection-taxonomy cheat-sheet)",
+        "BIOGUIDER_PROMPT ends with 'CORRUPTED DOCUMENT TO FIX:' followed by a newline",
+        "poetry run pytest system_tests/test_single_file_stress.py::test_multi_file_full_matrix --collect-only exits 0 (syntax intact)"
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Narrow test_configs to single bioguider prompt per Step 1b",
+      "priority": 2,
+      "passes": true,
+      "acceptanceCriteria": [
+        "system_tests/test_single_file_stress.py contains the line 'test_configs = [(m, \"bioguider\") for m in MODELS]'",
+        "grep -c 'for p in [\"bioguider\", \"simple\"]' system_tests/test_single_file_stress.py returns 0",
+        "Function docstring of test_multi_file_full_matrix references '5 models × 1 prompt' and '450' cells",
+        "poetry run pytest system_tests/test_single_file_stress.py::test_multi_file_full_matrix --collect-only exits 0"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Launch the 450-cell benchmark in background",
+      "priority": 3,
+      "passes": true,
+      "acceptanceCriteria": [
+        "Directories logs/ and outputs/multi_file_stress/ exist",
+        "/tmp/bench_log.txt contains a path to a file under logs/",
+        "The log file referenced exists and pytest has started (banner or test selection line present)",
+        "No 401 / no Python traceback in the first 50 lines of the log"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Abort-check after de_vignette completes",
+      "priority": 4,
+      "passes": true,
+      "acceptanceCriteria": [
+        "outputs/multi_file_stress/run_*/de_vignette/STRESS_TEST_RESULTS.json exists",
+        "At least one entry in that JSON has f1_score_scorable > 0",
+        "outputs/multi_file_stress/run_*/de_vignette/de_vignette.level_5.manifest.json contains at least one error whose category starts with 'prose_code_' or equals 'accession_id_prefix'",
+        "If either fails, the pytest pid is killed and diagnostics are appended to the log"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Full-run completion summary",
+      "priority": 5,
+      "passes": true,
+      "acceptanceCriteria": [
+        "outputs/multi_file_stress/run_*/INDEX.md exists",
+        "outputs/multi_file_stress/run_*/_aggregate/AGGREGATE_RESULTS.json exists",
+        "At least 8 of 10 per-file subdirs contain STRESS_TEST_RESULTS.json",
+        "Summary posted to chat with wall-clock, file-success-count, and mean f1_score_scorable across models"
+      ]
+    }
+  ],
+  "constraints": [
+    "Do NOT git commit during this run. User will review results first.",
+    "Do NOT re-enable the simple prompt axis.",
+    "Use force_deterministic=True injection (already hard-wired in the test)."
+  ]
+}

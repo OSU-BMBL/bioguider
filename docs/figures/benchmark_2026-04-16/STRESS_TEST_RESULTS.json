@@ -1,0 +1,677 @@
+{
+  "timestamp": "2026-04-16T13:28:59.597053",
+  "results": [
+    {
+      "model": "gpt-5.4+bioguider",
+      "error_count": 10,
+      "total_errors_injected": 97,
+      "errors_fixed": 64,
+      "errors_unfixed": 33,
+      "fix_rate": 0.6598,
+      "precision": 1.0,
+      "recall": 0.6598,
+      "f1_score": 0.795,
+      "duration_seconds": 55.4,
+      "category_breakdown": [
+        {
+          "category": "bio_term",
+          "injected": 2,
+          "fixed": 2,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "boolean",
+          "injected": 2,
+          "fixed": 1,
+          "unfixed": 1,
+          "fix_rate": 0.5
+        },
+        {
+          "category": "celltype_marker",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "comment_typo",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "function",
+          "injected": 10,
+          "fixed": 8,
+          "unfixed": 2,
+          "fix_rate": 0.8
+        },
+        {
+          "category": "gene_case",
+          "injected": 10,
+          "fixed": 8,
+          "unfixed": 2,
+          "fix_rate": 0.8
+        },
+        {
+          "category": "inline_code",
+          "injected": 10,
+          "fixed": 0,
+          "unfixed": 10,
+          "fix_rate": 0.0
+        },
+        {
+          "category": "link",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "markdown_structure",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "number",
+          "injected": 10,
+          "fixed": 7,
+          "unfixed": 3,
+          "fix_rate": 0.7
+        },
+        {
+          "category": "param_name",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "species_name",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "stat_test_misnaming",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "typo",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        }
+      ]
+    },
+    {
+      "model": "kimi-k2.5+bioguider",
+      "error_count": 10,
+      "total_errors_injected": 97,
+      "errors_fixed": 69,
+      "errors_unfixed": 28,
+      "fix_rate": 0.7113,
+      "precision": 1.0,
+      "recall": 0.7113,
+      "f1_score": 0.8313,
+      "duration_seconds": 91.82,
+      "category_breakdown": [
+        {
+          "category": "bio_term",
+          "injected": 2,
+          "fixed": 2,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "boolean",
+          "injected": 2,
+          "fixed": 1,
+          "unfixed": 1,
+          "fix_rate": 0.5
+        },
+        {
+          "category": "celltype_marker",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "comment_typo",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "function",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "gene_case",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "inline_code",
+          "injected": 10,
+          "fixed": 0,
+          "unfixed": 10,
+          "fix_rate": 0.0
+        },
+        {
+          "category": "link",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "markdown_structure",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "number",
+          "injected": 10,
+          "fixed": 7,
+          "unfixed": 3,
+          "fix_rate": 0.7
+        },
+        {
+          "category": "param_name",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "species_name",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "stat_test_misnaming",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        }
+      ]
+    },
+    {
+      "model": "glm-5+bioguider",
+      "error_count": 10,
+      "total_errors_injected": 97,
+      "errors_fixed": 69,
+      "errors_unfixed": 28,
+      "fix_rate": 0.7113,
+      "precision": 1.0,
+      "recall": 0.7113,
+      "f1_score": 0.8313,
+      "duration_seconds": 499.6,
+      "category_breakdown": [
+        {
+          "category": "bio_term",
+          "injected": 2,
+          "fixed": 2,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "boolean",
+          "injected": 2,
+          "fixed": 1,
+          "unfixed": 1,
+          "fix_rate": 0.5
+        },
+        {
+          "category": "celltype_marker",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "comment_typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "function",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "gene_case",
+          "injected": 10,
+          "fixed": 8,
+          "unfixed": 2,
+          "fix_rate": 0.8
+        },
+        {
+          "category": "inline_code",
+          "injected": 10,
+          "fixed": 0,
+          "unfixed": 10,
+          "fix_rate": 0.0
+        },
+        {
+          "category": "link",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "markdown_structure",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "number",
+          "injected": 10,
+          "fixed": 7,
+          "unfixed": 3,
+          "fix_rate": 0.7
+        },
+        {
+          "category": "param_name",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "species_name",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "stat_test_misnaming",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        }
+      ]
+    },
+    {
+      "model": "gpt-oss+bioguider",
+      "error_count": 10,
+      "total_errors_injected": 97,
+      "errors_fixed": 64,
+      "errors_unfixed": 33,
+      "fix_rate": 0.6598,
+      "precision": 1.0,
+      "recall": 0.6598,
+      "f1_score": 0.795,
+      "duration_seconds": 16.91,
+      "category_breakdown": [
+        {
+          "category": "bio_term",
+          "injected": 2,
+          "fixed": 2,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "boolean",
+          "injected": 2,
+          "fixed": 1,
+          "unfixed": 1,
+          "fix_rate": 0.5
+        },
+        {
+          "category": "celltype_marker",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "comment_typo",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "function",
+          "injected": 10,
+          "fixed": 8,
+          "unfixed": 2,
+          "fix_rate": 0.8
+        },
+        {
+          "category": "gene_case",
+          "injected": 10,
+          "fixed": 8,
+          "unfixed": 2,
+          "fix_rate": 0.8
+        },
+        {
+          "category": "inline_code",
+          "injected": 10,
+          "fixed": 0,
+          "unfixed": 10,
+          "fix_rate": 0.0
+        },
+        {
+          "category": "link",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "markdown_structure",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "number",
+          "injected": 10,
+          "fixed": 7,
+          "unfixed": 3,
+          "fix_rate": 0.7
+        },
+        {
+          "category": "param_name",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "species_name",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "stat_test_misnaming",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "typo",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        }
+      ]
+    },
+    {
+      "model": "gpt-4o+bioguider",
+      "error_count": 10,
+      "total_errors_injected": 97,
+      "errors_fixed": 70,
+      "errors_unfixed": 27,
+      "fix_rate": 0.7216,
+      "precision": 1.0,
+      "recall": 0.7216,
+      "f1_score": 0.8383,
+      "duration_seconds": 35.98,
+      "category_breakdown": [
+        {
+          "category": "bio_term",
+          "injected": 2,
+          "fixed": 2,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "boolean",
+          "injected": 2,
+          "fixed": 1,
+          "unfixed": 1,
+          "fix_rate": 0.5
+        },
+        {
+          "category": "celltype_marker",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "comment_typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "function",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "gene_case",
+          "injected": 10,
+          "fixed": 9,
+          "unfixed": 1,
+          "fix_rate": 0.9
+        },
+        {
+          "category": "inline_code",
+          "injected": 10,
+          "fixed": 0,
+          "unfixed": 10,
+          "fix_rate": 0.0
+        },
+        {
+          "category": "link",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "markdown_structure",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "number",
+          "injected": 10,
+          "fixed": 7,
+          "unfixed": 3,
+          "fix_rate": 0.7
+        },
+        {
+          "category": "param_name",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "species_name",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "stat_test_misnaming",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        }
+      ]
+    },
+    {
+      "model": "gpt-5.4+simple",
+      "error_count": 10,
+      "total_errors_injected": 97,
+      "errors_fixed": 71,
+      "errors_unfixed": 26,
+      "fix_rate": 0.732,
+      "precision": 1.0,
+      "recall": 0.732,
+      "f1_score": 0.8452,
+      "duration_seconds": 35.72,
+      "category_breakdown": [
+        {
+          "category": "bio_term",
+          "injected": 2,
+          "fixed": 2,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "boolean",
+          "injected": 2,
+          "fixed": 1,
+          "unfixed": 1,
+          "fix_rate": 0.5
+        },
+        {
+          "category": "celltype_marker",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "comment_typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "function",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "gene_case",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "inline_code",
+          "injected": 10,
+          "fixed": 0,
+          "unfixed": 10,
+          "fix_rate": 0.0
+        },
+        {
+          "category": "link",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "markdown_structure",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "number",
+          "injected": 10,
+          "fixed": 7,
+          "unfixed": 3,
+          "fix_rate": 0.7
+        },
+        {
+          "category": "param_name",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "species_name",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "stat_test_misnaming",
+          "injected": 1,
+          "fixed": 1,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        },
+        {
+          "category": "typo",
+          "injected": 10,
+          "fixed": 10,
+          "unfixed": 0,
+          "fix_rate": 1.0
+        }
+      ]
+    }
+  ]
+}

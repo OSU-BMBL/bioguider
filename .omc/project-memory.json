@@ -1,0 +1,494 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1777469177568,
+  "projectRoot": "/Users/wang.13246/Documents/GitHub/bioguider",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": "^3.11",
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml",
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "poetry",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "gh pr create --base main --head refactor/document-generation --title \"Document generation pipeline + benchmark v2 redesign\" --body \"$(cat <<'EOF'\n## Summary\n\nThis branch turns the BioGuider document-generation pipeline into a measurable system. Two halves:\n\n1. **Generation pipeline refactor** (Phase 1–2.5 across many commits) — breaks the monolithic generation manager into small composable components in `bioguider/generation/` (loader, suggestion extractor, repo reader, style analyzer, change planner, document renderer, LLM cleaner, output manager, etc.).\n2. **Benchmark v2 redesign** (today, 2026-04-29 → 2026-04-30) — rebuilds the evaluator after a reviewer audit found 4 bugs that distorted previous E001/E002 results. Adds two new metrics, fixes the link scorer, unifies evaluation codepaths, expands the model roster from 5 → 11 verified-real models.\n\n## What changed in benchmark v2 (the high-value part)\n\n### Evaluator fixes\n- **Precision is real now** (was structurally locked at 1.0). New `count_collateral_damage()` does deterministic FP detection via `difflib.SequenceMatcher` line-level diff — no LLM call needed.\n- **Link scorer fixed** — was returning fix-rate=100% because it counted any well-formed link as a fix. Now checks the specific injected snippet.\n- **Headline = sum-of-categories** (was diverging 40 vs 46 due to two evaluation codepaths). Unified to one source of truth in `evaluate_fixes()`.\n- **Propagation chain fixed** — `false_positives`, `code_fence_violations`, `yaml_violations`, `section_violations` now flow from `BenchmarkResult` → `StressLevelResult` → JSON/CSV. Locked in by `tests/test_stress_result_propagation.py`.\n\n### New metrics\n- **Hard FP** — protected-region violations (code fences, YAML, section headers). Caught by `check_protected_regions()`.\n- **Soft FP** — collateral damage outside known error sites and protected regions.\n\n### Prompt + model lock\n- BioGuider prompt → v3 (4 evaluation dimensions + ground-truth methodology).\n- Generic prompt → true one-liner (was leaking eval rubric).\n- Skill tests locked to `gpt-4o` for reproducibility.\n\n### MODELS roster expanded 5 → 11\nAdded `gpt-5.2`, `gpt-5.3-codex`, `gpt-5.4-nano`, `kimi-k2.6`, `minimax-m2.5`, `deepseek-v4-flash`. Excluded the proxy's `claude-*` aliases (they secretly route to Kimi) and `deepseek-v3.2` (claims to be Claude). Real Claude requires direct Anthropic API.\n\n## Results post-redesign\n\n| Hypothesis | Outcome | Magnitude |\n|---|---|---|\n| BioGuider F1 ≥ Generic | ✅ Confirmed (E002-v2 + E003) | +2.36pp F1_scorable |\n| BioGuider duration < Generic | ❌ Refuted | Generic ~10% faster |\n| BioGuider violations < Generic | ✅ Confirmed | -19.8% protected-region violations |\n| Old E001 model ranking | 🔄 Reversed (de_vignette only) | gpt-oss #1, gpt-4o #3 (was #1) |\n\n## What's in this PR\n\n- `bioguider/generation/benchmark_metrics.py` — evaluator core (new functions, BenchmarkResult fields, fixed link scorer)\n- `system_tests/test_single_file_stress.py` — test harness (BioGuider v3 prompt, model lock, propagation fix, expanded MODELS)\n- `tests/test_benchmark_protection.py` — 15 unit tests for new metrics\n- `tests/test_stress_result_propagation.py` — 5 regression tests locking the propagation chain\n- `scripts/benchmark_figures.R` — R/ggplot2 publication figure generation\n- `scripts/compute_post_hoc_protection.py` — offline protection computation\n- `scripts/finalize_e001_v2.sh` — one-command Task #4 wrap\n- `docs/BENCHMARK_V2_REPORT.{md,html}` — colleague-facing findings report\n- `docs/BENCHMARK_METHODS.md` — Chinese methodology document for paper Methods section\n- `docs/figures/bench_v2_pipeline.html` — editorial pipeline diagram\n- `docs/figures/bench_v2_blueprint.html` — engineering blueprint pipeline diagram\n- `docs/EXPERIMENT_LOG.md` — updated with E001-v2 partial / E002-v2 / E003 results; old E001/E002 marked deprecated\n\n## Test plan\n\n- [ ] `poetry run pytest tests/test_benchmark_protection.py tests/test_stress_result_propagation.py tests/test_viz.py tests/test_injection_prose_only.py tests/test_unscorable_filter.py tests/test_category_groups.py tests/test_scorer_inline_code.py` → all pass (56/56 last run)\n- [ ] `poetry run ruff check bioguider/generation/benchmark_metrics.py system_tests/test_single_file_stress.py` → clean\n- [ ] Smoke test: `poetry run pytest system_tests/test_single_file_stress.py::test_single_file_stress_minimal -v -s` → all 5 gates pass (precision != 1.0, link fix_rate sane, protected-region keys in JSON, headline = category sum, precision_scorable uses real FPs)\n- [ ] Verify R figure script still produces all 4 figures: `Rscript scripts/benchmark_figures.R`\n\n## Outstanding work after merge\n\n- Run full **E001-v3** (10 vignettes × 9 levels × 11 models = 990 cells, ~8h, ~$60-100) — picks up automatically with the expanded MODELS dict.\n- Add real Claude / DeepSeek-R1 / Gemini via direct SDK if needed for paper credibility.\n- Investigate `hashing_vignette` outlier (F1 ~0.32 for both prompts — possibly an injector category-mix artifact).\n\n## Pre-existing issues (not blocking, not introduced by this PR)\n\n- `tests/test_litellm_compat.py` (5 failures) — auth issue against the LiteLLM proxy, predates this branch.\n- `tests/test_summarized_file_db.py` (3 failures) — data dir setup, predates this branch.\n- 56 dependabot vulnerabilities on `main` — separate hygiene concern.\nEOF\n)\" 2>&1 | tail -3",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "Meeting": {
+      "path": "Meeting",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1777469177539,
+      "keyFiles": []
+    },
+    "RepoAgent": {
+      "path": "RepoAgent",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1777469177540,
+      "keyFiles": [
+        "LICENSE",
+        "README.md",
+        "README_CN.md"
+      ]
+    },
+    "bioguider": {
+      "path": "bioguider",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1777469177540,
+      "keyFiles": [
+        "__init__.py",
+        "conversation.py",
+        "settings.py"
+      ]
+    },
+    "bioguider_debug": {
+      "path": "bioguider_debug",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1777469177541,
+      "keyFiles": []
+    },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 2,
+      "lastAccessed": 1777469177541,
+      "keyFiles": []
+    },
+    "debug": {
+      "path": "debug",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1777469177541,
+      "keyFiles": [
+        "debug_generation_pipeline.py",
+        "debug_llm_generation.py",
+        "debug_overview_generation.py"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 2,
+      "lastAccessed": 1777469177541,
+      "keyFiles": [
+        "MORNING_HANDOFF.md",
+        "benchmark-runbook.md"
+      ]
+    },
+    "logs": {
+      "path": "logs",
+      "purpose": null,
+      "fileCount": 18,
+      "lastAccessed": 1777469177541,
+      "keyFiles": [
+        "BioGSP_evaluation_results_20251008.json",
+        "app.log",
+        "benchmark_rerun_20260416_131518.log",
+        "benchmark_rerun_20260416_131602.log",
+        "evaluation_report_github_fengsh27_BioGSP.json"
+      ]
+    },
+    "outputs": {
+      "path": "outputs",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1777469177542,
+      "keyFiles": []
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 5,
+      "lastAccessed": 1777469177542,
+      "keyFiles": [
+        "bench_diff.sh",
+        "bench_launch.sh",
+        "bench_rescore.py",
+        "bench_status.sh",
+        "bench_wake_summary.py"
+      ]
+    },
+    "system_tests": {
+      "path": "system_tests",
+      "purpose": null,
+      "fileCount": 42,
+      "lastAccessed": 1777469177542,
+      "keyFiles": [
+        "__init__.py",
+        "analyze_benchmark_results.py",
+        "conftest.py",
+        "inspect_manifest.py",
+        "test_agent_utils.py"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 21,
+      "lastAccessed": 1777469177543,
+      "keyFiles": [
+        "__init__.py",
+        "conftest.py",
+        "test_agent_utils.py",
+        "test_category_groups.py",
+        "test_conversation.py"
+      ]
+    },
+    "RepoAgent/assets": {
+      "path": "RepoAgent/assets",
+      "purpose": "Static assets",
+      "fileCount": 0,
+      "lastAccessed": 1777469177543,
+      "keyFiles": []
+    },
+    "bioguider/utils": {
+      "path": "bioguider/utils",
+      "purpose": "Utility functions",
+      "fileCount": 10,
+      "lastAccessed": 1777469177543,
+      "keyFiles": [
+        "code_structure_builder.py",
+        "constants.py",
+        "default.gitignore"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "system_tests/test_single_file_stress.py",
+      "accessCount": 195,
+      "lastAccessed": 1777598123176,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/llm_injector.py",
+      "accessCount": 56,
+      "lastAccessed": 1777520820912,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/benchmark_metrics.py",
+      "accessCount": 43,
+      "lastAccessed": 1777522313038,
+      "type": "directory"
+    },
+    {
+      "path": "bioguider/generation/viz.py",
+      "accessCount": 36,
+      "lastAccessed": 1777521232703,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/managers/config.py",
+      "accessCount": 31,
+      "lastAccessed": 1777521211754,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/unified_metrics.py",
+      "accessCount": 28,
+      "lastAccessed": 1777521218170,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 17,
+      "lastAccessed": 1776358692227,
+      "type": "directory"
+    },
+    {
+      "path": "bioguider/managers/benchmark_manager.py",
+      "accessCount": 8,
+      "lastAccessed": 1777470349824,
+      "type": "file"
+    },
+    {
+      "path": "system_tests/conftest.py",
+      "accessCount": 8,
+      "lastAccessed": 1777473918533,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/managers/generation_test_manager_v2.py",
+      "accessCount": 7,
+      "lastAccessed": 1777006285374,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/llm_content_generator.py",
+      "accessCount": 7,
+      "lastAccessed": 1777519264693,
+      "type": "file"
+    },
+    {
+      "path": "pyproject.toml",
+      "accessCount": 6,
+      "lastAccessed": 1776357969435,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_unscorable_filter.py",
+      "accessCount": 6,
+      "lastAccessed": 1777471023992,
+      "type": "file"
+    },
+    {
+      "path": "bioguider",
+      "accessCount": 5,
+      "lastAccessed": 1776357643528,
+      "type": "directory"
+    },
+    {
+      "path": "bioguider/managers/base_test_manager.py",
+      "accessCount": 5,
+      "lastAccessed": 1777006270932,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_llm_injector_biomed.py",
+      "accessCount": 5,
+      "lastAccessed": 1777012958202,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/prompts/__init__.py",
+      "accessCount": 5,
+      "lastAccessed": 1777520817580,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/agents/agent_utils.py",
+      "accessCount": 4,
+      "lastAccessed": 1776357602658,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_viz.py",
+      "accessCount": 4,
+      "lastAccessed": 1776358684827,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/agents/evaluation_task.py",
+      "accessCount": 4,
+      "lastAccessed": 1776999348236,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/prompts/full_document.txt",
+      "accessCount": 3,
+      "lastAccessed": 1777519559795,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_litellm_compat.py",
+      "accessCount": 2,
+      "lastAccessed": 1777004061905,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/managers/evaluation_manager.py",
+      "accessCount": 2,
+      "lastAccessed": 1777006015331,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/managers/generation_manager.py",
+      "accessCount": 2,
+      "lastAccessed": 1777006018572,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 2,
+      "lastAccessed": 1777009368976,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/rag/config.py",
+      "accessCount": 2,
+      "lastAccessed": 1777009417529,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/prompts/evaluation_readme.txt",
+      "accessCount": 2,
+      "lastAccessed": 1777519282008,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/prompts/section.txt",
+      "accessCount": 2,
+      "lastAccessed": 1777519559868,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/prompts/readme_comprehensive.txt",
+      "accessCount": 2,
+      "lastAccessed": 1777520817400,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 1,
+      "lastAccessed": 1776355540906,
+      "type": "file"
+    },
+    {
+      "path": ".bumpversion.cfg",
+      "accessCount": 1,
+      "lastAccessed": 1776355550048,
+      "type": "file"
+    },
+    {
+      "path": "requirements.txt",
+      "accessCount": 1,
+      "lastAccessed": 1776355550449,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355555719,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/settings.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355556564,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/conversation.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355556653,
+      "type": "file"
+    },
+    {
+      "path": "tests/conftest.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355565835,
+      "type": "file"
+    },
+    {
+      "path": "test_generation_report.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355566214,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355567013,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/rag/rag.py",
+      "accessCount": 1,
+      "lastAccessed": 1776355567367,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 1,
+      "lastAccessed": 1776355684224,
+      "type": "file"
+    },
+    {
+      "path": "system_tests/analyze_benchmark_results.py",
+      "accessCount": 1,
+      "lastAccessed": 1776356479334,
+      "type": "file"
+    },
+    {
+      "path": "system_tests/inspect_manifest.py",
+      "accessCount": 1,
+      "lastAccessed": 1776356839590,
+      "type": "directory"
+    },
+    {
+      "path": "bioguider/agents/common_conversation.py",
+      "accessCount": 1,
+      "lastAccessed": 1776357075220,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_generation_config.py",
+      "accessCount": 1,
+      "lastAccessed": 1776357530173,
+      "type": "file"
+    },
+    {
+      "path": "docs/blueprints/error_injection_v2.html",
+      "accessCount": 1,
+      "lastAccessed": 1776358051763,
+      "type": "file"
+    },
+    {
+      "path": "docs/blueprints/error_injection_overview.html",
+      "accessCount": 1,
+      "lastAccessed": 1776358296307,
+      "type": "file"
+    },
+    {
+      "path": "docs/figures/benchmark_2026-04-16/fig1_f1_by_error_level.png",
+      "accessCount": 1,
+      "lastAccessed": 1776368956876,
+      "type": "file"
+    },
+    {
+      "path": "bioguider/generation/prompts/continuation.txt",
+      "accessCount": 1,
+      "lastAccessed": 1776998015092,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_total_error_budget.py",
+      "accessCount": 1,
+      "lastAccessed": 1776999082093,
+      "type": "file"
+    },
+    {
+      "path": "tests/test_phase_split.py",
+      "accessCount": 1,
+      "lastAccessed": 1776999205956,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
